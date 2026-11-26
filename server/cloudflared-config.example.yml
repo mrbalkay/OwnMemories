@@ -1,0 +1,17 @@
+# Cloudflare Tunnel örneği: /etc/cloudflared/config.yml
+# 1) cloudflared tunnel login
+# 2) cloudflared tunnel create ownmemories          (kimlik dosyası ~/.cloudflared/<UUID>.json oluşur)
+# 3) cloudflared tunnel route dns ownmemories ownmemories.balkay.net
+# 4) Bu dosyayı düzenleyip /etc/cloudflared/config.yml olarak kaydedin, sonra:
+#    sudo cloudflared service install && sudo systemctl enable --now cloudflared
+tunnel: <TUNNEL-UUID>
+credentials-file: /etc/cloudflared/<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: ownmemories.balkay.net
+    service: http://localhost:80
+    originRequest:
+      # Büyük video yüklemeleri parçalı yapılır (≤ 50 MB); uzun istekler için zaman aşımları
+      connectTimeout: 30s
+      keepAliveTimeout: 90s
+  - service: http_status:404

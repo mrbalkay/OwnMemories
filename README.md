@@ -14,6 +14,8 @@ OwnCalendar'ın kardeş uygulamasıdır.
 | `docs/` | `ARCHITECTURE.md` (sözleşme), `INSTALL.md` (kurulum), tasarım ve planlar |
 | `tests/` | `php tests/run.php` |
 
+Kurulum (test hostingi, Ubuntu + Cloudflare Tunnel, Google Takeout aktarımı, yedekleme): [`docs/INSTALL.md`](docs/INSTALL.md)
+
 Yerel geliştirme: `php -S 127.0.0.1:8080 -t web web/router-dev.php`
 
 Testler: `php tests/run.php` — veritabanı testleri için `OM_TEST_DB_HOST`, `OM_TEST_DB_USER`,

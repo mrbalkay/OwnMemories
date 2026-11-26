@@ -1,0 +1,9 @@
+# OwnMemories gece yedeği: veritabanı dökümü + depo klasörünün ikinci diske eşlenmesi.
+# Yedek hedefini /etc/ownmemories-backup.env içinde BACKUP_DIR=/mnt/yedek/ownmemories olarak ayarlayın.
+[Unit]
+Description=OwnMemories nightly backup
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/ownmemories-backup.env
+ExecStart=/var/www/ownmemories/server/backup.sh

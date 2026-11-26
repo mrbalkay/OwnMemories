@@ -1,0 +1,10 @@
+# OwnMemories cron (günlük bakım + kuyrukta kalan işler). ownmemories-cron.timer ile her dakika çalışır.
+[Unit]
+Description=OwnMemories cron tick
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/ownmemories
+ExecStart=/usr/bin/php /var/www/ownmemories/bin/cron.php 50
