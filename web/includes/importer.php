@@ -332,7 +332,8 @@ function import_one(array $imp, array $index, ImportState $state, int $si, strin
             $assetId = $r['asset_id'];
             if ($r['status'] === 'created') {
                 $result = $sidecarName !== null ? 'imported' : 'no_metadata';
-                $detail = $sidecarName !== null ? 'sidecar: ' . $sidecarName : 'Sidecar bulunamadı; tarih ' . $res['date_source'] . ' kaynağından';
+                $srcLabel = ['exif' => 'fotoğraf bilgisinden (EXIF)', 'filename' => 'dosya adından', 'file' => 'dosya tarihinden (kesin değil)'][$res['date_source']] ?? $res['date_source'];
+                $detail = $sidecarName !== null ? 'sidecar: ' . $sidecarName : 'Meta veri (.json) dosyası bulunamadı; tarih ' . $srcLabel . ' alındı';
             } else {
                 $result = 'duplicate';
                 $detail = $r['status'] === 'deleted_before' ? 'Daha önce kalıcı silinmiş' : 'Zaten kütüphanede';
