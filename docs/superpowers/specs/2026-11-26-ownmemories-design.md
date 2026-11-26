@@ -255,3 +255,18 @@ anı kümeleme algoritmasının ayrıntısı, kurulum betiğinin içeriği.
   İşçi sayısı sunucu çekirdek sayısına göre ayarlanabilir.
 - **Takeout eşleştirme testleri:** gerçek Takeout'un dosya/klasör listesi (yalnız adlar) Aşama 1
   planlamasında alınıp test verisine dönüştürülür.
+
+## 12. Kullanıcılar ve yükleme kalitesi (sahibin cevapları)
+
+- **Google'a yükleme kalitesi: Orijinal kalite.** Takeout dosyaları iPhone'dakilerle birebir aynı kabul
+  edilir; birincil eşleştirme SHA-1'dir. Yine de güvenlik için ikinci kontrol eklenir: SHA-1 tutmazsa
+  çekim anı (saniye) + boyutlar (genişlik×yükseklik) + orijinal dosya adı aynıysa yinelenen sayılır,
+  yükleme atlanır ve iPhone `localIdentifier`'ı mevcut asset'e bağlanır.
+- **Kullanıcılar: sahip ve eşi** (iki hesap, her birinin kendi kütüphanesi ve kendi iPhone yedeği).
+  Eşler arası paylaşım biçimi §13'te.
+- **Gelecekte müşteriler:** sistem tam çalıştıktan sonra başka kullanıcılara açılabilir. Bugün yapılmaz
+  ama tasarım engellememeli: her şey `user_id` ile ayrık, kullanıcı başına depolama kotası ve kullanım
+  sayacı (`users.quota_bytes`, `users.used_bytes`) şimdiden tutulur; kayıt ve ödeme o zaman tasarlanır.
+- **Fiziksel depolama:** aynı dosya iki kullanıcıda olsa bile meta veri kullanıcı başına ayrı tutulur;
+  disk tasarrufu için ortak dosya deposu (içerik özetine göre tek kopya) kurucu kararıdır ve istemciye
+  hiçbir zaman "bu dosya başka bir kullanıcıda var" bilgisi sızdırılmaz.
