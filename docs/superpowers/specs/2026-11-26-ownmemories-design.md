@@ -1,7 +1,7 @@
 # OwnMemories — Tasarım Belgesi
 
 Hazırlayan: Mehmet BALKAY
-Tarih: 2026-11-26 · Durum: Taslak (onay bekliyor)
+Tarih: 2026-11-26 · Durum: Onaylandı (2026-11-26)
 
 ## 1. Amaç ve neden
 
@@ -270,3 +270,21 @@ anı kümeleme algoritmasının ayrıntısı, kurulum betiğinin içeriği.
 - **Fiziksel depolama:** aynı dosya iki kullanıcıda olsa bile meta veri kullanıcı başına ayrı tutulur;
   disk tasarrufu için ortak dosya deposu (içerik özetine göre tek kopya) kurucu kararıdır ve istemciye
   hiçbir zaman "bu dosya başka bir kullanıcıda var" bilgisi sızdırılmaz.
+
+## 13. Paylaşım ve test ortamı (sahibin cevapları)
+
+- **Paylaşım v1: ortak albümler.** Albüm sahibi bir albümü başka kullanıcıyla paylaşır; paylaşılan kişi
+  görür ve (izin verilirse) kendi fotoğraflarını ekleyebilir. Tablo: `album_members` (album_id, user_id,
+  role `viewer`/`contributor`). Eklenen fotoğraf ekleyenin kütüphanesinde kalır; albümden çıkarılması silmez.
+- **Tam paylaşım (partner paylaşımı)** sonraki bir aşamada; v1 veri modeli buna engel olmamalı.
+- **Test ortamı:** Aşama 1 önce sahibin seçtiği herhangi bir web adresinde (paylaşımlı hosting olabilir)
+  test edilecek, sonra evdeki Ubuntu sunucusuna taşınacak. Bu yüzden sistem iki ortamda da çalışmalı:
+  - Arka plan işleri: Ubuntu'da systemd işçisi; hostingde dakikalık cron (`bin/cron.php` her çalışmada
+    süre sınırlı olarak kuyruktan iş alır). Ayrıca web istekleri sonrası küçük iş dilimleri işlenebilir.
+  - Araçlar yoksa geri düşüş: `vipsthumbnail` → Imagick → GD; `exiftool` → PHP `exif_read_data`
+    (+ HEIC için Imagick varsa); `ffmpeg` yoksa video küçük resmi yerine yer tutucu ve dönüştürme yok.
+    `setup.php` ve admin "Sistem" sayfası hangi aracın bulunduğunu gösterir.
+  - Depolama klasörü yapılandırılabilir; hostingde web kökü dışında bir klasör, yoksa erişimi
+    `.htaccess` ile kapalı bir klasör kullanılır.
+  - Takeout aktarımı hostingde de çalışır: zip'ler FTP ile import klasörüne yüklenir, aktarım cron ile
+    dilimler halinde ilerler (CLI gerekmez); admin panelden başlatılır ve izlenir.
