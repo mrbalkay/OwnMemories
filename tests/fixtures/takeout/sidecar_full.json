@@ -1,0 +1,13 @@
+{
+  "title": "IMG_20190701_150405.jpg",
+  "description": "Kordon'da gün batımı",
+  "imageViews": "12",
+  "creationTime": {"timestamp": "1562000000", "formatted": "1 Tem 2019 16:53:20 UTC"},
+  "photoTakenTime": {"timestamp": "1561982645", "formatted": "1 Tem 2019 12:04:05 UTC"},
+  "geoData": {"latitude": 38.4192, "longitude": 27.1287, "altitude": 12.0, "latitudeSpan": 0.0, "longitudeSpan": 0.0},
+  "geoDataExif": {"latitude": 38.0, "longitude": 27.0, "altitude": 0.0, "latitudeSpan": 0.0, "longitudeSpan": 0.0},
+  "people": [{"name": "Ayşe"}, {"name": "Mehmet"}],
+  "url": "https://photos.google.com/photo/xyz",
+  "googlePhotosOrigin": {"mobileUpload": {"deviceType": "IOS_PHONE"}},
+  "favorited": true
+}

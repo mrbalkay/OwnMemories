@@ -1,0 +1,35 @@
+/* OwnMemories — basit sayfalar (giriş, kurulum). Pastel palet OwnCalendar ile uyumlu. */
+:root {
+  --bg: #f7f5fc; --surface: #ffffff; --text: #2e2a3d; --muted: #6f6a80; --line: #e6e1f2;
+  --primary: #8b78d8; --primary-soft: #ece7fb; --accent: #f0a5b8; --danger: #d9576f; --ok: #3f9d7a;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #17151f; --surface: #221f2d; --text: #ece9f5; --muted: #a39db6; --line: #353046; --primary: #a998ef; --primary-soft: #2f2a45; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+body.simple { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 48px 16px; }
+.card { width: 100%; max-width: 460px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; box-shadow: 0 10px 30px rgba(60, 40, 120, .07); }
+body.wide .card { max-width: 720px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; margin-bottom: 18px; }
+h1 { font-size: 22px; margin: 0 0 6px; }
+h2 { font-size: 16px; margin: 24px 0 8px; }
+p.muted, .muted { color: var(--muted); }
+label { display: block; font-weight: 600; margin: 14px 0 4px; font-size: 14px; }
+input[type=text], input[type=email], input[type=password], input[type=number], input[type=url], select {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit;
+}
+input:focus, select:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
+button, .btn { display: inline-block; margin-top: 20px; padding: 11px 18px; border: 0; border-radius: 10px; background: var(--primary); color: #fff; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+button.block { width: 100%; }
+.alert { padding: 10px 12px; border-radius: 10px; margin: 12px 0; }
+.alert-error { background: #fde8ec; color: #9c2a40; }
+.alert-ok { background: #e3f5ee; color: #24684f; }
+@media (prefers-color-scheme: dark) { .alert-error { background: #4a2330; color: #ffc9d4; } .alert-ok { background: #1f3d33; color: #bdf0dc; } }
+table.checks { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.checks td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.yes { color: var(--ok); font-weight: 600; } .no { color: var(--danger); font-weight: 600; } .opt { color: var(--muted); }
+small.hint { display: block; color: var(--muted); margin-top: 4px; }
