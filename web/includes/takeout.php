@@ -40,6 +40,15 @@ function takeout_sidecar_index(array $sidecarNames): array
 /** Medya dosya adı (veya yolu) için sidecar adını bulur; yoksa null. */
 function takeout_match_sidecar(string $mediaPath, array $sidecarIndex): ?string
 {
+    return takeout_match_sidecar_info($mediaPath, $sidecarIndex)['name'];
+}
+
+/**
+ * Sidecar eşleşmesi ve nasıl bulunduğu: via = 'self' | 'edited' | 'live' (Live Photo videosu fotoğrafınkini ödünç aldı).
+ * @return array{name:?string, via:?string}
+ */
+function takeout_match_sidecar_info(string $mediaPath, array $sidecarIndex): array
+{
     $name = tk_nfc(basename(str_replace('\\', '/', $mediaPath)));
     foreach (['exact', 'lower'] as $mode) {
         $set = $sidecarIndex[$mode] ?? [];
@@ -56,7 +65,7 @@ function takeout_match_sidecar(string $mediaPath, array $sidecarIndex): ?string
         // 1) Kendi adıyla
         $hit = tk_match_name($name, $look);
         if ($hit !== null) {
-            return $hit;
+            return ['name' => $hit, 'via' => 'self'];
         }
         // 2) Düzenlenmiş kopya → orijinalin sidecar'ı
         $base = pathinfo($name, PATHINFO_FILENAME);
@@ -65,7 +74,7 @@ function takeout_match_sidecar(string $mediaPath, array $sidecarIndex): ?string
             $orig = preg_replace(TAKEOUT_EDITED_RE, '', $base) . ($ext !== '' ? '.' . $ext : '');
             $hit = tk_match_name($orig, $look);
             if ($hit !== null) {
-                return $hit;
+                return ['name' => $hit, 'via' => 'edited'];
             }
         }
         // 3) Live Photo videosu → aynı adlı fotoğrafın sidecar'ı
@@ -73,12 +82,12 @@ function takeout_match_sidecar(string $mediaPath, array $sidecarIndex): ?string
             foreach (['HEIC', 'heic', 'JPG', 'jpg', 'JPEG', 'jpeg'] as $pe) {
                 $hit = tk_match_name($base . '.' . $pe, $look);
                 if ($hit !== null) {
-                    return $hit;
+                    return ['name' => $hit, 'via' => 'live'];
                 }
             }
         }
     }
-    return null;
+    return ['name' => null, 'via' => null];
 }
 
 /** Tek bir ad için tüm sidecar biçimlerini dener. */
@@ -246,6 +255,30 @@ function takeout_is_special_bucket(string $name): bool
         'archive', 'arşiv', 'archiv', 'archives', 'archivo', 'archivio', 'archief',
         'failed videos', 'başarısız videolar', 'locked folder', 'kilitli klasör',
     ], true);
+}
+
+/**
+ * Tek bir yolu sınıflandırır: media | sidecar | album_meta | ignored (Takeout'un kendi dosyaları) | unsupported.
+ * @return array{type:string, dir:string, name:string, kind:?string, bucket:string}
+ */
+function takeout_classify_one(string $path): array
+{
+    $path = str_replace('\\', '/', $path);
+    $name = basename($path);
+    $dir = dirname($path);
+    $dir = $dir === '.' ? '' : $dir;
+    $lower = mb_strtolower(tk_nfc($name));
+    $out = ['type' => 'unsupported', 'dir' => $dir, 'name' => $name, 'kind' => null, 'bucket' => ''];
+    if (str_starts_with($name, '._') || in_array($lower, ['.ds_store', 'thumbs.db', 'desktop.ini'], true) || str_ends_with($lower, '.html') || str_ends_with($lower, '.htm')) {
+        $out['type'] = 'ignored';
+    } elseif (str_ends_with($lower, '.json')) {
+        $out['type'] = in_array($lower, TAKEOUT_ALBUM_META_NAMES, true) ? 'album_meta' : (in_array($lower, TAKEOUT_OTHER_JSON, true) ? 'ignored' : 'sidecar');
+    } elseif (($kind = media_kind($path, $name)) !== null) {
+        $out['type'] = 'media';
+        $out['kind'] = $kind;
+        $out['bucket'] = takeout_bucket($dir);
+    }
+    return $out;
 }
 
 /**

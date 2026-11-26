@@ -22,8 +22,10 @@ function job_enqueue(string $type, array $payload, int $priority = 5, int $delay
 function job_claim(string $workerId): ?array
 {
     $now = now_utc();
-    // Çöken işçilerin işleri kuyruğa geri döner.
-    db_exec("UPDATE jobs SET status = 'queued', locked_by = NULL, locked_at = NULL WHERE status = 'running' AND locked_at < ?", [gmdate('Y-m-d H:i:s', time() - JOB_STALE_SECONDS)]);
+    // Çöken işçilerin (ör. PHP bellek hatası) işleri: deneme hakkı varsa kuyruğa döner, yoksa başarısız olur.
+    foreach (db_all("SELECT * FROM jobs WHERE status = 'running' AND locked_at < ? LIMIT 50", [gmdate('Y-m-d H:i:s', time() - JOB_STALE_SECONDS)]) as $stale) {
+        job_fail($stale, 'İşçi yanıt vermeden durdu (zaman aşımı veya bellek hatası)', 0);
+    }
     $token = mb_substr($workerId, 0, 40) . ':' . bin2hex(random_bytes(6));
     $n = db_exec("UPDATE jobs SET status = 'running', locked_by = ?, locked_at = ?, attempts = attempts + 1, updated_at = ?
                   WHERE status = 'queued' AND run_after <= ? ORDER BY priority, id LIMIT 1", [$token, $now, $now, $now]);
@@ -46,15 +48,20 @@ function job_complete(int $id, string $status = 'done', ?string $err = null): vo
 }
 
 /** Hata: deneme hakkı varsa ertelenerek kuyruğa döner, yoksa 'failed'. */
-function job_fail(array $job, string $err): void
+function job_fail(array $job, string $err, ?int $delaySec = null): void
 {
     $attempts = (int) $job['attempts'];
+    $delaySec ??= $attempts * 300;
     if ($attempts < JOB_MAX_ATTEMPTS) {
         db_exec("UPDATE jobs SET status = 'queued', last_error = ?, locked_by = NULL, locked_at = NULL, run_after = ?, updated_at = ? WHERE id = ?", [
-            mb_substr($err, 0, 4000), gmdate('Y-m-d H:i:s', time() + $attempts * 300), now_utc(), $job['id'],
+            mb_substr($err, 0, 4000), gmdate('Y-m-d H:i:s', time() + $delaySec), now_utc(), $job['id'],
         ]);
     } else {
         job_complete((int) $job['id'], 'failed', mb_substr($err, 0, 4000));
+        $payload = is_array($job['payload']) ? $job['payload'] : (json_decode((string) $job['payload'], true) ?: []);
+        if ($job['type'] === 'import_step' && !empty($payload['import_id'])) {
+            db_exec("UPDATE imports SET status = 'failed', last_error = ? WHERE id = ? AND status NOT IN ('done','paused')", [mb_substr($err, 0, 2000), (int) $payload['import_id']]);
+        }
     }
 }
 

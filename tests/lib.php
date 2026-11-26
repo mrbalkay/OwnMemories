@@ -125,6 +125,12 @@ function test_db(): ?PDO
     return $pdo;
 }
 
+/** Kilit testleri için ikinci bağımsız bağlantı. */
+function test_db_second_connection(): PDO
+{
+    return db_connect(config('db'));
+}
+
 function require_db(): PDO
 {
     $pdo = test_db();

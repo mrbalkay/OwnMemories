@@ -11,8 +11,8 @@ declare(strict_types=1);
 const THUMB_EDGE = 360;
 const PREVIEW_EDGE = 2048;
 
-const MEDIA_PHOTO_EXT = ['jpg', 'jpeg', 'jpe', 'png', 'gif', 'webp', 'heic', 'heif', 'avif', 'dng', 'tif', 'tiff', 'bmp', 'cr2', 'nef', 'arw', 'raf', 'orf', 'rw2'];
-const MEDIA_VIDEO_EXT = ['mp4', 'mov', 'm4v', '3gp', '3g2', 'avi', 'mkv', 'mts', 'm2ts', 'wmv', 'webm', 'mpg', 'mpeg'];
+const MEDIA_PHOTO_EXT = ['jpg', 'jpeg', 'jpe', 'jfif', 'jfi', 'cr3', 'nrw', 'png', 'gif', 'webp', 'heic', 'heif', 'avif', 'dng', 'tif', 'tiff', 'bmp', 'cr2', 'nef', 'arw', 'raf', 'orf', 'rw2'];
+const MEDIA_VIDEO_EXT = ['mp4', 'mov', 'm4v', '3gp', '3g2', 'avi', 'mkv', 'mts', 'm2ts', 'wmv', 'webm', 'mpg', 'mpeg', 'ts', 'flv', 'm2t', 'mod', 'tod'];
 
 /** 'photo' | 'video' | null. Önce verilen dosya adının (yoksa yolun) uzantısı, uzantı yoksa içerik. */
 function media_kind(string $path, ?string $filename = null): ?string
@@ -44,7 +44,7 @@ function media_mime(string $path, ?string $filename = null): string
 {
     $ext = strtolower(pathinfo($filename ?? $path, PATHINFO_EXTENSION));
     $map = [
-        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'jpe' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif',
+        'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'jpe' => 'image/jpeg', 'jfif' => 'image/jpeg', 'jfi' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif',
         'webp' => 'image/webp', 'heic' => 'image/heic', 'heif' => 'image/heif', 'avif' => 'image/avif', 'dng' => 'image/x-adobe-dng',
         'tif' => 'image/tiff', 'tiff' => 'image/tiff', 'bmp' => 'image/bmp',
         'mp4' => 'video/mp4', 'm4v' => 'video/mp4', 'mov' => 'video/quicktime', '3gp' => 'video/3gpp', '3g2' => 'video/3gpp2',
@@ -445,8 +445,7 @@ function media_render_gd(string $src, string $tmp, int $edge, string $format): b
     if (!is_array($info) || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_GIF, IMAGETYPE_WEBP, IMAGETYPE_BMP], true)) {
         return false;
     }
-    // Bellek koruması: ~4 bayt/piksel; çok büyük görüntüleri GD ile açma.
-    if ($info[0] * $info[1] > 60_000_000) {
+    if (!media_gd_fits((int) $info[0], (int) $info[1], (int) filesize($src), php_memory_limit_bytes(), memory_get_usage())) {
         return false;
     }
     $img = @imagecreatefromstring((string) file_get_contents($src));
@@ -473,6 +472,35 @@ function media_render_gd(string $src, string $tmp, int $edge, string $format): b
     $ok = $format === 'webp' && function_exists('imagewebp') ? imagewebp($img, $tmp, 80) : imagejpeg($img, $tmp, 82);
     imagedestroy($img);
     return $ok;
+}
+
+/** php.ini memory_limit bayt cinsinden (-1 = sınırsız). */
+function php_memory_limit_bytes(): int
+{
+    $v = trim((string) ini_get('memory_limit'));
+    if ($v === '' || $v === '-1') {
+        return -1;
+    }
+    $n = (int) $v;
+    return match (strtolower(substr($v, -1))) {
+        'g' => $n * 1024 ** 3,
+        'm' => $n * 1024 ** 2,
+        'k' => $n * 1024,
+        default => $n,
+    };
+}
+
+/**
+ * GD ile açmak güvenli mi? Çözülmüş görüntü ~5 bayt/piksel + dosyanın kendisi (+ küçültülmüş kopya, döndürme)
+ * kullanılan belleğe eklenince sınırın %80'ini aşmamalı. Aşarsa yer tutucu tercih edilir (PHP fatal yerine).
+ */
+function media_gd_fits(int $w, int $h, int $fileSize, int $limit, int $used): bool
+{
+    if ($limit < 0) {
+        return $w * $h <= 120_000_000;
+    }
+    $need = (int) ($w * $h * 5) + $fileSize + 8 * 1024 * 1024;
+    return $used + $need <= (int) ($limit * 0.8);
 }
 
 function media_gd_orient(GdImage $img, int $o): GdImage

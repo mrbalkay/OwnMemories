@@ -81,9 +81,15 @@ function upload_chunk(string $id, int $userId, int $offset, $stream): int
                 ftruncate($out, $received);
                 throw new ValidationError('Parça beklenenden büyük.', 'body');
             }
-            fwrite($out, $buf);
+            if (fwrite($out, $buf) !== strlen($buf)) {
+                ftruncate($out, $received);
+                throw new RuntimeException('Yükleme diske yazılamadı (disk dolu olabilir)');
+            }
         }
-        fflush($out);
+        if (!fflush($out)) {
+            ftruncate($out, $received);
+            throw new RuntimeException('Yükleme diske yazılamadı (disk dolu olabilir)');
+        }
     } finally {
         flock($out, LOCK_UN);
         fclose($out);

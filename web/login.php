@@ -21,11 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             audit(null, 'login_failed', $email);
         } else {
             login_user($u);
-            $next = (string) ($_GET['next'] ?? '/app/');
-            if (!str_starts_with($next, '/') || str_starts_with($next, '//')) {
-                $next = '/app/';
-            }
-            redirect($next);
+            redirect(safe_next((string) ($_GET['next'] ?? '/app/')));
         }
     }
 }

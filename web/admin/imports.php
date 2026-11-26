@@ -59,7 +59,7 @@ if ($id > 0) {
     <?php foreach ($r['counts'] as $k => $v): ?><tr><td><?= e(t('admin.r_' . $k)) ?></td><td class="num" data-k="<?= e($k) ?>"><?= number_format((int) $v, 0, ',', '.') ?></td></tr><?php endforeach; ?>
     </tbody></table>
     <p><a class="btn" href="/admin/imports.php?id=<?= $id ?>&amp;csv=1"><?= e(t('admin.download_csv')) ?></a></p>
-    <?php foreach (['failed', 'no_metadata', 'skipped_trashed'] as $res): if (!$r['items'][$res]) continue; ?>
+    <?php foreach (['failed', 'unsupported', 'no_metadata', 'skipped_trashed'] as $res): if (!$r['items'][$res]) continue; ?>
       <h2><?= e(t('admin.r_' . $res)) ?> <span class="muted">(<?= count($r['items'][$res]) ?><?= count($r['items'][$res]) >= 500 ? '+' : '' ?>)</span></h2>
       <table class="tbl small"><tbody>
       <?php foreach ($r['items'][$res] as $it): ?><tr><td class="path"><?= e($it['entry_path']) ?><div class="muted"><?= e($it['zip_name']) ?></div></td><td><?= e((string) $it['detail']) ?></td></tr><?php endforeach; ?>

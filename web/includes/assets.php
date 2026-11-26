@@ -46,10 +46,13 @@ function asset_ingest(int $userId, string $srcPath, array $in): array
         $time = capture_time_resolve(null, $probe, $filename, @filemtime($srcPath) ?: null);
     }
 
-    // İkincil yineleme kontrolü: aynı an + aynı boyut + aynı dosya adı (büyük/küçük harf duyarsız).
-    if ($probe['width'] !== null) {
-        $dupe = db_val('SELECT id FROM assets WHERE user_id = ? AND taken_at = ? AND width = ? AND height = ? AND LOWER(original_filename) = ? LIMIT 1', [
-            $userId, $time['taken_at_utc'], $probe['width'], $probe['height'], mb_strtolower($filename),
+    // İkincil yineleme kontrolü: aynı çekim anı + aynı boyut + aynı dosya adı + benzer dosya büyüklüğü.
+    // Yalnız güvenilir tarihlerde (EXIF / Google) uygulanır; dosya zamanı veya addan gelen tarih zayıftır.
+    $sizeNow = (int) filesize($srcPath);
+    if ($probe['width'] !== null && in_array($time['date_source'], ['exif', 'takeout'], true)) {
+        $dupe = db_val("SELECT id FROM assets WHERE user_id = ? AND taken_at = ? AND width = ? AND height = ? AND LOWER(original_filename) = ?
+                AND date_source IN ('exif','takeout') AND size BETWEEN ? AND ? LIMIT 1", [
+            $userId, $time['taken_at_utc'], $probe['width'], $probe['height'], mb_strtolower($filename), (int) floor($sizeNow * 0.9), (int) ceil($sizeNow * 1.1),
         ]);
         if ($dupe !== null) {
             asset_link_source_ref($userId, (string) $dupe, $in);
@@ -75,6 +78,9 @@ function asset_ingest(int $userId, string $srcPath, array $in): array
     $lat = $in['lat'] ?? $probe['lat'];
     $lng = $in['lng'] ?? $probe['lng'];
     $pdo = db();
+    if (isset($GLOBALS['__om_before_asset_insert'])) {
+        ($GLOBALS['__om_before_asset_insert'])(); // yalnız testler: eşzamanlı yüklemeyi taklit eder
+    }
     try {
         $pdo->beginTransaction();
         $version = asset_bump_version($userId);
@@ -103,6 +109,13 @@ function asset_ingest(int $userId, string $srcPath, array $in): array
             $pdo->rollBack();
         }
         blob_release($sha1);
+        // Aynı dosya aynı anda başka bir istekle eklendiyse (benzersiz anahtar çakışması) yinelenen say.
+        if ($e instanceof PDOException && ($e->errorInfo[1] ?? 0) === 1062) {
+            $existing = db_val('SELECT id FROM assets WHERE user_id = ? AND blob_sha1 = ?', [$userId, $sha1]);
+            if ($existing !== null) {
+                return ['status' => 'duplicate', 'asset_id' => (string) $existing];
+            }
+        }
         throw $e;
     }
     job_enqueue('render', ['asset_id' => $id], $in['source'] === 'takeout' ? 7 : 3);

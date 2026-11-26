@@ -1,4 +1,4 @@
--- OwnMemories veritabanı şeması (SCHEMA_VERSION = 1)
+-- OwnMemories veritabanı şeması (SCHEMA_VERSION = 2; migrasyonlar dahil güncel hali)
 -- InnoDB, utf8mb4_unicode_ci, tüm zamanlar UTC. MySQL 5.7+ / MariaDB 10.4+ uyumlu.
 
 CREATE TABLE IF NOT EXISTS users (
@@ -78,7 +78,9 @@ CREATE TABLE IF NOT EXISTS assets (
   KEY ix_assets_timeline (user_id, trashed_at, taken_at),
   KEY ix_assets_version (user_id, version),
   KEY ix_assets_dupe (user_id, taken_at, width, height),
-  KEY ix_assets_source_ref (user_id, source_ref(191))
+  KEY ix_assets_source_ref (user_id, source_ref(191)),
+  KEY ix_assets_live (live_pair_id),
+  KEY ix_assets_edited (edited_of_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS deleted_checksums (
@@ -159,6 +161,7 @@ CREATE TABLE IF NOT EXISTS imports (
   started_at DATETIME NULL,
   finished_at DATETIME NULL,
   last_error TEXT NULL,
+  sources_json TEXT NULL,
   created_at DATETIME NOT NULL,
   KEY ix_imports_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -169,12 +172,25 @@ CREATE TABLE IF NOT EXISTS import_items (
   zip_name VARCHAR(255) NOT NULL,
   entry_path VARCHAR(1024) NOT NULL,
   entry_hash CHAR(40) NOT NULL,
-  result ENUM('imported','duplicate','no_metadata','skipped_trashed','failed','metadata_only') NOT NULL,
+  result ENUM('imported','duplicate','no_metadata','skipped_trashed','failed','metadata_only','unsupported') NOT NULL,
   asset_id CHAR(36) NULL,
   detail TEXT NULL,
   created_at DATETIME NOT NULL,
   UNIQUE KEY uq_import_items (import_id, entry_hash),
   KEY ix_import_items_result (import_id, result)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS import_entries (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  import_id INT UNSIGNED NOT NULL,
+  kind ENUM('media','sidecar','album_meta') NOT NULL,
+  source_idx SMALLINT UNSIGNED NOT NULL,
+  path VARCHAR(1024) NOT NULL,
+  dir_key VARCHAR(768) NOT NULL,
+  name_key VARCHAR(255) NOT NULL,
+  mtime INT UNSIGNED NOT NULL DEFAULT 0,
+  KEY ix_import_entries_kind (import_id, kind, id),
+  KEY ix_import_entries_dir (import_id, kind, dir_key(191))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS uploads (

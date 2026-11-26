@@ -224,6 +224,15 @@ function asset(string $path): string
     return $path . (is_file($file) ? '?v=' . filemtime($file) : '');
 }
 
+/** Giriş sonrası yönlendirme hedefi: yalnız bu sitedeki göreli yollar. */
+function safe_next(string $next, string $default = '/app/'): string
+{
+    if ($next === '' || $next[0] !== '/' || (isset($next[1]) && ($next[1] === '/' || $next[1] === '\\')) || preg_match('/[\x00-\x1F\\\\]/', $next)) {
+        return $default;
+    }
+    return $next;
+}
+
 function redirect(string $to): never
 {
     header('Location: ' . $to, true, 302);

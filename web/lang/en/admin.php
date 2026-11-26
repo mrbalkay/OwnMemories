@@ -12,6 +12,7 @@ return [
     'zip_files' => 'Zip files in folder', 'no_zips' => 'No zip files in the folder.', 'progress' => 'Progress', 'pause' => 'Pause', 'resume' => 'Resume',
     'report' => 'Report', 'download_csv' => 'Download CSV', 'counts' => 'Results', 'r_imported' => 'Imported', 'r_duplicate' => 'Already there',
     'r_no_metadata' => 'No metadata file (imported)', 'r_skipped_trashed' => 'Was in Google trash (skipped)', 'r_failed' => 'Error', 'r_metadata_only' => 'Metadata only',
+    'r_unsupported' => 'Unsupported file (skipped)',
     'r_other' => 'Non-media file', 'started' => 'Started', 'finished' => 'Finished', 'current' => 'Now', 'retry_failed' => 'Retry failed jobs',
     'rerender' => 'Regenerate all thumbnails', 'enqueued' => '{n} jobs queued', 'last_error' => 'Last error', 'tools' => 'Media tools',
     'php_limits' => 'PHP limits', 'found' => 'Found', 'missing' => 'Missing', 'version' => 'Version', 'refresh_tools' => 'Rescan tools',

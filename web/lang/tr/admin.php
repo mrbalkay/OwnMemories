@@ -12,6 +12,7 @@ return [
     'zip_files' => 'Klasördeki zip dosyaları', 'no_zips' => 'Klasörde zip dosyası yok.', 'progress' => 'İlerleme', 'pause' => 'Duraklat', 'resume' => 'Devam et',
     'report' => 'Rapor', 'download_csv' => 'CSV indir', 'counts' => 'Sonuçlar', 'r_imported' => 'İçe aktarıldı', 'r_duplicate' => 'Zaten vardı',
     'r_no_metadata' => 'Meta veri dosyası yok (içe aktarıldı)', 'r_skipped_trashed' => 'Google çöp kutusundaydı (alınmadı)', 'r_failed' => 'Hata', 'r_metadata_only' => 'Yalnız meta veri',
+    'r_unsupported' => 'Desteklenmeyen dosya (alınmadı)',
     'r_other' => 'Medya dışı dosya', 'started' => 'Başladı', 'finished' => 'Bitti', 'current' => 'Şu an', 'retry_failed' => 'Başarısızları yeniden dene',
     'rerender' => 'Tüm küçük resimleri yeniden üret', 'enqueued' => '{n} iş kuyruğa eklendi', 'last_error' => 'Son hata', 'tools' => 'Medya araçları',
     'php_limits' => 'PHP sınırları', 'found' => 'Bulundu', 'missing' => 'Yok', 'version' => 'Sürüm', 'refresh_tools' => 'Araçları yeniden tara',
