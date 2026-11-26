@@ -117,3 +117,27 @@ test('test_video_poster_when_ffmpeg', function () {
     assert_eq('ready', media_render("$d/tiny.mp4", 'video', "$d/poster.jpg", 320, 'jpeg'));
     assert_eq([320, 180], image_size("$d/poster.jpg"));
 });
+
+test('test_capture_time_from_exif_with_offset', function () {
+    $p = media_probe_empty();
+    $p['taken_local'] = '2019-07-01 15:00:00';
+    $p['tz_offset'] = 180;
+    assert_eq(['taken_at_utc' => '2019-07-01 12:00:00', 'tz_offset' => 180, 'date_source' => 'exif'], capture_time_resolve(null, $p, 'x.jpg', null));
+});
+
+test('test_capture_time_exif_without_offset_uses_istanbul', function () {
+    $p = media_probe_empty();
+    $p['taken_local'] = '2010-01-15 12:00:00'; // 2010 kışı: Türkiye UTC+2
+    $r = capture_time_resolve(null, $p, 'x.jpg', null);
+    assert_eq('2010-01-15 10:00:00', $r['taken_at_utc']);
+    assert_eq(120, $r['tz_offset']);
+});
+
+test('test_capture_time_video_utc_only', function () {
+    $p = media_probe_empty();
+    $p['taken_utc'] = '2022-08-10 09:00:00';
+    $r = capture_time_resolve(null, $p, 'v.mov', null);
+    assert_eq('2022-08-10 09:00:00', $r['taken_at_utc']);
+    assert_eq(180, $r['tz_offset'], 'İstanbul 2022 = +3');
+    assert_eq('exif', $r['date_source']);
+});

@@ -510,3 +510,76 @@ function media_video_frame(string $src): ?string
     @unlink($out);
     return null;
 }
+
+/* ------------------------------------------------------------ capture time */
+
+function default_timezone(): string
+{
+    return (string) config('app.default_timezone', 'Europe/Istanbul');
+}
+
+/** Varsayılan saat diliminin verilen UTC anındaki ofseti (dakika). */
+function tz_offset_at_utc(int $ts, ?string $tz = null): int
+{
+    $dt = new DateTimeImmutable('@' . $ts);
+    return intdiv((new DateTimeZone($tz ?? default_timezone()))->getOffset($dt), 60);
+}
+
+/** Varsayılan saat dilimindeki yerel zamanı UTC'ye çevirir: [utc 'Y-m-d H:i:s', ofset dk]. */
+function local_to_utc(string $local, ?int $offsetMin = null): array
+{
+    if ($offsetMin !== null) {
+        $ts = (int) (new DateTimeImmutable($local, new DateTimeZone('UTC')))->format('U') - $offsetMin * 60;
+        return [gmdate('Y-m-d H:i:s', $ts), $offsetMin];
+    }
+    $dt = new DateTimeImmutable($local, new DateTimeZone(default_timezone()));
+    return [gmdate('Y-m-d H:i:s', (int) $dt->format('U')), intdiv($dt->getOffset(), 60)];
+}
+
+/** Dosya adındaki tarih: IMG_20180512_093011.jpg, 2018-05-12 09.30.11.jpg, VID-20180512-WA0001.mp4 ... */
+function filename_datetime(string $filename): ?string
+{
+    $base = pathinfo($filename, PATHINFO_FILENAME);
+    if (preg_match('/(?<!\d)((?:19|20)\d{2})[-_.]?(\d{2})[-_.]?(\d{2})[-_ T.]?(\d{2})[-_.:]?(\d{2})[-_.:]?(\d{2})(?!\d)/', $base, $m)
+        && checkdate((int) $m[2], (int) $m[3], (int) $m[1]) && (int) $m[4] < 24 && (int) $m[5] < 60 && (int) $m[6] < 60) {
+        return sprintf('%s-%s-%s %s:%s:%s', $m[1], $m[2], $m[3], $m[4], $m[5], $m[6]);
+    }
+    if (preg_match('/(?<!\d)((?:19|20)\d{2})[-_.]?(\d{2})[-_.]?(\d{2})(?!\d)/', $base, $m) && checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
+        return sprintf('%s-%s-%s 12:00:00', $m[1], $m[2], $m[3]);
+    }
+    return null;
+}
+
+/**
+ * Çekim anını belirler. Öncelik: Takeout sidecar zamanı > EXIF/QuickTime > dosya adı > dosya zamanı.
+ * @return array{taken_at_utc:string, tz_offset:int, date_source:string}
+ */
+function capture_time_resolve(?int $sidecarTs, array $probe, string $filename, ?int $mtime): array
+{
+    if ($sidecarTs !== null && $sidecarTs > 0) {
+        $off = $probe['tz_offset'] ?? null;
+        if ($off === null && !empty($probe['taken_local'])) {
+            $localAsUtc = (int) (new DateTimeImmutable((string) $probe['taken_local'], new DateTimeZone('UTC')))->format('U');
+            $diff = (int) (round(($localAsUtc - $sidecarTs) / 900) * 15);
+            if (abs($diff) <= 14 * 60) {
+                $off = $diff;
+            }
+        }
+        return ['taken_at_utc' => gmdate('Y-m-d H:i:s', $sidecarTs), 'tz_offset' => $off ?? tz_offset_at_utc($sidecarTs), 'date_source' => 'takeout'];
+    }
+    if (!empty($probe['taken_local'])) {
+        [$utc, $off] = local_to_utc((string) $probe['taken_local'], $probe['tz_offset'] ?? null);
+        return ['taken_at_utc' => $utc, 'tz_offset' => $off, 'date_source' => 'exif'];
+    }
+    if (!empty($probe['taken_utc'])) {
+        $ts = (int) (new DateTimeImmutable((string) $probe['taken_utc'], new DateTimeZone('UTC')))->format('U');
+        return ['taken_at_utc' => gmdate('Y-m-d H:i:s', $ts), 'tz_offset' => tz_offset_at_utc($ts), 'date_source' => 'exif'];
+    }
+    $fromName = filename_datetime($filename);
+    if ($fromName !== null) {
+        [$utc, $off] = local_to_utc($fromName);
+        return ['taken_at_utc' => $utc, 'tz_offset' => $off, 'date_source' => 'filename'];
+    }
+    $ts = $mtime ?? time();
+    return ['taken_at_utc' => gmdate('Y-m-d H:i:s', $ts), 'tz_offset' => tz_offset_at_utc($ts), 'date_source' => 'file'];
+}
