@@ -38,12 +38,14 @@ try {
   await page.click('.viewer .icon-btn[aria-label="Bilgi"]');
   await page.waitForSelector('.v-info .i-row');
   await page.screenshot({ path: `${out}desktop-viewer.png` });
-  const favBtn = page.locator('.viewer .v-tools button').first();
-  const wasFav = (await favBtn.getAttribute('class')).includes('on');
-  if (wasFav) { await favBtn.click(); await page.waitForTimeout(400); }
-  await page.locator('.viewer .v-tools button').first().click();
-  await page.waitForTimeout(400);
+  const wasFav = (await page.$('.viewer button[aria-label="Favorilerden çıkar"]')) !== null;
+  if (!wasFav) {
+    await Promise.all([page.waitForResponse((r) => r.request().method() === 'PATCH'), page.click('.viewer button[aria-label="Favorilere ekle"]')]);
+  }
+  await page.waitForSelector('.viewer button[aria-label="Favorilerden çıkar"]');
   await page.keyboard.press('Escape');
+  await page.waitForSelector('.viewer', { state: 'detached' });
+  await page.waitForTimeout(300); // görüntüleyicinin history.back() işlemi bitsin
   await page.goto(base + '/app/#/favorites');
   await page.waitForSelector(`.tile[data-id="${firstId}"]`);
   step('favori eklendi ve Favoriler\'de görünüyor');
@@ -67,9 +69,7 @@ try {
   // favoriyi eski haline getir
   if (!wasFav) {
     await page.click(`.tile[data-id="${firstId}"]`);
-    await page.waitForSelector('.viewer .v-tools button');
-    await page.locator('.viewer .v-tools button').first().click();
-    await page.waitForTimeout(300);
+    await Promise.all([page.waitForResponse((r) => r.request().method() === 'PATCH'), page.click('.viewer button[aria-label="Favorilerden çıkar"]')]);
     await page.keyboard.press('Escape');
   }
   // Tarayıcıdan yükleme (benzersiz içerikli küçük bir PNG)
