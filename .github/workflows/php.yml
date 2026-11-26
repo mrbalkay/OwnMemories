@@ -1,0 +1,39 @@
+name: PHP
+
+on:
+  push:
+    paths: ['web/**', 'bin/**', 'tests/**', '.github/workflows/php.yml']
+  pull_request:
+    paths: ['web/**', 'bin/**', 'tests/**', '.github/workflows/php.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        php: ['8.1', '8.3']
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, gd, zip, intl, exif, mbstring, imagick
+          coverage: none
+      - name: Araçlar (exiftool, ffmpeg, vips)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libimage-exiftool-perl ffmpeg libvips-tools
+      - name: Sözdizimi kontrolü
+        run: find web bin tests -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+      - name: Testler
+        env:
+          OM_TEST_DB_HOST: 127.0.0.1
+          OM_TEST_DB_USER: root
+          OM_TEST_DB_PASS: root
+        run: php tests/run.php

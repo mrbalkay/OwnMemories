@@ -1,0 +1,13 @@
+/web/config/config.php
+/web/config/installed.lock
+/storage/
+/web/storage/
+/.superpowers/
+.DS_Store
+/node_modules/
+/tests/e2e/screens/
+# iOS
+/ios/*.xcodeproj
+/ios/build/
+/ios/.build/
+xcuserdata/

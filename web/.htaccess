@@ -1,0 +1,24 @@
+# OwnMemories — Apache yapılandırması (document root = web/)
+Options -Indexes
+DirectoryIndex index.php
+AddDefaultCharset UTF-8
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # HTTPS yönlendirmesi (Cloudflare Tunnel arkasında gerekmez; doğrudan yayında açın)
+    # RewriteCond %{HTTP:X-Forwarded-Proto} !https
+    # RewriteCond %{HTTPS} off
+    # RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # API: /api/v1/... → api/index.php
+    RewriteRule ^api/(v\d+/.*)$ api/index.php?r=/$1 [QSA,L]
+
+    # Gizli klasörler
+    RewriteRule ^(includes|install|config|storage|lang)(/|$) - [F,L]
+</IfModule>
+
+<IfModule mod_php.c>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 64M
+    php_value max_execution_time 120
+</IfModule>
