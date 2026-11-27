@@ -123,7 +123,7 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | GET | `assets/{id}/thumb` · `preview` | – | görüntü; hazır değilse 202 + SVG yer tutucu |
 | GET | `assets/{id}/original` | – | orijinal (indirme), Range |
 | GET | `assets/{id}/video` | – | orijinal (satır içi), Range |
-| POST | `uploads` | `{filename,size,sha1?,meta?:{taken_at,tz_offset,latitude,longitude,is_favorite,description,source_ref}}` | 201 `{id,chunk_size:52428800,received:0}` |
+| POST | `uploads` | `{filename,size,sha1?,meta?:{taken_at,tz_offset,latitude,longitude,is_favorite,description,source_ref,live_pair_source_ref,edited_of_source_ref}}` | 201 `{id,chunk_size:52428800,received:0}` |
 | PUT | `uploads/{id}?offset=N` | ham bayt (≤ 50 MB) veya `Content-Range: bytes a-b/total` | `{received}`; konum farklıysa 409 `offset_mismatch` + `received` |
 | GET | `uploads/{id}` | – | `{received}` (devam için) |
 | POST | `uploads/{id}/complete` | – | `{status:"created"\|"duplicate"\|"deleted_before", asset}`; özet tutmazsa 422 `checksum_mismatch`, eksikse 409 `incomplete` |
@@ -134,9 +134,14 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | POST | `albums/{id}/members` | `{email,role:"viewer"\|"contributor"}` | `{member}` |
 | DELETE | `albums/{id}/members/{userId}` | – | `{ok}` (sahip çıkarır veya üye ayrılır) |
 | GET | `users/lookup?email=` | – | `{exists,name}` |
+| POST | `devices/report` | `{device_id,name,model,os_version,app_version,pending,uploaded_total,last_backup_at,last_error}` | `{ok,server_time}` — iOS yedekleme durumu (Yönetim → Genel bakış) |
 
 Yetki: asset uçları yalnız sahibine; paylaşılan albüm üyesi albümdeki asset'leri görüntüler/indirir (salt okunur).
 Katkıda bulunan yalnız kendi asset'lerini ekler/çıkarır; sahip herkesinkini çıkarır. Yükleme kaynağı Bearer ile `ios`, oturumla `web`.
+
+iOS `source_ref` biçimi: `<localIdentifier>` (orijinal), `<localIdentifier>#live` (Live Photo videosu,
+`live_pair_source_ref` = fotoğrafınki), `<localIdentifier>#edited` (düzenlenmiş hali, `edited_of_source_ref` = orijinalinki).
+Aynı `#edited` kaynağının yeni hali gelince eski düzenlenmiş kopya çöpe taşınır.
 
 ## 5. İş kuyruğu ve cron
 

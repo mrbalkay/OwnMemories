@@ -1,4 +1,4 @@
--- OwnMemories veritabanı şeması (SCHEMA_VERSION = 2; migrasyonlar dahil güncel hali)
+-- OwnMemories veritabanı şeması (SCHEMA_VERSION = 3; migrasyonlar dahil güncel hali)
 -- InnoDB, utf8mb4_unicode_ci, tüm zamanlar UTC. MySQL 5.7+ / MariaDB 10.4+ uyumlu.
 
 CREATE TABLE IF NOT EXISTS users (
@@ -191,6 +191,23 @@ CREATE TABLE IF NOT EXISTS import_entries (
   mtime INT UNSIGNED NOT NULL DEFAULT 0,
   KEY ix_import_entries_kind (import_id, kind, id),
   KEY ix_import_entries_dir (import_id, kind, dir_key(191))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS devices (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  device_id VARCHAR(100) NOT NULL,
+  name VARCHAR(120) NOT NULL DEFAULT '',
+  model VARCHAR(60) NULL,
+  os_version VARCHAR(30) NULL,
+  app_version VARCHAR(30) NULL,
+  pending INT UNSIGNED NOT NULL DEFAULT 0,
+  uploaded_total INT UNSIGNED NOT NULL DEFAULT 0,
+  last_backup_at DATETIME NULL,
+  last_error VARCHAR(500) NULL,
+  last_seen_at DATETIME NOT NULL,
+  created_at DATETIME NOT NULL,
+  UNIQUE KEY uq_devices_user_device (user_id, device_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS uploads (

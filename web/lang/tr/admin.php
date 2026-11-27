@@ -24,4 +24,9 @@ return [
     'st_done' => 'Bitti',
     'st_failed' => 'Başarısız',
     'st_paused' => 'Duraklatıldı',
+    'devices' => 'Cihazlar',
+    'no_devices' => 'Henüz yedekleme yapan cihaz yok. iOS uygulamasıyla giriş yapınca burada görünür.',
+    'device' => 'Cihaz',
+    'pending' => 'Bekleyen',
+    'last_backup' => 'Son yedekleme',
 ];
