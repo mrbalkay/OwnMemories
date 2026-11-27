@@ -35,6 +35,12 @@ export class Timeline {
     this.status = h('div', { class: 'tl-status' });
     this.sentinel = h('div', { class: 'sentinel', 'aria-hidden': 'true' });
     this.root.append(this.jumpBack, this.wrap, this.status, this.sentinel);
+    this.lastWidth = 0;
+    this.ro = new ResizeObserver(() => {
+      const w = this.wrap.clientWidth;
+      if (w && Math.abs(w - this.lastWidth) > 1) { this.lastWidth = w; this.onResize(); }
+    });
+    this.ro.observe(this.wrap);
     this.io = new IntersectionObserver((es) => { if (!this.paused && es.some((e) => e.isIntersecting)) this.load(); }, { rootMargin: '1200px' });
     this.io.observe(this.sentinel);
     if (this.opts.scrubber !== false) this.buildScrubber();
@@ -43,6 +49,7 @@ export class Timeline {
 
   destroy() {
     window.removeEventListener('resize', this.onResize);
+    this.ro?.disconnect();
     this.io?.disconnect();
     this.unsub?.();
     this.scrub?.remove();
@@ -55,6 +62,7 @@ export class Timeline {
     this.paused = false;
     this.groups.clear();
     this.lastMonth = null;
+    this.monthEl = null;
     store.list = [];
     this.wrap.replaceChildren();
     this.jumpBack.hidden = !extra.before;
@@ -99,16 +107,17 @@ export class Timeline {
       let g = this.groups.get(key);
       if (!g) {
         const month = key.slice(0, 7);
-        if (month !== this.lastMonth) {
+        if (month !== this.lastMonth || !this.monthEl) {
           this.lastMonth = month;
-          this.wrap.append(h('h2', { class: 'month' }, formatMonth(month)));
+          this.monthEl = h('section', { class: 'month-group', dataset: { month } }, h('h2', { class: 'month' }, formatMonth(month)));
+          this.wrap.append(this.monthEl);
         }
         const grid = h('div', { class: 'grid', role: 'list' });
         const head = h('h3', { class: 'day' }, formatDay(key));
         const section = h('section', { class: 'day-group', dataset: { day: key } }, head, grid);
         g = { section, grid, assets: [] };
         this.groups.set(key, g);
-        this.wrap.append(section);
+        this.monthEl.append(section);
       }
       g.assets.push(a);
       g.grid.append(this.tile(a));
@@ -195,7 +204,12 @@ export class Timeline {
         g.assets = g.assets.filter((x) => x.id !== id);
         if (!grid.children.length) {
           this.groups.delete(sec.dataset.day);
+          const monthSec = sec.parentElement;
           sec.remove();
+          if (monthSec?.classList.contains('month-group') && !monthSec.querySelector('.day-group')) {
+            if (monthSec === this.monthEl) this.monthEl = null;
+            monthSec.remove();
+          }
         } else {
           this.layout(g);
         }

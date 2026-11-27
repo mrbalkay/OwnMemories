@@ -219,6 +219,7 @@ svg.fill { fill: currentColor; stroke: none; }
 .sb i { display: block; height: 100%; width: 0; background: #fff; }
 .sb.done i { width: 100%; }
 .sb.now i { animation: grow linear forwards; }
+.story.paused .sb.now i { animation-play-state: paused; }
 @keyframes grow { to { width: 100%; } }
 .story-title { display: grid; }
 .story-title strong { font-family: var(--serif); font-weight: 500; font-size: 22px; }
@@ -284,4 +285,5 @@ dialog.modal h3 { font-size: 14px; margin: 18px 0 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
+  .sb.now i { width: 50%; }
 }

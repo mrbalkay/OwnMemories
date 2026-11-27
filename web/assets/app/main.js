@@ -185,7 +185,7 @@ async function render() {
       const head = h('div', { class: 'mem-slot' });
       showTimeline({}, t('empty_photos'), head);
       import('./memories.js').then(async (m) => {
-        const strip = await m.memoriesStrip();
+        const strip = await m.memoriesStrip(viewerCtx);
         if (strip && head.isConnected) head.replaceWith(strip);
       });
     }
