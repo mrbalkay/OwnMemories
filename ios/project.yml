@@ -34,30 +34,62 @@ targets:
       - path: OwnMemories
         excludes:
           - "Info.plist"
+          - "OwnMemories.entitlements"
           - "Resources/PrivacyInfo.xcprivacy"
       - path: OwnMemories/Resources/PrivacyInfo.xcprivacy
         buildPhase: resources
       - path: Core/Sources/OwnMemoriesCore
+      - path: Shared
     settings:
       base:
         PRODUCT_NAME: OwnMemories
         PRODUCT_BUNDLE_IDENTIFIER: net.balkay.ownmemories
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_FILE: OwnMemories/Info.plist
+        CODE_SIGN_ENTITLEMENTS: OwnMemories/OwnMemories.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
     dependencies:
+      - target: OwnMemoriesWidgets
+        embed: true
+        codeSign: true
       - sdk: Photos.framework
       - sdk: BackgroundTasks.framework
       - sdk: AVKit.framework
       - sdk: Network.framework
+      - sdk: WidgetKit.framework
+      - sdk: UserNotifications.framework
+
+  OwnMemoriesWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: OwnMemoriesWidgets
+        excludes:
+          - "Info.plist"
+          - "OwnMemoriesWidgets.entitlements"
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: OwnMemoriesWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: net.balkay.ownmemories.widgets
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_FILE: OwnMemoriesWidgets/Info.plist
+        CODE_SIGN_ENTITLEMENTS: OwnMemoriesWidgets/OwnMemoriesWidgets.entitlements
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
 
 schemes:
   OwnMemories:
     build:
       targets:
         OwnMemories: all
+        OwnMemoriesWidgets: [running, profiling, analyzing, archiving]
     run:
       config: Debug
     archive:

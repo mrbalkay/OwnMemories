@@ -149,6 +149,13 @@ jobs:
             tail -40 "$RUNNER_TEMP/archive.log"
           }
           if archive; then echo "Arşiv tamam."; exit 0; fi
+          if grep -q "application-groups" "$RUNNER_TEMP/archive.log"; then
+            echo "::warning::App Group 'group.net.balkay.ownmemories' developer portalında kayıtlı/atanmış değil. Bu derleme App Group olmadan yapılıyor: uygulama tam çalışır, widget'lar fotoğraf gösteremez. Grubu developer.apple.com → Identifiers → App Groups bölümünde oluşturun; sonraki derlemeler grubu kullanır."
+            for f in ios/OwnMemories/OwnMemories.entitlements ios/OwnMemoriesWidgets/OwnMemoriesWidgets.entitlements; do
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.application-groups" "$f" || true
+            done
+            if archive; then echo "Arşiv tamam (App Group olmadan)."; exit 0; fi
+          fi
           show_errors
           exit 1
 

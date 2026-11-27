@@ -109,3 +109,19 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(try FileHash.sha1Hex(of: url), "a9993e364706816aba3e25717850c26c9cd0d89d")
     }
 }
+
+final class MemoryModelTests: XCTestCase {
+    func testDecodeMemories() throws {
+        let json = """
+        {"date":"2026-11-27","memories":[{"id":"on_this_day:2025-11-27","kind":"on_this_day","title":"1 yıl önce bugün","years_ago":1,
+        "date":"2025-11-27","count":0,"cover_asset_id":"c","asset_ids":[],"assets":[]},
+        {"id":"favorites:2026-11-27","kind":"favorites","title":"Favorilerinizden","years_ago":null,"date":"2026-11-27","count":0,
+        "cover_asset_id":"d","asset_ids":[],"assets":[]}]}
+        """
+        let r = try JSONDecoder().decode(MemoriesResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(r.memories.count, 2)
+        XCTAssertEqual(r.memories[0].yearsAgo, 1)
+        XCTAssertNil(r.memories[1].yearsAgo)
+        XCTAssertEqual(r.memories[0].coverAssetId, "c")
+    }
+}

@@ -10,6 +10,7 @@ struct AssetViewer: View {
     @State private var selection: String = ""
     @State private var current: [String: Asset] = [:]
     @State private var showInfo = false
+    @State private var chrome = true
 
     private func asset(_ id: String) -> Asset? { current[id] ?? assets.first { $0.id == id } }
 
@@ -24,6 +25,7 @@ struct AssetViewer: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
+            .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() } }
 
             HStack {
                 Button { dismiss() } label: { Image(systemName: "xmark").padding(10) }
@@ -39,7 +41,9 @@ struct AssetViewer: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
             .background(LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+            .opacity(chrome ? 1 : 0)
         }
+        .statusBarHidden(!chrome)
         .onAppear { selection = startId }
         .sheet(isPresented: $showInfo) {
             if let a = asset(selection) { AssetInfoView(asset: a).presentationDetents([.medium, .large]) }

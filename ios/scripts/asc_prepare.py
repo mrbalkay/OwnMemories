@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """App Store Connect API ile Bundle ID'yi hazırlar (bağımlılıksız). OwnCalendar'daki betiğin uyarlaması.
 
-- net.balkay.ownmemories Bundle ID'si yoksa oluşturur (ek yetenek gerekmez: Fotoğraflar, arka plan görevleri
-  ve arka plan URLSession için portal yeteneği gerekmiyor)
+- net.balkay.ownmemories ve .widgets Bundle ID'leri yoksa oluşturur
+- İkisinde de APP_GROUPS yeteneğini açar (widget ile anı önbelleği paylaşımı için)
 - Bu Bundle ID'lere ait, yetenekleri eskimiş Xcode yönetimli geliştirme profillerini siler
   (Xcode -allowProvisioningUpdates ile hemen yeniden oluşturur)
 
@@ -14,7 +14,8 @@ from asc_api import call, errtext  # noqa: E402
 
 APP_ID = "net.balkay.ownmemories"
 BUNDLES = {
-    APP_ID: ("OwnMemories", []),
+    APP_ID: ("OwnMemories", ["APP_GROUPS"]),
+    APP_ID + ".widgets": ("OwnMemories Widgets", ["APP_GROUPS"]),
 }
 
 

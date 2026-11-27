@@ -78,3 +78,19 @@ dbtest('test_memories_api_and_isolation', function () {
     $today = api_route('GET', '/v1/memories', $u)['json']['date'];
     assert_true((bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $today));
 });
+
+dbtest('test_random_assets_endpoint', function () {
+    $u = user_find(user_create('ali@example.com', 'parola12345', 'Ali'));
+    $ids = [];
+    for ($i = 0; $i < 8; $i++) {
+        $ids[] = mem_asset((int) $u['id'], sprintf('2024-0%d-10 10:00:00', $i + 1), 30 + $i);
+    }
+    $recent = mem_asset((int) $u['id'], gmdate('Y-m-d H:i:s', time() - 86400), 50);
+    asset_trash((int) $u['id'], [$ids[0]]);
+    $r = api_route('GET', '/v1/assets/random', $u, [], ['count' => '5'])['json']['assets'];
+    assert_eq(5, count($r));
+    $got = array_column($r, 'id');
+    assert_true(!in_array($ids[0], $got, true), 'çöptekiler yok');
+    assert_true(!in_array($recent, $got, true), 'son 30 gün yok');
+    assert_eq(7, count(api_route('GET', '/v1/assets/random', $u, [], ['count' => '50'])['json']['assets']));
+});

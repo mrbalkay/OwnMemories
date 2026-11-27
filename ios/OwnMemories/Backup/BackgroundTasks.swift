@@ -17,6 +17,8 @@ enum BackgroundJobs {
 
     private static func run(_ task: BGTask, seconds: TimeInterval?) {
         let work = Task { @MainActor in
+            await MemoryService.shared.refresh()
+            await MemoryNotifier.shared.reschedule()
             await BackupEngine.shared.runOnce(deadline: seconds.map { Date().addingTimeInterval($0) })
         }
         task.expirationHandler = { work.cancel() }

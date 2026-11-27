@@ -179,3 +179,31 @@ struct DeviceReport: Codable, Equatable {
         case lastError = "last_error"
     }
 }
+
+struct Memory: Codable, Identifiable, Hashable {
+    let id: String
+    let kind: String
+    let title: String
+    let yearsAgo: Int?
+    let date: String
+    let count: Int
+    let coverAssetId: String
+    let assetIds: [String]
+    let assets: [Asset]
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, date, count, assets
+        case yearsAgo = "years_ago"
+        case coverAssetId = "cover_asset_id"
+        case assetIds = "asset_ids"
+    }
+}
+
+struct MemoriesResponse: Codable {
+    let date: String
+    let memories: [Memory]
+}
+
+struct AssetList: Codable {
+    let assets: [Asset]
+}
