@@ -17,8 +17,11 @@ export class Timeline {
     this.next = null;
     this.loading = false;
     this.done = false;
-    this.groups = new Map(); // dayKey → {section, grid}
+    this.groups = new Map(); // dayKey → {section, grid, assets, tiles}
+    this.lastMonth = null;
     store.list = [];
+    this.onResize = () => { clearTimeout(this._rt); this._rt = setTimeout(() => this.layoutAll(), 120); };
+    window.addEventListener('resize', this.onResize);
     store.loadMore = () => this.load();
     this.build();
     this.unsub = store.onChange(() => this.syncSelection());
@@ -39,6 +42,7 @@ export class Timeline {
   }
 
   destroy() {
+    window.removeEventListener('resize', this.onResize);
     this.io?.disconnect();
     this.unsub?.();
     this.scrub?.remove();
@@ -50,6 +54,7 @@ export class Timeline {
     this.done = false;
     this.paused = false;
     this.groups.clear();
+    this.lastMonth = null;
     store.list = [];
     this.wrap.replaceChildren();
     this.jumpBack.hidden = !extra.before;
@@ -87,24 +92,69 @@ export class Timeline {
   }
 
   append(assets) {
+    const touched = new Set();
     for (const a of assets) {
       store.list.push(a);
       const key = dayKey(a);
       let g = this.groups.get(key);
       if (!g) {
+        const month = key.slice(0, 7);
+        if (month !== this.lastMonth) {
+          this.lastMonth = month;
+          this.wrap.append(h('h2', { class: 'month' }, formatMonth(month)));
+        }
         const grid = h('div', { class: 'grid', role: 'list' });
-        const head = h('h2', { class: 'day' }, formatDay(key));
+        const head = h('h3', { class: 'day' }, formatDay(key));
         const section = h('section', { class: 'day-group', dataset: { day: key } }, head, grid);
-        g = { section, grid };
+        g = { section, grid, assets: [] };
         this.groups.set(key, g);
         this.wrap.append(section);
       }
+      g.assets.push(a);
       g.grid.append(this.tile(a));
+      touched.add(g);
     }
+    for (const g of touched) this.layout(g);
+  }
+
+  /** Oranları koruyan satır yerleşimi (justified): her satır grid genişliğini tam doldurur. */
+  layout(g) {
+    const width = g.grid.clientWidth || this.wrap.clientWidth;
+    if (!width) return;
+    const target = window.innerWidth < 600 ? 128 : (window.innerWidth < 1100 ? 190 : 230);
+    const tiles = [...g.grid.children];
+    const GAP = parseFloat(getComputedStyle(g.grid).columnGap) || 4;
+    let row = [];
+    let sum = 0;
+    const flush = (last) => {
+      if (!row.length) return;
+      const gaps = GAP * (row.length - 1);
+      let hgt = (width - gaps) / sum;
+      if (last && hgt > target * 1.25) hgt = target; // son satır gereğinden büyümesin
+      row.forEach(([el, ar]) => {
+        el.style.width = `${Math.floor(ar * hgt)}px`;
+        el.style.height = `${Math.floor(hgt)}px`;
+      });
+      row = [];
+      sum = 0;
+    };
+    tiles.forEach((el, i) => {
+      const a = g.assets[i];
+      const ar = a && a.width && a.height ? Math.min(3, Math.max(0.4, a.width / a.height)) : 1;
+      row.push([el, ar]);
+      sum += ar;
+      if (sum * target + GAP * (row.length - 1) >= width) flush(false);
+    });
+    flush(true);
+  }
+
+  layoutAll() {
+    for (const g of this.groups.values()) this.layout(g);
   }
 
   tile(a) {
     const img = h('img', { src: thumbUrl(a.id), alt: a.filename, loading: 'lazy', decoding: 'async', draggable: 'false' });
+    img.addEventListener('load', () => img.classList.add('in'), { once: true });
     const sel = h('button', { class: 'tile-check', 'aria-label': t('select'), tabindex: '-1', onclick: (e) => { e.stopPropagation(); store.toggle(a.id); } });
     sel.innerHTML = '<svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg>';
     const badges = h('div', { class: 'tile-badges' });
@@ -139,10 +189,16 @@ export class Timeline {
       const el = this.wrap.querySelector(`.tile[data-id="${id}"]`);
       const grid = el?.parentElement;
       el?.remove();
-      if (grid && !grid.children.length) {
-        const sec = grid.closest('.day-group');
-        this.groups.delete(sec.dataset.day);
-        sec.remove();
+      const sec = grid?.closest('.day-group');
+      const g = sec ? this.groups.get(sec.dataset.day) : null;
+      if (g) {
+        g.assets = g.assets.filter((x) => x.id !== id);
+        if (!grid.children.length) {
+          this.groups.delete(sec.dataset.day);
+          sec.remove();
+        } else {
+          this.layout(g);
+        }
       }
     }
     if (store.list.length === 0 && this.done) this.status.replaceChildren(h('div', { class: 'empty' }, h('p', {}, this.opts.empty || t('empty_photos'))));
@@ -150,7 +206,13 @@ export class Timeline {
 
   refreshTile(a) {
     const el = this.wrap.querySelector(`.tile[data-id="${a.id}"]`);
-    if (el) el.replaceWith(this.tile(a));
+    if (!el) return;
+    const fresh = this.tile(a);
+    fresh.style.width = el.style.width;
+    fresh.style.height = el.style.height;
+    el.replaceWith(fresh);
+    const g = this.groups.get(dayKey(a));
+    if (g) g.assets = g.assets.map((x) => (x.id === a.id ? a : x));
   }
 
   async buildScrubber() {

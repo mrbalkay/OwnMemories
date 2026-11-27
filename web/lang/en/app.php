@@ -32,4 +32,6 @@ return [
     'uploads_title' => 'Uploads', 'from' => 'From', 'to' => 'To', 'filter' => 'Filter', 'used' => '{used} used', 'used_quota' => '{used} of {quota}',
     'video' => 'Video', 'today' => 'Today', 'yesterday' => 'Yesterday', 'no_location' => 'No location', 'map_open' => 'Open in map',
     'video_unplayable' => 'This video cannot play in this browser (iPhone HEVC format). The server is preparing a compatible copy; try again shortly or download the original.',
+    'memories' => 'Memories',
+    'open_photo' => 'Open photo',
 ];
