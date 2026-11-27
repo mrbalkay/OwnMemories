@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# OwnMemories — Ubuntu Server 24.04 kurulum betiği (root olarak çalıştırın).
+# OwnMemories — Ubuntu Server (22.04 / 24.04 / daha yeni) ve Debian 12+ kurulum betiği (root olarak çalıştırın).
+# Dağıtımın varsayılan PHP sürümünü kullanır (en az 8.1).
 #   sudo bash server/install-ubuntu.sh
 # Yapar: paketleri kurar, /var/www/ownmemories'e kopyalar, Apache sitesini, veritabanını,
 # depo klasörünü ve systemd birimlerini (işçi, cron, yedek) hazırlar. Cloudflare Tunnel adımları docs/INSTALL.md'de.
@@ -13,12 +14,25 @@ DB_NAME="${OM_DB_NAME:-ownmemories}"
 DB_USER="${OM_DB_USER:-ownmemories}"
 DB_PASS="${OM_DB_PASS:-$(openssl rand -hex 16)}"
 
+echo "==> Sistem: $(. /etc/os-release && echo "$PRETTY_NAME")"
 echo "==> Paketler"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq apache2 mysql-server \
-  php8.3 libapache2-mod-php8.3 php8.3-cli php8.3-mysql php8.3-gd php8.3-imagick php8.3-zip php8.3-intl php8.3-mbstring php8.3-xml php8.3-exif \
-  libimage-exiftool-perl ffmpeg libvips-tools libheif-examples imagemagick rsync openssl
+has_pkg() { apt-cache show "$1" >/dev/null 2>&1; }
+DB_PKG=mysql-server
+has_pkg mysql-server || DB_PKG=mariadb-server
+HEIF_PKG=""
+has_pkg libheif-examples && HEIF_PKG=libheif-examples
+apt-get install -y -qq apache2 "$DB_PKG" \
+  php libapache2-mod-php php-cli php-mysql php-gd php-imagick php-zip php-intl php-mbstring php-xml \
+  libimage-exiftool-perl ffmpeg libvips-tools $HEIF_PKG imagemagick rsync openssl
+
+PHPV="$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')"
+if ! php -r 'exit(version_compare(PHP_VERSION, "8.1.0", ">=") ? 0 : 1);'; then
+  echo "Bu sistemdeki PHP $PHPV; OwnMemories en az PHP 8.1 ister (Ubuntu 22.04 veya üstü)." >&2
+  exit 1
+fi
+echo "    PHP $PHPV, veritabanı: $DB_PKG"
 
 echo "==> Dosyalar: $DEST"
 mkdir -p "$DEST"
@@ -31,21 +45,21 @@ chown -R www-data:www-data "$STORAGE"
 chmod 750 "$STORAGE"
 
 echo "==> PHP ayarları"
-cat > /etc/php/8.3/apache2/conf.d/90-ownmemories.ini <<INI
+cat > "/etc/php/$PHPV/apache2/conf.d/90-ownmemories.ini" <<INI
 upload_max_filesize = 64M
 post_max_size = 64M
 memory_limit = 512M
 max_execution_time = 300
 INI
-cp /etc/php/8.3/apache2/conf.d/90-ownmemories.ini /etc/php/8.3/cli/conf.d/90-ownmemories.ini
-sed -i 's/^memory_limit = 512M/memory_limit = 1024M/' /etc/php/8.3/cli/conf.d/90-ownmemories.ini
+cp "/etc/php/$PHPV/apache2/conf.d/90-ownmemories.ini" "/etc/php/$PHPV/cli/conf.d/90-ownmemories.ini"
+sed -i 's/^memory_limit = 512M/memory_limit = 1024M/' "/etc/php/$PHPV/cli/conf.d/90-ownmemories.ini"
 
 echo "==> Apache"
 cp "$SRC/server/apache-ownmemories.conf" /etc/apache2/sites-available/ownmemories.conf
 a2enmod -q rewrite remoteip headers >/dev/null
 a2dissite -q 000-default >/dev/null || true
 a2ensite -q ownmemories >/dev/null
-systemctl reload apache2
+systemctl restart apache2
 
 echo "==> Veritabanı"
 mysql -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"

@@ -46,7 +46,7 @@ Yerel geliştirme için:
 php -S 127.0.0.1:8080 -t web web/router-dev.php
 ```
 
-## B. Evdeki Ubuntu sunucusu (Ubuntu Server 24.04 LTS)
+## B. Evdeki Ubuntu sunucusu (Ubuntu Server 22.04 veya üstü)
 
 ### B1. Temel kurulum
 
@@ -58,7 +58,7 @@ sudo OM_STORAGE=/srv/ownmemories bash server/install-ubuntu.sh
 ```
 
 Betik şunları yapar:
-- Apache, PHP 8.3, MySQL, exiftool, ffmpeg ve libvips'i kurar.
+- Apache, dağıtımın varsayılan PHP sürümünü (en az 8.1), MySQL (yoksa MariaDB), exiftool, ffmpeg ve libvips'i kurar.
 - Dosyaları `/var/www/ownmemories` klasörüne kopyalar.
 - Veritabanını ve kullanıcısını oluşturur.
 - Depo klasörünü (`/srv/ownmemories`) hazırlar.
