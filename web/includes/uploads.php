@@ -137,8 +137,41 @@ function upload_complete(string $id, int $userId): array
         @unlink($file);
         db_exec('DELETE FROM uploads WHERE id = ?', [$id]);
     }
+    if ($r['asset_id'] !== null) {
+        upload_link_related($userId, $r['asset_id'], $meta);
+    }
     $asset = $r['asset_id'] !== null ? db_row('SELECT * FROM assets WHERE id = ?', [$r['asset_id']]) : null;
     return ['status' => $r['status'], 'asset' => $asset !== null ? asset_to_json($asset) : null];
+}
+
+/**
+ * iOS yüklemesinin ilişkilerini kurar: Live Photo eşi (live_pair_source_ref), düzenlenmiş halin orijinali
+ * (edited_of_source_ref). Aynı source_ref'li eski bir iOS asset'i (önceki düzenleme) çöpe taşınır.
+ */
+function upload_link_related(int $userId, string $assetId, array $meta): void
+{
+    $find = fn(string $ref) => db_val("SELECT id FROM assets WHERE user_id = ? AND source = 'ios' AND source_ref = ? AND trashed_at IS NULL AND id <> ? ORDER BY created_at DESC LIMIT 1", [$userId, mb_substr($ref, 0, 512), $assetId]);
+    $changed = false;
+    $ref = isset($meta['source_ref']) ? (string) $meta['source_ref'] : '';
+    if ($ref !== '' && str_ends_with($ref, '#edited')) {
+        $old = db_all("SELECT id FROM assets WHERE user_id = ? AND source = 'ios' AND source_ref = ? AND id <> ? AND trashed_at IS NULL", [$userId, mb_substr($ref, 0, 512), $assetId]);
+        if ($old) {
+            asset_trash($userId, array_column($old, 'id'));
+        }
+    }
+    if (!empty($meta['live_pair_source_ref']) && ($pair = $find((string) $meta['live_pair_source_ref'])) !== null) {
+        db_exec('UPDATE assets SET live_pair_id = ? WHERE id = ? AND user_id = ?', [$pair, $assetId, $userId]);
+        db_exec('UPDATE assets SET live_pair_id = ? WHERE id = ? AND user_id = ?', [$assetId, $pair, $userId]);
+        $changed = true;
+    }
+    if (!empty($meta['edited_of_source_ref']) && ($orig = $find((string) $meta['edited_of_source_ref'])) !== null) {
+        db_exec('UPDATE assets SET edited_of_id = ? WHERE id = ? AND user_id = ?', [$orig, $assetId, $userId]);
+        $changed = true;
+    }
+    if ($changed) {
+        $v = asset_bump_version($userId);
+        db_exec('UPDATE assets SET version = ? WHERE user_id = ? AND id = ?', [$v, $userId, $assetId]);
+    }
 }
 
 function uploads_cleanup(): int

@@ -30,6 +30,21 @@ $lastRun = max($o['cron_last_run'], $o['worker_last_seen']);
   </tbody>
 </table>
 
+<h2><?= e(t('admin.devices')) ?></h2>
+<?php if (!$o['devices']): ?><p class="muted"><?= e(t('admin.no_devices')) ?></p><?php else: ?>
+<table class="tbl">
+  <thead><tr><th><?= e(t('admin.device')) ?></th><th><?= e(t('admin.name')) ?></th><th class="num"><?= e(t('admin.pending')) ?></th><th><?= e(t('admin.last_backup')) ?></th><th><?= e(t('admin.last_seen')) ?></th></tr></thead>
+  <tbody>
+  <?php foreach ($o['devices'] as $d): ?>
+    <tr><td><?= e($d['name']) ?> <span class="muted small"><?= e(trim(($d['model'] ?? '') . ' · iOS ' . ($d['os_version'] ?? '?') . ' · ' . ($d['app_version'] ?? ''))) ?></span>
+      <?php if ($d['last_error']): ?><div class="small no"><?= e($d['last_error']) ?></div><?php endif; ?></td>
+      <td><?= e($d['user_name']) ?></td><td class="num"><?= (int) $d['pending'] ?></td>
+      <td><?= admin_time($d['last_backup_at']) ?></td><td><?= admin_time($d['last_seen_at']) ?></td></tr>
+  <?php endforeach; ?>
+  </tbody>
+</table>
+<?php endif; ?>
+
 <h2><?= e(t('admin.recent_imports')) ?></h2>
 <?php if (!$o['imports']): ?><p class="muted"><?= e(t('admin.none')) ?></p><?php else: ?>
 <table class="tbl">

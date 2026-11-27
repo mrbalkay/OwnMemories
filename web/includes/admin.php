@@ -70,6 +70,7 @@ function admin_overview(): array
         'disk_free' => is_dir($root) ? (float) @disk_free_space($root) : null,
         'disk_total' => is_dir($root) ? (float) @disk_total_space($root) : null,
         'imports' => db_all('SELECT i.*, u.name AS user_name FROM imports i JOIN users u ON u.id = i.user_id ORDER BY i.id DESC LIMIT 5'),
+        'devices' => db_all('SELECT d.*, u.name AS user_name FROM devices d JOIN users u ON u.id = d.user_id ORDER BY d.last_seen_at DESC'),
         'cron_last_run' => (int) site_setting('cron_last_run', '0'),
         'worker_last_seen' => (int) site_setting('worker_last_seen', '0'),
     ];

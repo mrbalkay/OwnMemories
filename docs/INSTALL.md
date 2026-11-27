@@ -80,7 +80,29 @@ Betik sonunda veritabanı parolasını yazar; bunu not alın. Ardından:
 > **Disk:** 200 GB+ arşiv, önizlemeler ve büyüme payı için en az 1 TB veri diski önerilir.
 > Depo klasörünü (`/srv/ownmemories`) bu diske bağlayın.
 
-### B2. Cloudflare Tunnel
+### B2. Tailscale (önerilen)
+
+Uygulama internete açılmaz; yalnız Tailscale ağınızdaki (tailnet) cihazlardan erişilir. iOS uygulaması için HTTPS
+adresi Tailscale'in kendi sertifikasıyla sağlanır.
+
+1. Tailscale yönetim panelinde (login.tailscale.com) **DNS** sayfasında **MagicDNS** ve **HTTPS Certificates** açık olsun.
+2. Sunucuda Tailscale bağlıyken uygulamayı HTTPS ile yayınlayın (yeniden başlatmalarda da kalıcıdır):
+   ```bash
+   sudo tailscale serve --bg 80
+   ```
+   ```bash
+   tailscale serve status
+   ```
+   Çıktıdaki adres `https://<makine-adı>.<tailnet-adınız>.ts.net` biçimindedir.
+3. `/var/www/ownmemories/web/config/config.php` dosyasında `'url' =>` satırını bu adresle değiştirin.
+4. Telefonda ve bilgisayarda Tailscale uygulamasını kurup aynı hesapla giriş yapın; adresi tarayıcıda açın.
+5. Eşiniz için: Tailscale panelinde **Users → Invite** ile tailnet'e davet edin veya yalnız bu makineyi
+   **Share** ile paylaşın. OwnMemories'te de **Yönetim → Kullanıcılar** sayfasından hesabını oluşturun.
+
+> iOS uygulaması yedeklemeyi bu adres üzerinden yapar. Telefonda Tailscale bağlı değilse yedekleme bekler ve
+> bağlantı gelince devam eder.
+
+### B3. Cloudflare Tunnel (isteğe bağlı, internetten erişim için)
 
 1. Cloudflare'de `balkay.net` alan adının etkin olduğundan emin olun.
 2. Sunucuda `cloudflared` kurun:

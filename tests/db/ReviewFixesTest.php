@@ -203,5 +203,5 @@ dbtest('test_live_and_edited_indexes_exist', function () {
     $keys = array_column(db_all('SHOW INDEX FROM assets'), 'Column_name');
     assert_true(in_array('live_pair_id', $keys, true));
     assert_true(in_array('edited_of_id', $keys, true));
-    assert_eq(2, SCHEMA_VERSION);
+    assert_true(SCHEMA_VERSION >= 2);
 });

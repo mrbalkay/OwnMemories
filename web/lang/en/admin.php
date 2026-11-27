@@ -24,4 +24,9 @@ return [
     'st_done' => 'Done',
     'st_failed' => 'Failed',
     'st_paused' => 'Paused',
+    'devices' => 'Devices',
+    'no_devices' => 'No device is backing up yet. It appears here after signing in with the iOS app.',
+    'device' => 'Device',
+    'pending' => 'Pending',
+    'last_backup' => 'Last backup',
 ];
