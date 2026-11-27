@@ -38,15 +38,19 @@ struct MemoriesProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PhotoEntry>) -> Void) {
         let list = build()
-        let refresh = (list.last?.date ?? Date()).addingTimeInterval(30 * 60)
+        let midnight = Calendar.current.startOfDay(for: Date()).addingTimeInterval(24 * 3600 + 60)
+        let refresh = min((list.last?.date ?? Date()).addingTimeInterval(30 * 60), midnight)
         completion(Timeline(entries: list.isEmpty ? [placeholderEntry] : list, policy: .after(refresh)))
     }
 
     private func build() -> [PhotoEntry] {
         let s = WidgetStore.load()
         var items: [(String, WidgetPhoto, URL)] = []
-        for m in s.memories {
-            for p in m.photos { items.append((m.title, p, DeepLink.memory(date: m.date, id: m.id))) }
+        // "N yıl önce bugün" yalnız bugünün anlık görüntüsüyse gösterilir; değilse rastgele anlara düşülür.
+        if Calendar.current.isDateInToday(s.updatedAt) {
+            for m in s.memories {
+                for p in m.photos { items.append((m.title, p, DeepLink.memory(requestDate: m.requestDate, id: m.id))) }
+            }
         }
         if items.isEmpty {
             items = s.randoms.map { ("Geçmişten bir an", $0, DeepLink.asset($0.assetId)) }

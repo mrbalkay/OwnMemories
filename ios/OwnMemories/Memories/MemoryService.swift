@@ -9,19 +9,40 @@ final class MemoryService: ObservableObject {
 
     @Published private(set) var memories: [Memory] = []
     private var lastRefresh: Date?
+    private var inFlight: Task<Void, Never>?
 
+    /// Aynı anda tek yenileme çalışır; ikinci çağrı ilkini bekler.
     func refresh(force: Bool = false) async {
+        if let running = inFlight { await running.value; return }
         if !force, let last = lastRefresh, Date().timeIntervalSince(last) < 15 * 60 { return }
+        let task = Task { await self.performRefresh() }
+        inFlight = task
+        await task.value
+        inFlight = nil
+    }
+
+    private func performRefresh() async {
         guard let client = Session.storedClient() else { return }
         guard let r: MemoriesResponse = try? await client.send("GET", "memories") else { return }
         memories = r.memories
         lastRefresh = Date()
         let randoms: AssetList? = try? await client.send("GET", "assets/random", query: ["count": "12"])
-        await updateWidgets(memories: r.memories, randoms: randoms?.assets ?? [], client: client)
+        await updateWidgets(memories: r.memories, requestDate: r.date, randoms: randoms?.assets ?? [], client: client)
     }
 
-    private func updateWidgets(memories: [Memory], randoms: [Asset], client: APIClient) async {
+    /// Çıkışta: bellekteki anılar ve widget önbelleği temizlenir.
+    func reset() {
+        inFlight?.cancel()
+        inFlight = nil
+        memories = []
+        lastRefresh = nil
+        WidgetStore.save(.empty)
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    private func updateWidgets(memories: [Memory], requestDate: String, randoms: [Asset], client: APIClient) async {
         guard WidgetStore.directory != nil else { return }
+        let previous = WidgetStore.load()
         var snapshot = WidgetSnapshot(updatedAt: Date(), memories: [], randoms: [])
         for m in memories.prefix(3) {
             var photos: [WidgetPhoto] = []
@@ -29,11 +50,15 @@ final class MemoryService: ObservableObject {
             for a in picks.prefix(6) {
                 if let file = await cacheImage(a, client: client) { photos.append(WidgetPhoto(assetId: a.id, file: file, caption: Self.caption(a))) }
             }
-            if !photos.isEmpty { snapshot.memories.append(WidgetMemory(id: m.id, date: m.date, title: m.title, photos: photos)) }
+            if !photos.isEmpty { snapshot.memories.append(WidgetMemory(id: m.id, date: m.date, requestDate: requestDate, title: m.title, photos: photos)) }
         }
         for a in randoms.prefix(12) {
+            if Task.isCancelled { break }
             if let file = await cacheImage(a, client: client) { snapshot.randoms.append(WidgetPhoto(assetId: a.id, file: file, caption: Self.caption(a))) }
         }
+        // Yarıda kalan (iptal edilen) yenileme iyi içeriği silmesin.
+        if Task.isCancelled { return }
+        if snapshot.randoms.isEmpty { snapshot.randoms = previous.randoms }
         WidgetStore.save(snapshot)
         WidgetCenter.shared.reloadAllTimelines()
     }
@@ -46,9 +71,14 @@ final class MemoryService: ObservableObject {
         if FileManager.default.fileExists(atPath: url.path) { return name }
         guard let img = await ImageLoader.shared.image(for: client.url("assets/\(a.id)/preview"), client: client) else { return nil }
         let maxEdge: CGFloat = 800
-        let scale = min(1, maxEdge / max(img.size.width, img.size.height))
-        let size = CGSize(width: img.size.width * scale, height: img.size.height * scale)
-        let resized = UIGraphicsImageRenderer(size: size).image { _ in img.draw(in: CGRect(origin: .zero, size: size)) }
+        let pw = img.size.width * img.scale, ph = img.size.height * img.scale
+        let scale = min(1, maxEdge / max(pw, ph))
+        let size = CGSize(width: (pw * scale).rounded(), height: (ph * scale).rounded())
+        // Ölçek 1: piksel boyutu gerçekten ~800 px olsun (widget bellek sınırı).
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+        let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in img.draw(in: CGRect(origin: .zero, size: size)) }
         guard let data = resized.jpegData(compressionQuality: 0.8) else { return nil }
         try? data.write(to: url, options: .atomic)
         return name

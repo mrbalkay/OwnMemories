@@ -16,10 +16,15 @@ enum BackgroundJobs {
     }
 
     private static func run(_ task: BGTask, seconds: TimeInterval?) {
+        let deadline = seconds.map { Date().addingTimeInterval($0) }
         let work = Task { @MainActor in
-            await MemoryService.shared.refresh()
-            await MemoryNotifier.shared.reschedule()
-            await BackupEngine.shared.runOnce(deadline: seconds.map { Date().addingTimeInterval($0) })
+            // Yedekleme öncelikli; anılar ve bildirimler kalan sürede (en az 8 sn varsa) yenilenir.
+            await BackupEngine.shared.runOnce(deadline: deadline.map { $0.addingTimeInterval(-8) })
+            if Task.isCancelled { return }
+            if deadline == nil || deadline!.timeIntervalSinceNow > 8 {
+                await MemoryService.shared.refresh()
+                await MemoryNotifier.shared.reschedule()
+            }
         }
         task.expirationHandler = { work.cancel() }
         Task {

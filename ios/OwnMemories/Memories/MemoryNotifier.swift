@@ -25,6 +25,7 @@ final class MemoryNotifier: ObservableObject {
     @Published private(set) var denied = false
 
     private let prefix = "memory-"
+    private var current: Task<Void, Never>?
 
     private func changed() async {
         if enabled {
@@ -35,13 +36,35 @@ final class MemoryNotifier: ObservableObject {
         await reschedule()
     }
 
+    /// Önceki planlama sürüyorsa iptal edilir; yeni planlama tamamlanınca eski bildirimler değiştirilir.
     func reschedule() async {
+        current?.cancel()
+        let task = Task { await self.performReschedule() }
+        current = task
+        await task.value
+    }
+
+    /// Çıkışta bütün anı bildirimlerini kaldırır.
+    func clearAll() async {
+        current?.cancel()
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) }
         center.removePendingNotificationRequests(withIdentifiers: pending)
-        guard enabled, let client = Session.storedClient() else { return }
+        let delivered = await center.deliveredNotifications().map(\.request.identifier).filter { $0.hasPrefix(prefix) }
+        center.removeDeliveredNotifications(withIdentifiers: delivered)
+    }
+
+    private func performReschedule() async {
+        let center = UNUserNotificationCenter.current()
+        let existing = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) }
+        guard enabled, let client = Session.storedClient() else {
+            center.removePendingNotificationRequests(withIdentifiers: existing)
+            return
+        }
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+        var fresh: [UNNotificationRequest] = []
+        var anyFetched = false
 
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
@@ -53,9 +76,11 @@ final class MemoryNotifier: ObservableObject {
             guard let day = cal.date(byAdding: .day, value: offset, to: today),
                   let fire = cal.date(bySettingHour: hour, minute: 0, second: 0, of: day), fire > Date() else { continue }
             if frequency == .weekly && cal.component(.weekday, from: day) != 1 { continue }
+            if Task.isCancelled { return }
             let date = dayFmt.string(from: day)
-            guard let r: MemoriesResponse = try? await client.send("GET", "memories", query: ["date": date]),
-                  let m = r.memories.first(where: { $0.kind != "favorites" }) ?? r.memories.first else { continue }
+            guard let r: MemoriesResponse = try? await client.send("GET", "memories", query: ["date": date]) else { continue }
+            anyFetched = true
+            guard let m = r.memories.first(where: { $0.kind != "favorites" }) ?? r.memories.first else { continue }
             let content = UNMutableNotificationContent()
             content.title = m.title
             content.body = m.count == 1 ? "Bir anınız var, bakmak ister misiniz?" : "\(m.count) fotoğraf ve video sizi bekliyor."
@@ -64,7 +89,13 @@ final class MemoryNotifier: ObservableObject {
             content.userInfo = ["memoryDate": m.date, "memoryId": m.id, "requestDate": date]
             if let att = await attachment(for: m.coverAssetId, client: client) { content.attachments = [att] }
             let comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
-            let req = UNNotificationRequest(identifier: prefix + date, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false))
+            fresh.append(UNNotificationRequest(identifier: prefix + date, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
+        }
+        // Hiçbir gün sorulamadıysa (sunucuya ulaşılamadı) mevcut planı koru.
+        guard anyFetched, !Task.isCancelled, enabled else { return }
+        let keep = Set(fresh.map(\.identifier))
+        center.removePendingNotificationRequests(withIdentifiers: existing.filter { !keep.contains($0) })
+        for req in fresh where !Task.isCancelled && enabled {
             try? await center.add(req)
         }
     }

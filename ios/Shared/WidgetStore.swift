@@ -15,6 +15,8 @@ struct WidgetPhoto: Codable, Hashable {
 struct WidgetMemory: Codable, Hashable {
     let id: String
     let date: String
+    /// Sunucuya sorulan gün (anı bu tarihin anısı); bağlantı açılınca aynı gün istenir.
+    let requestDate: String
     let title: String
     let photos: [WidgetPhoto]
 }
@@ -57,12 +59,12 @@ enum WidgetStore {
 }
 
 enum DeepLink {
-    static func memory(date: String, id: String) -> URL {
+    static func memory(requestDate: String, id: String) -> URL {
         var c = URLComponents()
         c.scheme = "ownmemories"
         c.host = "memory"
-        c.queryItems = [URLQueryItem(name: "date", value: date), URLQueryItem(name: "id", value: id)]
-        return c.url!
+        c.queryItems = [URLQueryItem(name: "date", value: requestDate), URLQueryItem(name: "id", value: id)]
+        return c.url ?? URL(string: "ownmemories://")!
     }
 
     static func asset(_ id: String) -> URL {

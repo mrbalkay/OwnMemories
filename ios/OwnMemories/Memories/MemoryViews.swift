@@ -121,7 +121,7 @@ struct MemoryStoryView: View {
                     Color.clear.contentShape(Rectangle()).frame(width: geo.size.width * 0.35).onTapGesture { go(index - 1) }
                     Color.clear.contentShape(Rectangle()).onTapGesture { go(index + 1) }
                 }
-                .simultaneousGesture(LongPressGesture(minimumDuration: 0.25).onChanged { _ in paused = true }.onEnded { _ in paused = false })
+                .onLongPressGesture(minimumDuration: 0.25, maximumDistance: 30, perform: {}, onPressingChanged: { pressing in paused = pressing })
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 4) {
                         ForEach(memory.assets.indices, id: \.self) { i in

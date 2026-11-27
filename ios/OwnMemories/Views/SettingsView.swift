@@ -53,6 +53,8 @@ struct SettingsView: View {
                 Button("Çıkış yap", role: .destructive) {
                     Task {
                         engine.resetAll()
+                        MemoryService.shared.reset()
+                        await MemoryNotifier.shared.clearAll()
                         await session.logout()
                     }
                 }

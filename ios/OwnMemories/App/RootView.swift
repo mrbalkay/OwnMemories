@@ -26,20 +26,35 @@ struct RootView: View {
 struct SingleAssetLoader: View {
     let assetId: String
     @EnvironmentObject private var session: Session
+    @Environment(\.dismiss) private var dismiss
     @State private var asset: Asset?
+    @State private var failed = false
 
     var body: some View {
         Group {
             if let asset {
                 AssetViewer(assets: [asset], startId: asset.id, onChange: { _ in })
             } else {
-                ZStack { Color.black.ignoresSafeArea(); ProgressView().tint(.white) }
+                ZStack(alignment: .topLeading) {
+                    Color.black.ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        if failed {
+                            Text("Fotoğraf açılamadı. Sunucuya ulaşılamıyor olabilir.").foregroundStyle(.white).multilineTextAlignment(.center)
+                        } else {
+                            ProgressView().tint(.white)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(30)
+                    Button { dismiss() } label: { Image(systemName: "xmark").font(.title3).foregroundStyle(.white).padding(16) }
+                }
             }
         }
         .task {
-            guard let client = session.client else { return }
+            guard let client = session.client else { failed = true; return }
             let r: AssetEnvelope? = try? await client.send("GET", "assets/\(assetId)")
             asset = r?.asset
+            failed = asset == nil
         }
     }
 }
