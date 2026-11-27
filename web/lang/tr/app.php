@@ -32,4 +32,6 @@ return [
     'uploads_title' => 'Yüklemeler', 'from' => 'Başlangıç', 'to' => 'Bitiş', 'filter' => 'Süz', 'used' => '{used} kullanılıyor', 'used_quota' => '{used} / {quota}',
     'video' => 'Video', 'today' => 'Bugün', 'yesterday' => 'Dün', 'no_location' => 'Konum yok', 'map_open' => 'Haritada aç',
     'video_unplayable' => 'Bu video bu tarayıcıda oynatılamıyor (iPhone HEVC biçimi). Sunucu tarayıcı uyumlu bir kopya hazırlıyor; birazdan tekrar deneyin ya da orijinali indirin.',
+    'memories' => 'Anılar',
+    'open_photo' => 'Fotoğrafı aç',
 ];

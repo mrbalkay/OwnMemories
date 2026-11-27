@@ -84,6 +84,7 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['GET', '#^/v1/me$#', fn() => api_ok(['user' => user_public(api_need_user($user))])],
         ['GET', '#^/v1/assets$#', fn() => api_assets_list(api_need_user($user), $query)],
         ['GET', '#^/v1/assets/summary$#', fn() => api_assets_summary(api_need_user($user), $query)],
+        ['GET', '#^/v1/assets/random$#', fn() => api_assets_random(api_need_user($user), $query)],
         ['GET', '#^/v1/assets/map$#', fn() => api_assets_map(api_need_user($user), $query)],
         ['POST', '#^/v1/assets/check$#', fn() => api_assets_check(api_need_user($user), $body)],
         ['POST', '#^/v1/assets/(trash|restore|purge)$#', fn($m) => api_assets_bulk(api_need_user($user), $m[1], $body)],
@@ -104,6 +105,7 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['POST', "#^/v1/albums/$uuid/members$#", fn($m) => api_ok(['member' => album_share($m[1], (int) api_need_user($user)['id'], (string) ($body['email'] ?? ''), (string) ($body['role'] ?? 'viewer'))])],
         ['DELETE', "#^/v1/albums/$uuid/members/(\d+)$#", fn($m) => api_ok(['ok' => album_unshare($m[1], (int) api_need_user($user)['id'], (int) $m[2])])],
         ['GET', '#^/v1/users/lookup$#', fn() => api_user_lookup(api_need_user($user), $query)],
+        ['GET', '#^/v1/memories$#', fn() => api_memories(api_need_user($user), $query)],
         ['POST', '#^/v1/devices/report$#', fn() => api_ok(device_report((int) api_need_user($user)['id'], $body))],
     ];
     $methodMismatch = false;
@@ -453,6 +455,27 @@ function api_upload_chunk(array $user, string $id, array $q, $stream): array
         throw new ValidationError('Gövde yok.', 'body');
     }
     return api_ok(['received' => upload_chunk($id, (int) $user['id'], $offset, $stream)]);
+}
+
+/* -------------------------------------------------------------- memories */
+
+/** Widget'lar için rastgele fotoğraflar (son 30 gün hariç; zaman çizelgesi kuralları). */
+function api_assets_random(array $user, array $q): array
+{
+    $n = max(1, min(50, (int) ($q['count'] ?? 12)));
+    $rows = db_all('SELECT a.* FROM assets a WHERE ' . memories_base_where() . " AND a.type = 'photo' AND a.taken_at < ? ORDER BY RAND() LIMIT $n", [
+        (int) $user['id'], gmdate('Y-m-d H:i:s', time() - 30 * 86400),
+    ]);
+    return api_ok(['assets' => array_map('asset_to_json', $rows)]);
+}
+
+function api_memories(array $user, array $q): array
+{
+    $date = (string) ($q['date'] ?? '');
+    if ($date === '') {
+        $date = memories_today((int) $user['id']);
+    }
+    return api_ok(['date' => $date, 'memories' => memories_for((int) $user['id'], $date)]);
 }
 
 /* ---------------------------------------------------------------- albums */

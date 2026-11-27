@@ -48,19 +48,30 @@ final class LibraryModel: ObservableObject {
 
 struct LibraryView: View {
     @EnvironmentObject private var session: Session
+    @EnvironmentObject private var memories: MemoryService
     @StateObject private var model = LibraryModel()
     @State private var viewing: Asset?
-    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 2)]
+    @State private var story: Memory?
+    private let columns = [GridItem(.adaptive(minimum: 96), spacing: 1.5)]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
-                    ForEach(model.sections) { section in
+                    if !memories.memories.isEmpty {
+                        MemoriesStrip(memories: memories.memories) { story = $0 }
+                    }
+                    ForEach(Array(model.sections.enumerated()), id: \.element.id) { i, section in
+                        if i == 0 || model.sections[i - 1].id.prefix(7) != section.id.prefix(7) {
+                            Text(MonthTitle.text(for: String(section.id.prefix(7))))
+                                .font(.system(.title, design: .serif).weight(.medium))
+                                .padding(.horizontal, 16).padding(.top, 26).padding(.bottom, 2)
+                        }
                         Text(DayGrouping.title(for: section.id))
-                            .font(.system(.title3, design: .serif))
-                            .padding(.horizontal, 14).padding(.top, 18).padding(.bottom, 8)
-                        LazyVGrid(columns: columns, spacing: 2) {
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
+                        LazyVGrid(columns: columns, spacing: 1.5) {
                             ForEach(section.assets) { asset in
                                 Button { viewing = asset } label: { Tile(asset: asset) }
                                     .buttonStyle(.plain)
@@ -85,13 +96,37 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle("Fotoğraflar")
-            .refreshable { await model.reload(client: session.client) }
-            .task { if model.assets.isEmpty { await model.reload(client: session.client) } }
+            .refreshable {
+                await model.reload(client: session.client)
+                await memories.refresh(force: true)
+            }
+            .task {
+                if model.assets.isEmpty { await model.reload(client: session.client) }
+                await memories.refresh()
+            }
+            .fullScreenCover(item: $story) { m in
+                MemoryStoryView(memory: m).environmentObject(session)
+            }
             .fullScreenCover(item: $viewing) { asset in
                 AssetViewer(assets: model.assets, startId: asset.id, onChange: { model.update($0) })
                     .environmentObject(session)
             }
         }
+    }
+}
+
+enum MonthTitle {
+    static func text(for ym: String) -> String {
+        let p = ym.split(separator: "-").compactMap { Int($0) }
+        guard p.count == 2 else { return ym }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        guard let d = cal.date(from: DateComponents(year: p[0], month: p[1], day: 15)) else { return ym }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "tr_TR")
+        f.timeZone = cal.timeZone
+        f.setLocalizedDateFormatFromTemplate("MMMMyyyy")
+        return f.string(from: d).capitalized(with: Locale(identifier: "tr_TR"))
     }
 }
 

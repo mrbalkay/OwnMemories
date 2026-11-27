@@ -179,10 +179,16 @@ async function render() {
         openViewer(id, {});
       }));
       break;
-    default:
+    default: {
       route.name = 'photos';
       renderNav();
-      showTimeline({}, t('empty_photos'));
+      const head = h('div', { class: 'mem-slot' });
+      showTimeline({}, t('empty_photos'), head);
+      import('./memories.js').then(async (m) => {
+        const strip = await m.memoriesStrip(viewerCtx);
+        if (strip && head.isConnected) head.replaceWith(strip);
+      });
+    }
   }
   view.focus({ preventScroll: true });
 }

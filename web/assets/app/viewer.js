@@ -52,6 +52,7 @@ class Viewer {
     if (!fromPop && history.state?.viewer) history.back();
     this.prevFocus?.focus?.();
     if (current === this) current = null;
+    this.ctx.onClose?.();
   }
 
   key(e) {

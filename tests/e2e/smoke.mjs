@@ -81,6 +81,30 @@ try {
   await page.waitForSelector('.up-list li.ok, .up-list li.err', { timeout: 15000 });
   if (await page.$('.up-list li.err')) throw new Error('yükleme başarısız: ' + await page.textContent('.up-list li.err'));
   step('tarayıcıdan yükleme');
+  // Anı gösterisinden "Fotoğrafı aç" sonrası zaman çizelgesi gezinmesi bozulmamalı
+  await page.goto(base + '/app/#/photos');
+  await page.waitForSelector('.tile img');
+  if (await page.$('.mem-card')) {
+    await page.click('.mem-card');
+    await page.waitForSelector('.story');
+    await page.click('.story-actions button:first-child');
+    await page.waitForSelector('.viewer');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.viewer', { state: 'detached' });
+    await page.waitForTimeout(300);
+    const tiles = await page.$$('.tile');
+    await tiles[1].click();
+    await page.waitForSelector('.viewer .v-next:not([hidden])', { timeout: 5000 });
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.viewer', { state: 'detached' });
+    await page.waitForTimeout(300);
+    // Geri tuşu anı gösterisini kapatmalı
+    await page.click('.mem-card');
+    await page.waitForSelector('.story');
+    await page.goBack();
+    await page.waitForSelector('.story', { state: 'detached', timeout: 3000 });
+    step('anı gösterisi: fotoğrafı aç, geri tuşu, zaman çizelgesi gezinmesi');
+  }
   await page.goto(base + '/app/#/albums');
   await page.waitForSelector('.album-card, .empty');
   await page.screenshot({ path: `${out}desktop-albums.png` });
