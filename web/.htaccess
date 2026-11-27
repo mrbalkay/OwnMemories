@@ -10,8 +10,7 @@ AddDefaultCharset UTF-8
     # RewriteCond %{HTTPS} off
     # RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-    # API: /api/v1/... → api/index.php
-    RewriteRule ^api/(v\d+/.*)$ api/index.php?r=/$1 [QSA,L]
+    # API yönlendirmesi web/api/.htaccess içindedir.
 
     # Gizli klasörler
     RewriteRule ^(includes|install|config|storage|lang)(/|$) - [F,L]

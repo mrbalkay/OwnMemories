@@ -1,5 +1,9 @@
+# API yönlendirmesi burada yapılır: alt klasördeki RewriteEngine, üst klasörün kurallarını devre dışı bırakır.
 <IfModule mod_rewrite.c>
     RewriteEngine On
     # Authorization başlığını PHP'ye geçir (CGI/FPM)
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+    # /api/v1/... → api/index.php?r=/v1/...
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^(v\d+/.*)$ index.php?r=/$1 [QSA,L]
 </IfModule>

@@ -85,6 +85,17 @@ try {
   await page.waitForSelector('.album-card, .empty');
   await page.screenshot({ path: `${out}desktop-albums.png` });
   step('albümler');
+  // API hatasında sonsuz "Yükleniyor" yerine "Tekrar dene" görünmeli
+  const errPage = await browser.newPage();
+  await errPage.context().addCookies(await page.context().cookies());
+  let assetCalls = 0;
+  await errPage.route(/\/api\/v1\/assets\?/, (r) => { assetCalls++; r.fulfill({ status: 500, contentType: 'application/json', body: '{"error":{"code":"server_error","message":"x"}}' }); });
+  await errPage.goto(base + '/app/#/photos');
+  await errPage.waitForSelector('.tl-status button', { timeout: 8000 });
+  await errPage.waitForTimeout(1500);
+  if (assetCalls > 1) throw new Error(`hata sonrası istek döngüsü: ${assetCalls} istek`);
+  await errPage.close();
+  step('API hatasında "Tekrar dene"');
   const mobile = await run(390, 844, 'mobile');
   await mobile.click('#menuBtn');
   await mobile.screenshot({ path: `${out}mobile-menu.png` });

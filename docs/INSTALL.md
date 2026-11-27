@@ -214,3 +214,22 @@ Mümkünse yedeğin bir kopyasını evin dışında da tutun (ikinci bir konum v
    ```
    **Yönetim → Sistem** sayfasından araçları yeniden taratın; yeni sunucuda HEIC ve video desteği gelir.
 6. HEIC fotoğrafların küçük resimleri hostingde yer tutucu kaldıysa **Yönetim → İşler → Tüm küçük resimleri yeniden üret** düğmesine basın.
+
+## F. Güncelleme (Ubuntu)
+
+Yeni sürümü almak için sunucuda deponun klonlandığı klasörde:
+
+```bash
+cd ~/OwnMemories && git pull
+```
+
+```bash
+sudo bash server/update.sh
+```
+
+Betik kodu `/var/www/ownmemories` klasörüne kopyalar ve işçiyi yeniden başlatır. Yapılandırma ve fotoğraflar
+korunur; veritabanı değişiklikleri ilk istekte kendiliğinden uygulanır. Yönlendirmeleri kontrol etmek için:
+
+```bash
+bash tests/http/routes.sh http://127.0.0.1
+```

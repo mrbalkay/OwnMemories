@@ -32,7 +32,7 @@ export class Timeline {
     this.status = h('div', { class: 'tl-status' });
     this.sentinel = h('div', { class: 'sentinel', 'aria-hidden': 'true' });
     this.root.append(this.jumpBack, this.wrap, this.status, this.sentinel);
-    this.io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) this.load(); }, { rootMargin: '1200px' });
+    this.io = new IntersectionObserver((es) => { if (!this.paused && es.some((e) => e.isIntersecting)) this.load(); }, { rootMargin: '1200px' });
     this.io.observe(this.sentinel);
     if (this.opts.scrubber !== false) this.buildScrubber();
     this.load();
@@ -48,6 +48,7 @@ export class Timeline {
     this.query = { ...this.opts.query, ...extra };
     this.next = extra.before ? { before: extra.before } : null;
     this.done = false;
+    this.paused = false;
     this.groups.clear();
     store.list = [];
     this.wrap.replaceChildren();
@@ -60,6 +61,7 @@ export class Timeline {
   async load() {
     if (this.loading || this.done) return;
     this.loading = true;
+    let failed = false;
     this.status.replaceChildren(h('span', { class: 'spinner' }), t('loading'));
     try {
       const params = { ...this.query, limit: PAGE };
@@ -73,12 +75,15 @@ export class Timeline {
         this.status.append(h('div', { class: 'empty' }, h('p', {}, this.opts.empty || t('empty_photos'))));
       }
     } catch (e) {
-      this.status.replaceChildren(h('div', { class: 'empty' }, h('p', {}, t('load_failed')), h('button', { class: 'btn', onclick: () => this.load() }, t('retry'))));
+      failed = true;
+      this.status.replaceChildren(h('div', { class: 'empty' }, h('p', {}, t('load_failed')), h('button', { class: 'btn', onclick: () => { this.paused = false; this.load(); } }, t('retry'))));
     } finally {
       this.loading = false;
     }
+    // Hata olduysa kullanıcı "Tekrar dene" diyene kadar otomatik yükleme durur.
+    this.paused = failed;
     // Ekran dolmadıysa devam et
-    if (!this.done && this.sentinel.getBoundingClientRect().top < window.innerHeight + 1200) requestAnimationFrame(() => this.load());
+    if (!failed && !this.done && this.sentinel.getBoundingClientRect().top < window.innerHeight + 1200) requestAnimationFrame(() => this.load());
   }
 
   append(assets) {
