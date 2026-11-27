@@ -39,6 +39,9 @@ function memories_for(int $userId, string $date): array
         throw new ValidationError('Geçersiz tarih (YYYY-AA-GG).', 'date');
     }
     [$y, $mo, $d] = [(int) $m[1], (int) $m[2], (int) $m[3]];
+    if ($y < 1900 || $date > gmdate('Y-m-d', time() + 366 * 86400)) {
+        throw new ValidationError('Tarih aralık dışında.', 'date');
+    }
     $local = memories_local_expr();
     $base = memories_base_where();
 
@@ -50,24 +53,38 @@ function memories_for(int $userId, string $date): array
         $out[] = memories_make('on_this_day', $y - $year, $assets, sprintf('%04d-%02d-%02d', $year, $mo, $d));
     }
 
-    // 2) Bugün yoksa: X yıl önce bu hafta (±3 gün)
+    // 2) Bugün yoksa: X yıl önce bu hafta (±3 gün). Her yılın penceresi o yılın aynı gününe göre kurulur
+    // (29 Şubat artık olmayan yıllarda 28 Şubat'a sabitlenir); fotoğraf, içine düştüğü pencerenin yılına sayılır
+    // (yılbaşına yakın pencereler takvim yılı değiştirse de).
     if (!$out) {
         $minYear = (int) (db_val("SELECT MIN(YEAR($local)) FROM assets a WHERE $base", [$userId]) ?: $y);
-        $conds = [];
-        $args = [$userId];
-        for ($yy = $minYear; $yy < $y; $yy++) {
-            $center = DateTimeImmutable::createFromFormat('!Y-n-j', "$yy-$mo-$d", new DateTimeZone('UTC'));
-            if ($center === false) {
-                continue;
-            }
-            $conds[] = "($local >= ? AND $local < ?)";
-            $args[] = $center->modify('-3 days')->format('Y-m-d 00:00:00');
-            $args[] = $center->modify('+4 days')->format('Y-m-d 00:00:00');
+        $windows = [];
+        for ($yy = max($minYear - 1, $y - 100); $yy < $y; $yy++) {
+            $dim = (int) (new DateTimeImmutable(sprintf('%04d-%02d-01', $yy, $mo), new DateTimeZone('UTC')))->format('t');
+            $center = new DateTimeImmutable(sprintf('%04d-%02d-%02d', $yy, $mo, min($d, $dim)), new DateTimeZone('UTC'));
+            $windows[$yy] = [$center->modify('-3 days')->format('Y-m-d 00:00:00'), $center->modify('+4 days')->format('Y-m-d 00:00:00'), $center->format('Y-m-d')];
         }
-        if ($conds) {
-            $rows = db_all("SELECT a.*, YEAR($local) AS ly FROM assets a WHERE $base AND (" . implode(' OR ', $conds) . ') ORDER BY a.taken_at, a.id', $args);
-            foreach (memories_group_by_year($rows) as $year => $assets) {
-                $out[] = memories_make('this_week', $y - $year, $assets, sprintf('%04d-%02d-%02d', $year, $mo, $d));
+        if ($windows) {
+            $conds = [];
+            $args = [$userId];
+            foreach ($windows as [$from, $to]) {
+                $conds[] = "($local >= ? AND $local < ?)";
+                array_push($args, $from, $to);
+            }
+            $rows = db_all("SELECT a.*, $local AS loc FROM assets a WHERE $base AND (" . implode(' OR ', $conds) . ') ORDER BY a.taken_at, a.id', $args);
+            $by = [];
+            foreach ($rows as $r) {
+                foreach ($windows as $yy => [$from, $to]) {
+                    if ($r['loc'] >= $from && $r['loc'] < $to) {
+                        unset($r['loc']);
+                        $by[$yy][] = $r;
+                        break;
+                    }
+                }
+            }
+            krsort($by);
+            foreach ($by as $yy => $assets) {
+                $out[] = memories_make('this_week', $y - $yy, $assets, $windows[$yy][2]);
             }
         }
     }
@@ -75,7 +92,8 @@ function memories_for(int $userId, string $date): array
 
     // 3) Favorilerinizden (en az 1 yıl önceki favoriler; gün başına sabit rastgele seçim)
     $seed = crc32($userId . ':' . $date) & 0x7FFFFFFF;
-    $fav = db_all("SELECT a.* FROM assets a WHERE $base AND a.is_favorite = 1 AND YEAR($local) < ? ORDER BY RAND($seed) LIMIT 30", [$userId, $y]);
+    $yearAgo = (new DateTimeImmutable($date, new DateTimeZone('UTC')))->modify('-1 year')->format('Y-m-d 00:00:00');
+    $fav = db_all("SELECT a.* FROM assets a WHERE $base AND a.is_favorite = 1 AND $local < ? ORDER BY RAND($seed) LIMIT 30", [$userId, $yearAgo]);
     if (count($fav) >= 3) {
         usort($fav, fn($a, $b) => [$a['taken_at'], $a['id']] <=> [$b['taken_at'], $b['id']]);
         $out[] = memories_make('favorites', null, $fav, $date);

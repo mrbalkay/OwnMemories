@@ -94,3 +94,39 @@ dbtest('test_random_assets_endpoint', function () {
     assert_true(!in_array($recent, $got, true), 'son 30 gün yok');
     assert_eq(7, count(api_route('GET', '/v1/assets/random', $u, [], ['count' => '50'])['json']['assets']));
 });
+
+dbtest('test_this_week_across_new_year_uses_window_year', function () {
+    $u = user_create('ali@example.com', 'parola12345', 'Ali');
+    $jan = mem_asset($u, '2026-01-02 09:00:00', 1);   // 2025-12-30 penceresine düşer (yy=2025) → 1 yıl önce
+    $dec = mem_asset($u, '2024-12-28 09:00:00', 2);   // yy=2024 → 2 yıl önce
+    $m = memories_for($u, '2026-12-30');
+    assert_eq(['this_week', 'this_week'], array_column($m, 'kind'));
+    assert_eq([1, 2], array_column($m, 'years_ago'));
+    assert_eq([$jan], $m[0]['asset_ids']);
+    assert_eq('2025-12-30', $m[0]['date']);
+    assert_eq([$dec], $m[1]['asset_ids']);
+});
+
+dbtest('test_feb29_request_clamps_window_and_label', function () {
+    $u = user_create('ali@example.com', 'parola12345', 'Ali');
+    $x = mem_asset($u, '2023-02-27 09:00:00', 1);
+    $m = memories_for($u, '2024-02-29');
+    assert_eq(1, count($m));
+    assert_eq('2023-02-28', $m[0]['date'], 'artık yıl olmayan yılda 28 Şubat');
+    assert_eq([$x], $m[0]['asset_ids']);
+});
+
+dbtest('test_memories_rejects_far_dates', function () {
+    $u = user_create('ali@example.com', 'parola12345', 'Ali');
+    assert_throws(ValidationError::class, fn() => memories_for($u, '9999-06-15'));
+    assert_throws(ValidationError::class, fn() => memories_for($u, '1850-01-01'));
+});
+
+dbtest('test_favorites_need_one_full_year', function () {
+    $u = user_create('ali@example.com', 'parola12345', 'Ali');
+    foreach (['2025-12-20', '2025-12-25', '2025-12-28'] as $i => $d) {
+        mem_asset($u, "$d 10:00:00", 60 + $i, ['is_favorite' => true]);
+    }
+    $fav = array_filter(memories_for($u, '2026-01-02'), fn($x) => $x['kind'] === 'favorites');
+    assert_eq([], array_values($fav), 'birkaç haftalık favoriler anı değil');
+});
