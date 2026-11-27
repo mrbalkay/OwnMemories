@@ -1,0 +1,94 @@
+name: iOS derleme ve simülatör testi
+
+# İmzasız simülatör derlemesi + çekirdek testler + uygulamayı simülatörde açıp çökme kontrolü (secret gerektirmez)
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build-check.yml"
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build-check.yml"
+
+concurrency:
+  group: ios-build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Simülatörde derle ve çalıştır
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Çekirdek mantık testleri (swift test)
+        run: |
+          set -o pipefail
+          cd ios && swift test 2>&1 | tail -80
+
+      - name: Projeyi oluştur
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate
+
+      - name: Simülatör seç ve başlat
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')]
+          c.sort(key=lambda x: x['name'])
+          print(c[-1]['udid'])")
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Derle
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ios/OwnMemories.xcodeproj \
+            -scheme OwnMemories \
+            -configuration Debug \
+            -destination "id=$UDID" \
+            -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO \
+            > "$RUNNER_TEMP/build.log" 2>&1 || { grep -E "error:" "$RUNNER_TEMP/build.log" | sort -u | head -150; tail -40 "$RUNNER_TEMP/build.log"; exit 1; }
+          grep -E "warning:" "$RUNNER_TEMP/build.log" | grep "/ios/" | sort -u | head -60 || true
+          echo "Derleme tamam."
+
+      - name: Çalıştır, çökme kontrolü
+        run: |
+          APP=$(find build/dd/Build/Products -name "OwnMemories.app" -maxdepth 3 | head -1)
+          xcrun simctl install "$UDID" "$APP"
+          mkdir -p "$RUNNER_TEMP/shots"
+          xcrun simctl launch "$UDID" net.balkay.ownmemories > /dev/null
+          sleep 10
+          xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/launch.png" > /dev/null 2>&1 || true
+          if xcrun simctl spawn "$UDID" launchctl list | grep -q "net.balkay.ownmemories"; then
+            echo "✅ uygulama açıldı ve çalışıyor"
+          else
+            echo "::error::❌ uygulama açılışta çöktü"
+            for f in $(ls -t ~/Library/Logs/DiagnosticReports/OwnMemories*.ips 2>/dev/null | head -2); do head -c 6000 "$f"; done
+            exit 1
+          fi
+
+      - name: Ekran görüntülerini sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulator-screenshots
+          path: ${{ runner.temp }}/shots
+          retention-days: 7

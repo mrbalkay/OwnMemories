@@ -1,0 +1,197 @@
+name: iOS → TestFlight
+
+# Elle çalıştırma (Actions → "iOS → TestFlight" → Run workflow) veya v* etiketi gönderildiğinde.
+on:
+  workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "Sürüm (boş bırakılırsa project.yml'deki değer kullanılır, ör. 1.0.1)"
+        required: false
+        default: ""
+      tester_email:
+        description: "TestFlight dahili test grubuna eklenecek e-posta (isteğe bağlı; davet gönderilir)"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
+    # iOS koduna her gönderimde otomatik derleyip TestFlight'a yükler
+    branches:
+      - "main"
+    paths:
+      - "ios/**"
+      - "!ios/scripts/**"      # yalnızca CI/App Store betikleri değişince uygulama yeniden derlenmez
+      - "!ios/store/**"        # mağaza metinleri ve görselleri
+      - ".github/workflows/ios-testflight.yml"
+
+concurrency:
+  group: ios-testflight-${{ github.ref }}
+  # Art arda gönderimlerde yalnızca en yenisi derlenir
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  testflight:
+    name: Arşivle, imzala ve TestFlight'a yükle
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      SCHEME: OwnMemories
+      PROJECT: ios/OwnMemories.xcodeproj
+      ARCHIVE_PATH: ${{ github.workspace }}/build/OwnMemories.xcarchive
+      EXPORT_PATH: ${{ github.workspace }}/build/export
+      # Önceki elle yüklenmiş derlemelerle çakışmasın diye eklenecek sabit sayı (gerekirse artırın).
+      BUILD_NUMBER_OFFSET: 0
+
+    steps:
+      - name: Kodu al
+        uses: actions/checkout@v4
+
+      - name: Gizli anahtarları hazırla
+        # İki biçim desteklenir:
+        #  a) Tek secret APPLE_DEVELOPER: satır satır APPLE_TEAM_ID=..., ASC_ISSUER_ID=..., ASC_KEY_ID=..., ASC_KEY_P8=...
+        #     (P8 anahtarı birden çok satır sürebilir; BEGIN/END satırları olsa da olmasa da olur)
+        #  b) Dört ayrı secret: APPLE_TEAM_ID, ASC_ISSUER_ID, ASC_KEY_ID, ASC_KEY_P8
+        env:
+          APPLE_DEVELOPER: ${{ secrets.APPLE_DEVELOPER }}
+          S_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          S_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          S_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          S_ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc"
+          python3 - <<'EOF'
+          import os, re, textwrap
+          keys = ["APPLE_TEAM_ID", "ASC_ISSUER_ID", "ASC_KEY_ID", "ASC_KEY_P8"]
+          vals = {k: os.environ.get("S_" + k, "").strip() for k in keys}
+          combined = os.environ.get("APPLE_DEVELOPER", "")
+          if combined.strip():
+              cur = None
+              for line in combined.replace("\r", "").split("\n"):
+                  m = re.match(r"\s*(APPLE_TEAM_ID|ASC_ISSUER_ID|ASC_KEY_ID|ASC_KEY_P8)\s*[=:]\s*(.*)$", line)
+                  if m:
+                      cur = m.group(1); vals[cur] = m.group(2).strip()
+                  elif cur == "ASC_KEY_P8":
+                      vals[cur] += "\n" + line.strip()
+          missing = [k for k in keys if not vals[k]]
+          if missing:
+              for k in missing:
+                  print(f"::error::Eksik değer: {k} (APPLE_DEVELOPER secret'ı veya ayrı secret olarak; bkz. docs/TESTFLIGHT.md)")
+              raise SystemExit(1)
+          for k in keys[:3]:
+              vals[k] = vals[k].strip().strip('"').strip("'")
+          body = re.sub(r"-----(BEGIN|END) PRIVATE KEY-----", "", vals["ASC_KEY_P8"])
+          body = re.sub(r"[^A-Za-z0-9+/=]", "", body)
+          pem = "-----BEGIN PRIVATE KEY-----\n" + "\n".join(textwrap.wrap(body, 64)) + "\n-----END PRIVATE KEY-----\n"
+          path = os.path.join(os.environ["RUNNER_TEMP"], "asc", f"AuthKey_{vals['ASC_KEY_ID']}.p8")
+          with open(path, "w") as f:
+              f.write(pem)
+          os.chmod(path, 0o600)
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              for k in keys[:3]:
+                  print(f"::add-mask::{vals[k]}")
+                  f.write(f"{k}={vals[k]}\n")
+              f.write(f"ASC_KEY_PATH={path}\n")
+          print("Anahtarlar hazır.")
+          EOF
+          openssl pkey -in "$RUNNER_TEMP"/asc/*.p8 -noout 2>/dev/null \
+            && echo "P8 anahtarı geçerli." \
+            || { echo "::error::ASC_KEY_P8 geçerli bir özel anahtar değil (.p8 dosyasının içeriğini kontrol edin)"; exit 1; }
+
+      - name: Xcode seç (en güncel kararlı)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: XcodeGen kur ve projeyi oluştur
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate
+
+      - name: Apple tarafını hazırla (Bundle ID ve yetenekler)
+        env:
+          TESTER_EMAIL: ${{ github.event.inputs.tester_email }}
+        run: python3 ios/scripts/asc_prepare.py
+
+      - name: Derleme numarasını belirle
+        run: |
+          echo "BUILD_NUMBER=$(( ${{ github.run_number }} + BUILD_NUMBER_OFFSET ))" >> "$GITHUB_ENV"
+          MV="${{ github.event.inputs.marketing_version }}"
+          if [ -z "$MV" ] && [[ "${GITHUB_REF}" == refs/tags/v* ]]; then MV="${GITHUB_REF#refs/tags/v}"; fi
+          if [ -n "$MV" ]; then echo "VERSION_OVERRIDE=MARKETING_VERSION=$MV" >> "$GITHUB_ENV"; fi
+
+      - name: Arşivle (bulut tarafından yönetilen otomatik imzalama)
+        run: |
+          archive() {
+            set -o pipefail
+            xcodebuild archive \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -destination "generic/platform=iOS" \
+              -archivePath "$ARCHIVE_PATH" \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "$ASC_KEY_PATH" \
+              -authenticationKeyID "$ASC_KEY_ID" \
+              -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+              DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+              CODE_SIGN_STYLE=Automatic \
+              CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+              $VERSION_OVERRIDE \
+              > "$RUNNER_TEMP/archive.log" 2>&1
+          }
+          show_errors() {
+            echo "----- Hatalar -----"
+            grep -E "(error|Error):" "$RUNNER_TEMP/archive.log" | sort -u | head -150 || true
+            echo "----- Son satırlar -----"
+            tail -40 "$RUNNER_TEMP/archive.log"
+          }
+          if archive; then echo "Arşiv tamam."; exit 0; fi
+          show_errors
+          exit 1
+
+      - name: Dışa aktar ve App Store Connect'e yükle
+        run: |
+          set -o pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>testFlightInternalTestingOnly</key><false/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$EXPORT_PATH" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            | tee "$RUNNER_TEMP/export.log" | xcbeautify || { tail -200 "$RUNNER_TEMP/export.log"; exit 1; }
+          echo "### ✅ Derleme $BUILD_NUMBER App Store Connect'e yüklendi" >> "$GITHUB_STEP_SUMMARY"
+          echo "İşlendikten sonra (genelde 10–20 dk) TestFlight uygulamasında görünecek." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hata durumunda günlükleri sakla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-logs
+          path: |
+            ${{ runner.temp }}/*.log
+            ~/Library/Logs/DiagnosticReports
+          retention-days: 7
+
+      - name: API anahtarını sil
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/asc"
