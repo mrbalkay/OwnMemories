@@ -4,6 +4,11 @@ import Photos
 import SwiftData
 import UIKit
 
+struct UploadFailed: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
 /// Yedekleme motoru: tarar, dışa aktarır, SHA-1 ile sunucuya sorar, parçalı arka plan yüklemesi yapar.
 @MainActor
 final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserver {
@@ -99,6 +104,7 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
         guard authorization == .authorized || authorization == .limited else { status = "Fotoğraf erişimi gerekli"; return }
         observeLibrary()
         isRunning = true
+        lastError = nil
         defer {
             isRunning = false
             currentName = nil
@@ -251,12 +257,7 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
             req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
             req.allowsCellularAccess = !settings.wifiOnly
             req.timeoutInterval = 600
-            let result: (Data, URLResponse)
-            do {
-                result = try await BackgroundUploader.shared.upload(req, fromFile: file)
-            } catch {
-                throw APIError.unreachable(error.localizedDescription)
-            }
+            let result = try await uploadWithRetry(req, file: file, client: client)
             do {
                 let r: UploadReceived = try APIClient.decode(data: result.0, response: result.1)
                 received = r.received
@@ -268,6 +269,26 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
         }
         let done: UploadComplete = try await client.send("POST", "uploads/\(uploadId)/complete")
         finish(record, assetId: done.asset?.id)
+    }
+
+    /// Parçayı yükler; geçici hatalarda 3 kez yeniden dener. Sonunda da olmazsa sunucuya ulaşılabiliyorsa
+    /// yalnız bu öğe hatalı sayılır, ulaşılamıyorsa tur durur.
+    private func uploadWithRetry(_ req: URLRequest, file: URL, client: APIClient) async throws -> (Data, URLResponse) {
+        var lastErr: Error?
+        for attempt in 0..<3 {
+            if attempt > 0 { try? await Task.sleep(nanoseconds: UInt64(attempt) * 3_000_000_000) }
+            if Task.isCancelled { throw CancellationError() }
+            do {
+                return try await BackgroundUploader.shared.upload(req, fromFile: file)
+            } catch {
+                lastErr = error
+            }
+        }
+        struct Ping: Decodable { let ok: Bool }
+        if (try? await client.send("GET", "ping", as: Ping.self)) != nil {
+            throw UploadFailed(message: "Yükleme başarısız: \(lastErr?.localizedDescription ?? "bilinmeyen hata")")
+        }
+        throw APIError.unreachable(lastErr?.localizedDescription ?? "")
     }
 
     private func finish(_ record: BackupRecord, assetId: String?) {

@@ -74,6 +74,7 @@ function job_handlers(): array
     $h = [
         'noop' => fn(array $p): string => 'done',
         'render' => 'job_render',
+        'transcode' => 'job_transcode',
     ];
     if (function_exists('import_job_step')) {
         $h['import_step'] = 'import_job_step';
@@ -130,13 +131,65 @@ function job_render(array $p): string
     }
     $fmt = media_preferred_format();
     $ext = $fmt === 'webp' ? 'webp' : 'jpg';
-    derived_delete($a['id']);
+    derived_delete($a['id'], false);
+    if ($a['type'] === 'video' && derived_find_video($a['id']) === null) {
+        job_enqueue('transcode', ['asset_id' => $a['id']], 9);
+    }
     $state = media_render($src, $a['type'], derived_path($a['id'], 'thumb', $ext), THUMB_EDGE, $fmt);
     if ($state === 'ready') {
         media_render($src, $a['type'], derived_path($a['id'], 'preview', $ext), PREVIEW_EDGE, $fmt);
     }
     db_exec('UPDATE assets SET thumb_state = ? WHERE id = ?', [$state, $a['id']]);
     return $state === 'ready' ? 'done' : 'skipped';
+}
+
+/**
+ * Tarayıcıda oynatılamayan videolar (iPhone HEVC/MOV) için H.264 MP4 kopyası üretir. Orijinal korunur.
+ * Zaten H.264 + MP4 olan videolar için bir şey yapmaz.
+ */
+function job_transcode(array $p): string
+{
+    $a = db_row('SELECT id, type, blob_sha1, mime FROM assets WHERE id = ?', [(string) ($p['asset_id'] ?? '')]);
+    $t = tools_detect();
+    if ($a === null || $a['type'] !== 'video' || !$t['ffmpeg'] || !$t['ffprobe']) {
+        return 'skipped';
+    }
+    $src = blob_path($a['blob_sha1']);
+    if (!is_file($src)) {
+        return 'skipped';
+    }
+    $probe = tool_run([$t['ffprobe'], '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name,pix_fmt', '-of', 'csv=p=0', $src], 60);
+    [$codec, $pix] = array_pad(explode(',', trim($probe['out'])), 2, '');
+    if ($codec === '') {
+        return 'skipped'; // video akışı yok veya okunamadı
+    }
+    if ($codec === 'h264' && in_array($pix, ['yuv420p', 'yuvj420p'], true) && $a['mime'] === 'video/mp4') {
+        return 'skipped';
+    }
+    $out = derived_path($a['id'], 'web', 'mp4');
+    @mkdir(dirname($out), 0750, true);
+    $tmp = $out . '.tmp.mp4';
+    $r = tool_run([$t['ffmpeg'], '-v', 'error', '-y', '-i', $src,
+        '-map', '0:v:0', '-map', '0:a:0?',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
+        '-vf', "scale='min(1920,iw)':-2",
+        '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', $tmp], 3600);
+    if ($r['code'] !== 0 || !is_file($tmp) || filesize($tmp) === 0) {
+        @unlink($tmp);
+        throw new RuntimeException('Video dönüştürülemedi: ' . mb_substr(trim($r['err']), -500));
+    }
+    rename($tmp, $out);
+    asset_bump_version_for($a['id']);
+    return 'done';
+}
+
+/** Bir asset'in sürümünü artırır (istemciler yeni web videosunu görsün). */
+function asset_bump_version_for(string $assetId): void
+{
+    $uid = (int) db_val('SELECT user_id FROM assets WHERE id = ?', [$assetId]);
+    if ($uid > 0) {
+        db_exec('UPDATE assets SET version = ?, updated_at = ? WHERE id = ?', [asset_bump_version($uid), now_utc(), $assetId]);
+    }
 }
 
 /** Bakım: günde bir çöp temizliği ve süresi geçmiş yüklemeler. */

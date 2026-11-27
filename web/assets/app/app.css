@@ -157,6 +157,8 @@ svg.fill { fill: currentColor; stroke: none; }
 .v-stage.zoom { overflow: auto; place-items: start; }
 .v-stage.zoom .v-img { max-width: none; max-height: none; cursor: zoom-out; }
 .v-livevid { z-index: 1; }
+.v-msg { max-width: 420px; text-align: center; color: #e9e6f3; line-height: 1.6; padding: 24px; }
+.v-msg .btn { margin-top: 10px; }
 .v-live { position: absolute; top: 64px; left: 16px; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, .16); color: #fff; font-size: 12px; font-weight: 700; letter-spacing: .04em; cursor: pointer; z-index: 2; }
 .v-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .1); color: #fff; cursor: pointer; display: grid; place-items: center; z-index: 2; }
 .v-nav:hover { background: rgba(255, 255, 255, .22); }

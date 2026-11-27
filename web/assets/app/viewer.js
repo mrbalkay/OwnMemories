@@ -108,6 +108,11 @@ class Viewer {
     this.stage.replaceChildren();
     if (a.type === 'video') {
       const v = h('video', { src: videoUrl(a.id), controls: true, autoplay: true, playsinline: true, poster: previewUrl(a.id), preload: 'metadata' });
+      v.addEventListener('error', () => {
+        this.stage.replaceChildren(h('div', { class: 'v-msg' },
+          h('p', {}, t('video_unplayable')),
+          h('a', { class: 'btn', href: originalUrl(a.id) }, t('download'))));
+      });
       this.stage.append(v);
       return;
     }

@@ -416,6 +416,9 @@ function api_asset_file(array $user, string $id, string $variant): array
         }
         return ['status' => 200, 'file' => ['path' => $p, 'mime' => str_ends_with($p, '.webp') ? 'image/webp' : 'image/jpeg', 'cache' => 'private, max-age=31536000, immutable', 'download' => null]];
     }
+    if ($variant === 'video' && ($web = derived_find_video($id)) !== null) {
+        return ['status' => 200, 'file' => ['path' => $web, 'mime' => 'video/mp4', 'cache' => 'private, max-age=86400', 'download' => null]];
+    }
     $path = blob_path($a['blob_sha1']);
     if (!is_file($path)) {
         api_not_found();

@@ -102,11 +102,21 @@ function derived_find(string $assetId, string $variant): ?string
     return null;
 }
 
-function derived_delete(string $assetId): void
+/** Tarayıcı uyumlu (H.264 MP4) video kopyası veya null. */
+function derived_find_video(string $assetId): ?string
+{
+    $p = derived_path($assetId, 'web', 'mp4');
+    return is_file($p) && filesize($p) > 0 ? $p : null;
+}
+
+function derived_delete(string $assetId, bool $includeVideo = true): void
 {
     foreach (['thumb', 'preview', 'poster'] as $v) {
         foreach (['webp', 'jpg'] as $ext) {
             @unlink(derived_path($assetId, $v, $ext));
         }
+    }
+    if ($includeVideo) {
+        @unlink(derived_path($assetId, 'web', 'mp4'));
     }
 }

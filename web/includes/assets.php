@@ -244,6 +244,7 @@ function asset_to_json(array $a): array
         'live_pair_id' => $a['live_pair_id'],
         'edited_of_id' => $a['edited_of_id'],
         'thumb_state' => $a['thumb_state'],
+        'web_video' => $a['type'] === 'video' && derived_find_video($a['id']) !== null,
         'updated_at' => iso_utc($a['updated_at']),
         'version' => (int) $a['version'],
     ];

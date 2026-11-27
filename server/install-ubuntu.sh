@@ -23,6 +23,8 @@ DB_PKG=mysql-server
 has_pkg mysql-server || DB_PKG=mariadb-server
 HEIF_PKG=""
 has_pkg libheif-examples && HEIF_PKG=libheif-examples
+# iPhone HEIC fotoğraflarını çözmek için HEVC çözücü eklentisi (Ubuntu 24.04+ ayrı paket)
+has_pkg libheif-plugin-libde265 && HEIF_PKG="$HEIF_PKG libheif-plugin-libde265"
 apt-get install -y -qq apache2 "$DB_PKG" \
   php libapache2-mod-php php-cli php-mysql php-gd php-imagick php-zip php-intl php-mbstring php-xml \
   libimage-exiftool-perl ffmpeg libvips-tools $HEIF_PKG imagemagick rsync openssl
