@@ -107,7 +107,8 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
             ResourceExporter.cleanup()
         }
 
-        let charging = [.charging, .full].contains(UIDevice.current.batteryState)
+        let battery = UIDevice.current.batteryState
+        let charging = battery == .charging || battery == .full
         switch BackupPolicy.decide(online: NetworkMonitor.shared.isOnline, onWifi: NetworkMonitor.shared.isOnWifi, charging: charging, settings: settings) {
         case .offline: status = "İnternet bağlantısı yok"; return
         case .waitForWifi: status = "Wi-Fi bekleniyor"; return
@@ -244,20 +245,20 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
         while let range = ranges.first {
             if Task.isCancelled { return }
             let single = range.lowerBound == 0 && range.upperBound == exported.size
-            let file = single ? exported.url : try ResourceExporter.writeChunk(of: exported.url, range: range)
+            let file = try (single ? exported.url : ResourceExporter.writeChunk(of: exported.url, range: range))
             defer { if !single { try? FileManager.default.removeItem(at: file) } }
             var req = client.authorized(client.url("uploads/\(uploadId)", query: ["offset": String(range.lowerBound)]), method: "PUT")
             req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
             req.allowsCellularAccess = !settings.wifiOnly
             req.timeoutInterval = 600
-            let (data, resp): (Data, URLResponse)
+            let result: (Data, URLResponse)
             do {
-                (data, resp) = try await BackgroundUploader.shared.upload(req, fromFile: file)
+                result = try await BackgroundUploader.shared.upload(req, fromFile: file)
             } catch {
                 throw APIError.unreachable(error.localizedDescription)
             }
             do {
-                let r: UploadReceived = try APIClient.decode(data: data, response: resp)
+                let r: UploadReceived = try APIClient.decode(data: result.0, response: result.1)
                 received = r.received
             } catch let APIError.server(status, code, _, serverReceived) where status == 409 && code == "offset_mismatch" {
                 received = serverReceived ?? received
