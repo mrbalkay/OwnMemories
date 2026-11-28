@@ -34,4 +34,9 @@ return [
     'video_unplayable' => 'Bu video bu tarayıcıda oynatılamıyor (iPhone HEVC biçimi). Sunucu tarayıcı uyumlu bir kopya hazırlıyor; birazdan tekrar deneyin ya da orijinali indirin.',
     'memories' => 'Anılar',
     'open_photo' => 'Fotoğrafı aç',
+    'settings' => 'Ayarlar', 'appearance' => 'Görünüm', 'appearance_note' => 'Seçtiğiniz görünüm hesabınıza kaydedilir; web\'de ve iPhone uygulamasında aynı görünür.',
+    'theme_sinema' => 'Sinema', 'theme_sinema_desc' => 'Karanlık, kenardan kenara fotoğraflar; günün anısı büyük bir afişle karşılar.',
+    'theme_galeri' => 'Galeri', 'theme_galeri_desc' => 'Müze kataloğu sakinliği: bol beyaz alan, ince çizgiler, zarif serif başlıklar.',
+    'theme_yerel' => 'Yerel iOS', 'theme_yerel_desc' => 'Apple uygulamaları kadar tanıdık: büyük kalın başlıklar, cam yüzeyler.',
+    'theme_saved' => 'Görünüm kaydedildi', 'default_badge' => 'Varsayılan', 'profile' => 'Profil', 'your_name' => 'Adınız',
 ];

@@ -23,6 +23,7 @@ const NAV = [
 ];
 
 function renderNav() {
+  document.getElementById('navSettings')?.classList.toggle('active', route.name === 'settings');
   nav.replaceChildren(...NAV.map(([key, ic, href]) => h('a', {
     href, class: 'nav-item' + (route.name === key || (key === 'albums' && route.name === 'album' && !route.shared) ? ' active' : ''),
     'aria-current': route.name === key ? 'page' : null,
@@ -172,6 +173,9 @@ async function render() {
       }
       break;
     }
+    case 'settings':
+      import('./settings.js').then((m) => m.renderSettings(view));
+      break;
     case 'map':
       import('./map.js').then((m) => m.renderMap(view, (id, points) => {
         store.list = points.map((p) => ({ id: p.id, type: 'photo' }));

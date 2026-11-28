@@ -34,4 +34,9 @@ return [
     'video_unplayable' => 'This video cannot play in this browser (iPhone HEVC format). The server is preparing a compatible copy; try again shortly or download the original.',
     'memories' => 'Memories',
     'open_photo' => 'Open photo',
+    'settings' => 'Settings', 'appearance' => 'Appearance', 'appearance_note' => 'Your choice is saved to your account and applies on the web and in the iPhone app.',
+    'theme_sinema' => 'Cinema', 'theme_sinema_desc' => 'Dark, edge-to-edge photos; the memory of the day greets you as a large poster.',
+    'theme_galeri' => 'Gallery', 'theme_galeri_desc' => 'The calm of a museum catalogue: generous white space, hairlines, elegant serif titles.',
+    'theme_yerel' => 'Native iOS', 'theme_yerel_desc' => 'As familiar as Apple\'s own apps: large bold titles, glass surfaces.',
+    'theme_saved' => 'Appearance saved', 'default_badge' => 'Default', 'profile' => 'Profile', 'your_name' => 'Your name',
 ];

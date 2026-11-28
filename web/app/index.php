@@ -15,23 +15,27 @@ $boot = [
     'version' => OM_VERSION,
 ];
 $nonce = csp_nonce();
+$skin = $boot['user']['theme'];
 ?><!doctype html>
-<html lang="<?= e(locale()) ?>">
+<html lang="<?= e(locale()) ?>" data-skin="<?= e($skin) ?>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<meta name="theme-color" content="#f7f5fc" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#17151f" media="(prefers-color-scheme: dark)">
 <title>OwnMemories</title>
 <link rel="icon" href="<?= e(asset('img/icon.svg')) ?>" type="image/svg+xml">
 <link rel="stylesheet" href="<?= e(asset('app/app.css')) ?>">
+<?php foreach (UI_THEMES as $th): ?>
+<link rel="stylesheet" id="skin-<?= e($th) ?>" href="<?= e(asset('app/theme-' . $th . '.css')) ?>"<?= $th === $skin ? '' : ' disabled' ?>>
+<?php endforeach; ?>
+<meta name="theme-color" id="themeColor" content="<?= $skin === 'sinema' ? '#0b0b0e' : ($skin === 'galeri' ? '#f6f4f0' : '#f2f2f7') ?>">
 </head>
 <body>
 <div id="app" class="app">
   <aside class="sidebar" id="sidebar">
     <a class="logo" href="#/photos"><img src="<?= e(asset('img/icon.svg')) ?>" alt="" width="30" height="30"><span>OwnMemories</span></a>
     <nav class="nav" id="nav"></nav>
+    <a class="nav-item nav-settings" id="navSettings" href="#/settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg><span><?= e(t('app.settings')) ?></span></a>
     <div class="me">
       <div class="me-name"><?= e($user['name']) ?></div>
       <div class="me-usage" id="usage"></div>
