@@ -85,6 +85,7 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['PATCH', '#^/v1/me$#', fn() => api_me_update(api_need_user($user), $body)],
         ['GET', '#^/v1/assets$#', fn() => api_assets_list(api_need_user($user), $query)],
         ['GET', '#^/v1/assets/summary$#', fn() => api_assets_summary(api_need_user($user), $query)],
+        ['GET', '#^/v1/assets/days$#', fn() => api_assets_days(api_need_user($user), $query)],
         ['GET', '#^/v1/assets/random$#', fn() => api_assets_random(api_need_user($user), $query)],
         ['GET', '#^/v1/assets/map$#', fn() => api_assets_map(api_need_user($user), $query)],
         ['POST', '#^/v1/assets/check$#', fn() => api_assets_check(api_need_user($user), $body)],
@@ -247,8 +248,50 @@ function api_assets_list(array $user, array $q): array
 function api_assets_summary(array $user, array $q): array
 {
     [$where, $args] = api_asset_filters($user, $q);
-    $rows = db_all("SELECT DATE_FORMAT(a.taken_at, '%Y-%m') AS month, COUNT(*) AS n FROM assets a WHERE $where GROUP BY month ORDER BY month DESC", $args);
+    $local = API_LOCAL_TAKEN;
+    $rows = db_all("SELECT DATE_FORMAT($local, '%Y-%m') AS month, COUNT(*) AS n FROM assets a WHERE $where GROUP BY month ORDER BY month DESC", $args);
     return api_ok(['months' => array_map(fn($r) => ['month' => $r['month'], 'count' => (int) $r['n']], $rows)]);
+}
+
+/**
+ * Yerel çekim zamanı (SQL ifadesi): zaman çizelgesinin gün başlıklarıyla aynı mantık
+ * (taken_at + taken_tz_offset; dengeleme yoksa UTC). Bkz. util.js dayKey().
+ */
+const API_LOCAL_TAKEN = 'DATE_ADD(a.taken_at, INTERVAL COALESCE(a.taken_tz_offset, 0) MINUTE)';
+
+/**
+ * Takvim: ?month=YYYY-MM için fotoğraflı yerel günler, sayıları, kapak öğesi ve
+ * o güne atlamak için 'before' imleci (günün en yeni taken_at'i + 1 sn).
+ */
+function api_assets_days(array $user, array $q): array
+{
+    $month = (string) ($q['month'] ?? '');
+    if (!preg_match('/^(\d{4})-(\d{2})$/', $month, $m) || (int) $m[2] < 1 || (int) $m[2] > 12 || (int) $m[1] < 1900 || (int) $m[1] > 9999) {
+        throw new ValidationError('Geçersiz ay (YYYY-MM).', 'month');
+    }
+    [$where, $args] = api_asset_filters($user, $q);
+    $local = API_LOCAL_TAKEN;
+    $start = sprintf('%04d-%02d-01 00:00:00', (int) $m[1], (int) $m[2]);
+    $end = gmdate('Y-m-d H:i:s', (int) strtotime("$start UTC +1 month"));
+    // taken_at aralığı dizini kullanır (±14 sa dengeleme payı); yerel ifade kesin süzer.
+    $where .= " AND a.taken_at >= DATE_SUB(?, INTERVAL 14 HOUR) AND a.taken_at < DATE_ADD(?, INTERVAL 14 HOUR) AND $local >= ? AND $local < ?";
+    array_push($args, $start, $end, $start, $end);
+    $rows = db_all(
+        "SELECT day, n, last_at, id FROM (
+            SELECT DATE($local) AS day, a.id, a.taken_at,
+                   COUNT(*) OVER (PARTITION BY DATE($local)) AS n,
+                   MAX(a.taken_at) OVER (PARTITION BY DATE($local)) AS last_at,
+                   ROW_NUMBER() OVER (PARTITION BY DATE($local) ORDER BY $local DESC, a.id DESC) AS rn
+            FROM assets a WHERE $where
+        ) d WHERE rn = 1 ORDER BY day DESC",
+        $args
+    );
+    return api_ok(['month' => $month, 'days' => array_map(fn($r) => [
+        'day' => (string) $r['day'],
+        'count' => (int) $r['n'],
+        'cover_asset_id' => $r['id'],
+        'before' => gmdate('Y-m-d\TH:i:s\Z', (int) strtotime($r['last_at'] . ' UTC') + 1),
+    ], $rows)]);
 }
 
 function api_assets_map(array $user, array $q): array
