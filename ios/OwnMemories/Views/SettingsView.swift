@@ -81,6 +81,11 @@ struct SettingsView: View {
                     } label: {
                         Label("Temizlik", systemImage: "sparkles")
                     }
+                    NavigationLink {
+                        ShareLinksView()
+                    } label: {
+                        Label("Paylaşılan bağlantılar", systemImage: "link")
+                    }
                 } header: {
                     Text("Kütüphane")
                 } footer: {

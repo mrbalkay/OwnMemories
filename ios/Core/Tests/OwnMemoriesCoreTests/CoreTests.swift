@@ -370,4 +370,35 @@ final class PlaceModelTests: XCTestCase {
         let two = [try asset("1", city: "Çeşme"), try asset("2", city: "İzmir"), try asset("3", city: "İzmir"), try asset("4", city: "Urla")]
         XCTAssertEqual(DayGrouping.place(for: two), "İzmir, Çeşme")
     }
+
+    // MARK: - Fotoğraftaki yazı (OCR)
+
+    func testDecodeSearchAssetWithTextMatch() throws {
+        let json = #"{"mode":"smart","assets":[{"id":"a1","type":"photo","filename":"IMG_9.jpg","size":10,"taken_at":"2025-03-01T10:00:00Z","is_favorite":false,"is_archived":false,"text_match":{"term":"fatura","snippet":"ELEKTRİK FATURASI","parts":[{"t":"ELEKTRİK ","m":false},{"t":"FATURASI","m":true}]}},{"id":"a2","type":"photo","filename":"IMG_10.jpg","size":10,"taken_at":"2025-03-01T10:00:00Z","is_favorite":false,"is_archived":false}],"next_offset":null,"total":2,"text_matches":1}"#
+        let r = try JSONDecoder().decode(SearchResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(r.assets.count, 2)
+        XCTAssertEqual(r.assets[0].textMatch?.term, "fatura")
+        XCTAssertEqual(r.assets[0].textMatch?.parts.filter(\.m).map(\.t), ["FATURASI"])
+        XCTAssertNil(r.assets[1].textMatch)
+    }
+
+    func testDecodeAssetText() throws {
+        let done = try JSONDecoder().decode(AssetText.self, from: Data(#"{"status":"done","text":"NÖBETÇİ ECZANE\nKadıköy","lines":["NÖBETÇİ ECZANE","Kadıköy"],"words":3,"lang":"tr"}"#.utf8))
+        XCTAssertTrue(done.hasText)
+        XCTAssertEqual(done.lines, ["NÖBETÇİ ECZANE", "Kadıköy"])
+        let none = try JSONDecoder().decode(AssetText.self, from: Data(#"{"status":"none","text":"","lines":[],"words":0,"lang":null}"#.utf8))
+        XCTAssertFalse(none.hasText)
+        let old = try JSONDecoder().decode(AssetText.self, from: Data("{}".utf8))
+        XCTAssertEqual(old.status, "unavailable")
+    }
+
+    func testOCRTextHighlightsTurkishWords() {
+        let tokens = OCRText.tokens("İSTANBUL eczane")
+        XCTAssertEqual(tokens, ["istanbul", "eczane"])
+        let line = "ISTANBUL GÜNEŞ ECZANESİ"
+        let hits = OCRText.hitRanges(in: line, tokens: tokens).map { String(line[$0]) }
+        XCTAssertEqual(hits, ["ISTANBUL", "ECZANESİ"])
+        XCTAssertEqual(OCRText.hitRanges(in: "ÇİĞKÖFTE DÜRÜM", tokens: OCRText.tokens("köfte")).count, 1)
+        XCTAssertTrue(OCRText.hitRanges(in: "sunum", tokens: ["su"]).isEmpty)
+    }
 }

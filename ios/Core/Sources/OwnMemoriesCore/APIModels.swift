@@ -55,6 +55,8 @@ struct Asset: Codable, Identifiable, Hashable {
     let access: String?
     /// Yer (sunucu GPS'ten çevrimdışı bulur); konum yoksa ya da yer verisi kurulu değilse nil. Eski sunucularda alan yok.
     let place: AssetPlace?
+    /// Arama sonucunda fotoğraftaki yazı eşleşmesi (GET /v1/search; yalnız yazıda bulunanlarda). Eski sunucularda yok.
+    let textMatch: AssetTextMatch?
 
     var isVideo: Bool { type == "video" }
 
@@ -76,6 +78,7 @@ struct Asset: Codable, Identifiable, Hashable {
         case livePairId = "live_pair_id"
         case editedOfId = "edited_of_id"
         case thumbState = "thumb_state"
+        case textMatch = "text_match"
     }
 }
 
@@ -310,12 +313,20 @@ struct Memory: Codable, Identifiable, Hashable {
     let coverAssetId: String
     let assetIds: [String]
     let assets: [Asset]
+    /// Geziler: saklı geziden gelen anı (yoksa nil). "Albüme dönüştür" bu kimlikle yapılır.
+    var tripId: Int? = nil
+    /// Gezi albüme dönüştürüldüyse albüm kimliği.
+    var albumId: String? = nil
+    /// Uzun etiket: "1 yıl önce bu hafta: Bozcaada gezisi"
+    var label: String? = nil
 
     enum CodingKeys: String, CodingKey {
-        case id, kind, title, date, count, assets, place
+        case id, kind, title, date, count, assets, place, label
         case yearsAgo = "years_ago"
         case coverAssetId = "cover_asset_id"
         case assetIds = "asset_ids"
+        case tripId = "trip_id"
+        case albumId = "album_id"
     }
 }
 
@@ -640,5 +651,185 @@ struct ServerBackupStatus: Codable, Equatable {
         case configured, level, targets, running
         case nextRunAt = "next_run_at"
         case restoreTest = "restore_test"
+    }
+}
+
+// MARK: - Geziler ve etkinlikler (GET /v1/trips, /v1/trips/{id}; trips.php)
+
+struct TripPlace: Codable, Hashable {
+    let name: String
+    let country: String?
+    let countryCode: String?
+    let cityId: Int?
+    let count: Int
+    let lat: Double?
+    let lng: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case name, country, count, lat, lng
+        case countryCode = "country_code"
+        case cityId = "city_id"
+    }
+}
+
+struct TripPoint: Codable, Hashable {
+    let lat: Double
+    let lng: Double
+}
+
+/// Otomatik gezi ya da etkinlik. kind: "trip" | "event"; label: "day_trip" | "birthday" | "wedding" | … (yoksa nil).
+struct TripSummary: Codable, Identifiable, Hashable {
+    let id: Int
+    let kind: String
+    let label: String?
+    let labelText: String?
+    /// Tam başlık: "Bozcaada gezisi, 12–15 Temmuz 2024" ya da kullanıcının verdiği ad
+    let title: String
+    /// Tarihsiz kısa ad: "Bozcaada gezisi" (kullanıcı adlandırdıysa onun adı)
+    let shortTitle: String?
+    let titleAuto: Bool
+    let startDay: String
+    let endDay: String
+    let days: Int
+    /// "12–15 Temmuz 2024"
+    let rangeText: String
+    let places: [TripPlace]
+    let coverAssetId: String?
+    let count: Int
+    let distanceKm: Double?
+    let dismissed: Bool
+    let albumId: String?
+    /// Yalnız GET /v1/trips/{id}: çekim sırasıyla rota noktaları.
+    var route: [TripPoint]? = nil
+
+    var isEvent: Bool { kind == "event" }
+    var displayTitle: String { titleAuto ? (shortTitle ?? title) : title }
+    var kindText: String { isEvent ? (labelText ?? "Etkinlik") : "Gezi" }
+    var daysText: String { days > 1 ? "\(days) gün" : "Tek gün" }
+    var year: String { String(startDay.prefix(4)) }
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, label, title, days, places, count, dismissed, route
+        case labelText = "label_text"
+        case shortTitle = "short_title"
+        case titleAuto = "title_auto"
+        case startDay = "start_day"
+        case endDay = "end_day"
+        case rangeText = "range_text"
+        case coverAssetId = "cover_asset_id"
+        case distanceKm = "distance_km"
+        case albumId = "album_id"
+    }
+}
+
+struct TripsResponse: Codable {
+    let trips: [TripSummary]
+    let hidden: Int?
+}
+
+struct TripEnvelope: Codable {
+    let trip: TripSummary
+}
+
+/// POST /v1/trips/{id}/album yanıtı (albümün yalnız gereken alanları).
+struct TripAlbumResponse: Codable {
+    struct AlbumRef: Codable, Hashable {
+        let id: String
+        let title: String
+        let count: Int?
+    }
+    let album: AlbumRef
+    let trip: TripSummary
+}
+
+struct TripPatch: Codable {
+    var title: String? = nil
+    var dismissed: Bool? = nil
+}
+
+// MARK: - Fotoğraftaki yazı (OCR)
+
+/// Arama sonucundaki yazı eşleşmesi: {"term": "fatura", "snippet": "ELEKTRİK FATURASI",
+/// "parts": [{"t": "ELEKTRİK ", "m": false}, {"t": "FATURASI", "m": true}]}
+struct AssetTextMatch: Codable, Hashable {
+    let term: String
+    let snippet: String
+    let parts: [Part]
+
+    struct Part: Codable, Hashable {
+        let t: String
+        let m: Bool
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        term = try c.decodeIfPresent(String.self, forKey: .term) ?? ""
+        snippet = try c.decodeIfPresent(String.self, forKey: .snippet) ?? ""
+        parts = try c.decodeIfPresent([Part].self, forKey: .parts) ?? []
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case term, snippet, parts
+    }
+}
+
+/// GET /v1/assets/{id}/text — sunucunun fotoğraftan okuduğu yazı.
+struct AssetText: Codable, Equatable {
+    /// "done" (yazı var) | "none" (yazı yok) | "pending" (henüz okunmadı) | "unavailable" (sunucuda özellik yok)
+    let status: String
+    let text: String
+    let lines: [String]
+    let words: Int
+    let lang: String?
+
+    var hasText: Bool { status == "done" && !lines.isEmpty }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        status = try c.decodeIfPresent(String.self, forKey: .status) ?? "unavailable"
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        lines = try c.decodeIfPresent([String].self, forKey: .lines) ?? []
+        words = try c.decodeIfPresent(Int.self, forKey: .words) ?? 0
+        lang = try c.decodeIfPresent(String.self, forKey: .lang)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status, text, lines, words, lang
+    }
+}
+
+/// Yazıda arama sözcüklerini bulma (sunucudaki ocr.php ile aynı kurallar: tam sözcük, sözcük başı ≥ 3 harf,
+/// sözcük içi ≥ 4 harf; Türkçe duyarlı katlama PlaceText.fold).
+enum OCRText {
+    /// Sorgu sözcükleri (katlanmış, tekrarsız).
+    static func tokens(_ query: String) -> [String] {
+        var out: [String] = []
+        for w in PlaceText.fold(query).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init) where !out.contains(w) {
+            out.append(w)
+        }
+        return out
+    }
+
+    static func matches(_ word: String, _ tokens: [String]) -> Bool {
+        let w = PlaceText.fold(word)
+        return tokens.contains { t in w == t || (t.count >= 3 && w.hasPrefix(t)) || (t.count >= 4 && w.contains(t)) }
+    }
+
+    /// Satırdaki eşleşen sözcüklerin aralıkları.
+    static func hitRanges(in line: String, tokens: [String]) -> [Range<String.Index>] {
+        guard !tokens.isEmpty else { return [] }
+        var out: [Range<String.Index>] = []
+        var i = line.startIndex
+        while i < line.endIndex {
+            if line[i].isLetter || line[i].isNumber {
+                var j = i
+                while j < line.endIndex, line[j].isLetter || line[j].isNumber { j = line.index(after: j) }
+                if matches(String(line[i..<j]), tokens) { out.append(i..<j) }
+                i = j
+            } else {
+                i = line.index(after: i)
+            }
+        }
+        return out
     }
 }

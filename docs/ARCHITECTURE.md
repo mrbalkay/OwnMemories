@@ -77,6 +77,8 @@ tests/                php tests/run.php
 - `asset_embeddings` — asset_id PK, user_id, model (ör. `ViT-B-16-SigLIP2__webli`), vec (MEDIUMBLOB, float32 little-endian, L2-normalize, 768 boyut = 3072 bayt), created_at. ownmemories-ml yazar; asset kalıcı silinince PHP siler (§7)
 - `asset_quality` (009) — asset_id PK, user_id, phash (BIGINT UNSIGNED, 64 bit DCT algısal özet), sharpness (Laplace varyansı), brightness (0..255), color (VARBINARY(48), 4×4 ortalama RGB), is_screenshot, algo, computed_at. ownmemories-ml yazar; asset kalıcı silinince PHP siler (§8)
 - `cleanup_dismissed` (009) — (user_id, kind, item_key) PK, asset_ids, created_at: Temizlik'te "Bunlar farklı" / "Bu iyi" ile gizlenen öneriler (§8)
+- `trips` (009_trips) — id, user_id, kind (`trip`\|`event`), label (`day_trip`, `birthday`, `wedding`, `concert`, `beach`, `snow` ya da NULL), label_checked, title, title_auto (0: kullanıcı adlandırdı, korunur), start_at/end_at (UTC), start_day/end_day (yerel), days, place_summary (JSON `{places:[{name,country,country_code,city_id,count,lat,lng}], countries:[{cc,name,count}], home_cc}`), cover_asset_id, cover_auto, asset_count/photo_count/video_count, distance_km (evden en uzak), dismissed, album_id ("Albüme dönüştür" ile oluşan albüm), fingerprint (tür + sıralı öğe kimliklerinin SHA-1'i), created_at, updated_at (§9)
+- `trip_assets` — (trip_id, asset_id) PK (§9)
 
 ### Yineleme kuralları
 1. Aynı kullanıcıda aynı SHA-1 → yinelenen.
@@ -152,9 +154,14 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | DELETE | `albums/{id}/members/{userId}` | – | `{ok}` (sahip çıkarır veya üye ayrılır) |
 | GET | `users/lookup?email=` | – | `{exists,name}` |
 | GET | `assets/random?count=12` | – | `{assets:[…]}` — son 30 gün dışındaki rastgele fotoğraflar (widget) |
-| GET | `memories?date=YYYY-MM-DD` | (varsayılan: kullanıcının bugünü) | `{date, memories:[{id,kind,title,place,years_ago,date,count,cover_asset_id,asset_ids,assets}]}` — `kind`: `on_this_day` / `this_week` (bugün yoksa ±3 gün) / `trip` (yıldönümü bugünün ±3 gününe düşen gezi; aynı yılın günlük anısının yerini alır, `end_date`, `days`) / `favorites`. Başlıklar yer adlarıyla Türkçe ekli kurulur (§8) |
+| GET | `memories?date=YYYY-MM-DD` | (varsayılan: kullanıcının bugünü) | `{date, memories:[{id,kind,title,place,years_ago,date,count,cover_asset_id,asset_ids,assets}]}` — `kind`: `on_this_day` / `this_week` (bugün yoksa ±3 gün) / `trip` (yıldönümü bugünün ±3 gününe düşen gezi; aynı yılın günlük anısının yerini alır, `end_date`, `days`) / `favorites`. Başlıklar yer adlarıyla Türkçe ekli kurulur (§8). Geziler hesaplandıysa (§9) `trip` anıları saklı gezilerden gelir: `title` "Bozcaada gezisi" (ya da kullanıcının verdiği ad), ek alanlar `trip_id`, `album_id`, `label` ("1 yıl önce bu hafta: Bozcaada gezisi"); gizlenen gezi anı olmaz |
 | GET | `places` | `favorite=1`, `type` | `{places:[{id,name,admin1,country,country_code,region,count,cover_asset_id,lat,lng}], ready, pending}` — şehir düzeyinde yerler (zaman çizelgesi görünürlük kuralları), sayıya göre azalan; kapak: fotoğraf > favori > en yeni. `ready`: yer verisi kurulu mu; `pending`: yeri bekleyen konumlu öğe |
 | GET | `places/{id}` | – | `{place:{…, first_at, last_at}}`; kullanıcının o yerde öğesi yoksa 404 |
+| GET | `trips` | `kind=trip\|event`, `dismissed=1` (yalnız gizlenenler) | `{trips:[Trip], hidden, status:{computed_at, pending, places_ready, places_pending}}` — en yeni önce. Hiç hesaplanmamışsa istek içinde hesaplanır (ML etiketi sonra işle). Trip: `{id,kind,label,label_text,title,short_title,title_auto,start_at,end_at,start_day,end_day,days,range_text,places,countries,cover_asset_id,count,photo_count,video_count,distance_km,dismissed,album_id,updated_at}` (§9) |
+| GET | `trips/{id}` | – | `{trip:{…, route:[{lat,lng}]}}` (rota: çekim sırasıyla en çok 240 nokta); başkasının gezisi 404 |
+| PATCH | `trips/{id}` | `{title?, dismissed?, cover_asset_id?}` | `{trip}` — ad ≤ 120 karakter; boş/null ad otomatik ada döner; kapak gezide olmalı |
+| DELETE | `trips/{id}` | – | `{ok}` — gizler (öğeler silinmez, yeniden önerilmez; `PATCH {dismissed:false}` geri getirir) |
+| POST | `trips/{id}/album` | – | 201 `{album, trip}` — gezinin öğeleriyle normal albüm (ad = gezi adı, kapak = gezi kapağı, açıklama = tarih · yerler); albüm zaten varsa 200 aynı albüm |
 | POST | `devices/report` | `{device_id,name,model,os_version,app_version,pending,uploaded_total,last_backup_at,last_error}` | `{ok,server_time}` — iOS yedekleme durumu (Yönetim → Genel bakış) |
 | GET | `search` | `q` (≤ 200 karakter), `from`, `to` (ISO), `favorite=1`, `sort=relevance\|date` (varsayılan relevance), `limit≤200 (60)`, `offset` | `{mode:"smart"\|"text", assets:[…], next_offset:int\|null, total, status:{indexed,total,pending,model,ready}\|null}` — akıllı mod: ML hizmetinden (config `ml.url`, varsayılan `http://127.0.0.1:8765`, zaman aşımı `ml.timeout` 3 sn, isteğe bağlı `ml.min_score`) en fazla 500 sıralı kimlik alınır; zaman çizelgesi görünürlük kurallarıyla (yalnız kendi kütüphanesi, çöp/arşiv hariç, tek kare kuralı) süzülür, sıra korunur. Dosya adı/açıklama/kamera/kişi eşleşmeleri öne alınır (hibrit). Sorguda adlandırılmış (gizli olmayan) bir kişinin adı tam sözcük olarak geçerse (`Ali plajda`; büyük/küçük harf ve i/ı duyarsız, en uzun ad) o kişinin fotoğrafları en başa gelir, kendi aralarında kalan sözcüklerle (`plajda`) akıllı sırada; diğer sonuçlar ardından korunur (ör. `Deniz` adlı kişi varken `deniz kenarı` aramasında manzaralar kaybolmaz). Hizmet yok, hata ya da sonuç yoksa `assets?q=` ile aynı metin araması (`mode:"text"`, tarihe göre); hizmet yanıt verip ilgi eşiğini geçen olmadığında metin araması da boşsa `mode:"smart"`, boş liste. Boş `q` → boş liste. `status` yalnız ilk sayfada (offset=0) |
 | GET | `search/status` | – | ML `/status` vekili: `{available:true,indexed,total,pending,model,ready}` ya da `{available:false}` |
@@ -476,3 +483,147 @@ iskele ×2, masa ×2 — ayrı kaldı; LFW'de aynı kişinin farklı fotoğrafla
 da %7'ye karartılmış kopya — ikisi "karanlık/parlak" listesine düşer). Bulanık kopyalar (σ ≥ 2 Gauss) netliği
 1–25, net fotoğraflar ≥ 80.
 
+## 9. Geziler ve etkinlikler (otomatik albümler)
+
+`web/includes/trips.php`; arayüz `web/assets/app/trips.js` + `trips.css` (#/trips, #/trip/{id}), iOS `Views/TripsView.swift`
+(Harita sekmesinde Harita | Yerler | Geziler).
+
+- **Ev (dönemlik, taşınmalar)**: her ay için ±6 aylık pencerede şehir puanı = Σ min(o aydaki farklı gün, 4) (uzun bir gezi
+  evi geçemez); en az 2 ay ve 3 puan. Boş aylar önceki evi alır. Ev noktası: o şehirdeki çekimlerin ortancası (İstanbul gibi
+  geniş şehirlerde merkez değil, kullanıcının semti).
+- **Gezi**: kareleri evden ≥ 50 km olan günler (günün konumlu karelerinin en az yarısı) ardışık birleşir; 1 boş gün
+  geziyi bölmez, evde geçen bir gün böler. En az 4 öğe ve (≥ 2 gün ya da ≥ 150 km uzak). Üyeler: uzak kareler + aradaki
+  konumsuz kareler (evdeki kareler değil).
+- **Etkinlik**: (a) 50–150 km'lik tek günlük çıkış, ≥ 5 öğe (`label=day_trip`: "Şile, 3 Ağustos 2024"); (b) gezi dışı,
+  dosya tarihi olmayan (EXIF/Takeout) ve ekran görüntüsü olmayan karelerde ≤ 2 saat aralıklı, ≤ 16 saatlik patlama:
+  ≥ max(12, 3 × günlük ortanca) öğe (karelerin %40'ında yüz varsa ≥ max(8, 2 × ortanca)); aynı anda damgalanmış
+  toplu kopyalar sayılmaz. ML çalışıyorsa "doğum günü", "düğün", "konser", "plaj", "kar" sorgularıyla etiket: en iyi
+  ortalama puan ötekilerden ≥ %15 yüksek ve karelerin yarısı sonuçlardaysa ("Doğum günü, 14 Şubat 2025").
+- **Başlık**: tek yer "Bozcaada gezisi, 12–15 Temmuz 2024"; 2–3 günlük hafta sonu "Kapadokya'da hafta sonu, 8–9 Mart 2025";
+  yurt dışı 2–3 şehir "İtalya: Roma, Floransa ve Venedik"; yurt dışı ≥ 4 şehir ya da ≥ 14 gün "Tayland, Kasım 2025";
+  birden çok ülke "Fransa ve İtalya, Mayıs 2024"; yurt içi çok şehir "İzmir, Çeşme ve Bodrum gezisi, …". Bölge
+  (Kapadokya) şehirden önce gelir; tek ülkeli gezide başlıkta yalnız o ülkenin yerleri (Vatikan uğrağı İtalya'yı bozmaz).
+- **Kapak**: favori +4, yüz (en çok 3) ×0,8, netlik (asset_quality) ≤ +2, video −3, ekran görüntüsü −6, 64 px altı −8.
+- **Kararlı kimlik**: yeni adaylar saklı gezilerle ortak öğe sayısına göre (≥ %30) açgözlü eşleşir. Parmak izi aynıysa
+  yazılmaz. Eşleşmeyen eski gezi: kullanıcı dokunmadıysa silinir; adlandırıldı/kapak seçildi/gizlendi/albüme dönüştü ise
+  görünür öğeleriyle kalır (hiç öğesi kalmazsa silinir). Kullanıcı adı, kapak, gizleme ve albüm bağı korunur.
+- **İş**: `trips` (payload `user_id`), kütüphane parmak izi değişmediyse hemen biter. Kuyruğa girer: öğe eklenince
+  (10 dk gecikmeli, kullanıcı başına tek iş), çöp/geri al (2 dk), konum/tarih/favori değişikliği (5 dk), yer bulma
+  bitince (herkes), gece bakımı (herkes). `GET /v1/trips` ilk kez çağrılırsa istek içinde hesaplar.
+
+
+## 9. Bağlantıyla paylaşım (herkese açık bağlantılar)
+
+Tailnet dışındaki kişilere bir albüm (güncel içeriğiyle) veya bir seçim gösterilir. Kod: `web/includes/shares.php`
+(sahip tarafı, öğe anahtarları, GPS silme, zip akışı), `web/includes/share_public.php` (genel uç, HTML),
+`web/s/index.php` (ön denetleyici), `web/s/assets/share.{css,js}`, web arayüzü `web/assets/app/shares.js` + `qr.js`,
+iOS `ios/OwnMemories/Views/ShareLinkSheet.swift`, sunucu `server/setup-share.sh` + `server/apache-ownmemories-share.conf`.
+
+**Ağ:** Apache'de ayrı site, yalnızca `127.0.0.1:8091`, DocumentRoot `web/s`, her istek `web/s/index.php`'ye.
+`tailscale funnel --bg --https=8443 http://127.0.0.1:8091` yalnızca bu portu açar (ana uygulama `tailscale serve` 443,
+tailnet'e özel). `shares.public_url` (config) bağlantı adreslerinin köküdür; yoksa isteğin adresi kullanılır (tailnet
+içinde ana sitenin `/s/` yolu da çalışır: `web/s/.htaccess`). mod_remoteip yalnızca yerel vekilin X-Forwarded-For'una
+güvenir; uç yalnızca `REMOTE_ADDR` kullanır.
+
+**Veri (migration 010):** `share_links` (token_hash = SHA-256(belirteç), user_id, kind album|selection, album_id,
+title, created_at, expires_at, password_hash, allow_download, show_location, views, last_viewed_at, revoked_at),
+`share_link_assets` (link_id, asset_id, sort_order). Belirteç 32 bayt rastgele, base64url (43 karakter); düz hali
+saklanmaz. Albüm bağlantısı albümün çöpte olmayan güncel öğelerini, seçim bağlantısı sahibin çöpte olmayan
+öğelerini gösterir. Albüm silinirse, sahip devre dışıysa veya iptal edildiyse bağlantı 410 döner.
+
+**Öğe anahtarı:** `AES-256-ECB(anahtar = HMAC-SHA256(site_settings.share_secret, "item|" + belirteç), uuid'nin 16 baytı)`
+→ base64url 22 karakter. Bağlantıya özgüdür, iç kimliği göstermez; her istekte çözülür ve üyelik denetlenir.
+
+**Uçlar (sahip, oturum+CSRF veya Bearer):**
+| Yöntem | Yol | Açıklama |
+|---|---|---|
+| GET | `/v1/shares[?album=<id>]` | `{links: [Link], public_url, funnel}` |
+| POST | `/v1/shares` | `{kind, album_id \| ids[], title?, expires: 1d\|1w\|1m\|never, password?, allow_download, show_location}` → 201 `{link, token, url, funnel}` (albüm yalnız sahibince; seçimde yalnız kendi öğeleri, en çok 2000) |
+| PATCH | `/v1/shares/{id}` | title, expires, password (null = kaldır), allow_download, show_location → `{link}` |
+| POST | `/v1/shares/{id}/revoke` | iptal → `{link}` |
+| POST | `/v1/shares/{id}/rotate` | yeni belirteç → `{link, token, url}` |
+| DELETE | `/v1/shares/{id}` | siler |
+
+Link: `{id, kind, album_id, title, count, cover_asset_id, created_at, expires_at, has_password, allow_download,
+show_location, views, last_viewed_at, revoked_at, status: active|expired|revoked, url: null}`. Başkasının
+bağlantısı 404.
+
+**Genel uç (`/s/...`, oturum yok):** `GET /s/<b>` galeri | 401 parola | 404/410 durum sayfası; `POST /s/<b>` parola
+(IP+bağlantı 8/15 dk, bağlantı 40/saat; `password_verify`) → `om_su` çerezi (yol `/s/<b>`, HttpOnly, SameSite=Lax,
+HMAC(link id, token_hash, password_hash, son kullanma)); `GET /s/<b>/m/<anahtar>/t|p|v|o` küçük resim, önizleme,
+video (Range), orijinal (yalnız allow_download); `GET /s/<b>/zip` (yalnız allow_download; sıkıştırmasız, veri
+tanımlayıcılı, gerekirse ZIP64, geçici dosyasız akış); `GET /s/<b>/og.jpg` (parolasız bağlantılarda 1200 px JPEG).
+Bilinmeyen belirteçler IP başına 10 dakikada 40 ile sınırlı (aşılınca geçerli belirteçler de 429); belirteç biçiminde
+olmayan yollar (favicon, `/wp-login.php` gibi tarayıcı/bot yoklamaları) sayılmaz, `/robots.txt` her şeyi yasaklar.
+Parola sayaçları önce artırılır sonra denetlenir (eşzamanlı istek seli sınırı aşamaz). 240'tan fazla öğede ilk 240 karo
+HTML, kalanı `share.js` tarafından kaydırdıkça eklenir (100k öğeli albüm ~2,5 sn, ~9 MB; 20k üstünde bellek sınırı 512 MB).
+Başlıklar: CSP `default-src 'none'` (yalnız 'self'), `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`,
+`X-Frame-Options: DENY`, `Cache-Control: private, no-store` (HTML/orijinal). Görüntülenme, çerezsiz ilk ziyarette
+sayılır (6 saat; botlar ve HEAD sayılmaz).
+
+**Konum:** show_location=0 iken t/p türevleri metadatasızdır (vips/Imagick strip); `o` fotoğrafları
+`exiftool -gps:all= -xmp:all= -iptc:all= ... -o -` ile akıtılır (ilk parça önceden okunur; exiftool yazamazsa — BMP,
+bozuk dosya — ya da yoksa: gerçek JPEG için APP1/APP13 PHP'de çıkarılır, diğerlerinde metadatasız önizleme verilir;
+boş dosya hiç sunulmaz); videolar `ffmpeg -c copy -map_metadata -1` ile `derived/share-web|share-orig`'e
+önbelleklenir (asset kalıcı silinince silinir).
+
+## 9. Fotoğraftaki yazı (OCR)
+
+**Motor:** PaddleOCR PP-OCRv6 çok dilli modelleri (RapidOCR'ın ONNX dışa aktarımı, Apache-2.0): "tiny" algılama
+(1.8 MB) + "small" tanıma (21 MB, 18.7 bin karakter; Türkçe harfler dahil). `ml/ownmemories_ml/ocr.py` yalnız
+onnxruntime + numpy + Pillow kullanır: DB son işlemesi (eşik 0.3 → 2×2 genişletme → 8-komşu bağlı bileşenler (satır
+koşuları + birleşim-bul) → dışbükey zarf + en küçük döndürülmüş dikdörtgen → kutu puanı ≥ 0.5 → genişletme 1.6) ve
+dörtgen kırpma (PIL `QUAD`) numpy ile yazıldı; `rapidocr` paketi (OpenCV 170 MB + shapely + pyclipper + omegaconf)
+gerekmez. Tanıma CTC; kod çözme Türkçe/İngilizce/Batı Avrupa karakter kümesiyle sınırlı, sık karışmalar Türkçeye
+çevrilir (Č/Ć → Ğ, Í → İ, Õ → Ö, Š/Ș → Ş, "$AİR" → "ŞAİR", büyük harfli sözcükte 1/0 → I/O, iSTANBUL → İSTANBUL).
+Gürültü süzgeci: satır güveni < 0.80, harf/rakamsız ya da tek harfli satırlar atılır; toplam < 3 harf/rakam ya da
+harfsiz < 6 rakamlık sonuçlar "yazı yok" sayılır.
+
+**Seçim ölçümü** (`ml/tests/ocr_bench.py`; sentetik küme `ocr_synth.py`: 41 tabela/fiş/belge/menü/ekran görüntüsü,
+döndürme/perspektif/bulanıklık/gürültü; gerçek küme `ocr_commons.py`: Wikimedia Commons'tan 23 Türkçe tabela/eczane/
+dükkân fotoğrafı; sözcük bulma oranı = doğru metindeki sözcüklerin katlanmış OCR çıktısında bulunma oranı):
+
+| Motor | sentetik | gerçek | CPU / yazılı görüntü | yazısız 172 fotoğrafta sanrı |
+|---|---|---|---|---|
+| **PP-OCRv6 tiny det + small rec, 1280 px (seçilen)** | **%99.7** | **%88** | ~0.7–1.0 sn | 1 ("1000"; artık süzülüyor) |
+| PP-OCRv6 small det + small rec, 960 px | %99.7 | %84 | ~1.6 sn | 0 |
+| RapidOCR 3.10 paketi (aynı modeller + açı sınıflandırıcı) | %98.8 | %82 | ~3.6–5.5 sn | – |
+| Tesseract 5.3 tur+eng, psm 3 | %66 | %11 | ~0.5 sn | – |
+| Tesseract 5.3 tur+eng, psm 11 | %69 | %34 | ~0.8–11 sn | – |
+
+Tesseract temiz belgede harf doğruluğunda iyi (İ/ş/ğ tam) ama döndürülmüş/fotoğraf yazısında ve tabelalarda zayıf;
+PP-OCR her türde güçlü. Python 3.13 ve 3.14'te sonuçlar birebir aynı.
+
+**Dizinleyici** (`service.py` `_ocr_step`): CLIP kuyruğu boşken tur başına `OM_OCR_BATCH` (8) fotoğraf
+(`type='photo'`, küçük resmi hazır, çöpte değil; `asset_text` satırı olmayan ya da `engine` farklı olan); kaynak
+türetilmiş önizleme (2048 px; yoksa video kapağı/küçük resim). Algılama uzun kenarı 1280 px'e ölçekli görüntüde,
+tanıma tam çözünürlükten kırpılan satırlarda. Yazı yoksa da satır yazılır (`words=0`: tarandı). Ölçülen hız (4 iş
+parçacığı, 2048 px önizleme): yazısız ~0.1–0.15 sn, yazılı ~0.2–0.5 sn; 227 fotoğraflık geliştirme kütüphanesi 38 sn.
+
+**Tablo** `asset_text` (migration 011): `asset_id` PK, `user_id`, `text` (satırlar `\n` ile), `folded` (ascii_bin;
+`" elektrik faturasi "`), `lang` (tr/en tahmini), `words`, `engine` (`ppocr-v6/1`), `computed_at`; `FULLTEXT(folded)`.
+Katlama: Türkçe küçük harf (İ→i, I→ı) + aksan atma + yalnız `[a-z0-9]` sözcükler; PHP `ocr_fold()` (= `places_fold`)
+ve Python `ocr.fold()` ortak örneklerle sınanır (`tests/fixtures/ocr/fold.json`).
+
+**Arama** (`web/includes/ocr.php`, `GET /v1/search` içinde): sorgu sözcükleri katlanır; tüm sözcükler eşleşmeli.
+Puan: 3 tam sözcük, 2 sözcük başı (Türkçe ekler: "fatura" ⊂ "faturası"), 1 sözcük içi (≥ 4 harf: "köfte" ⊂
+"çiğköfte"); iki harfli sözcükler yalnız tam sözcük. Adaylar önce FULLTEXT'ten (`+fatura*`, boolean), sözcük başı
+eşleşmesi 50'den azsa ve ≥ 4 harfli sözcük varsa ayrıca `LIKE` taramasıyla (durak sözcükleri ve FULLTEXT dizini
+yoksa yalnız LIKE). 100 bin fotoğraf / 30 bin yazılı yapay kütüphanede sorgu 0.1–0.16 sn (eşleşme yoksa FULLTEXT
+~10 ms + LIKE ~0.1 sn). Sıra: adlandırılmış kişi → **yazı (puan ≥ 2)** → akıllı ∩ metin → dosya adı/açıklama →
+yazı (puan 1) → akıllı. Hizmet yoksa: yazı (≥ 2) → dosya adı/açıklama → yazı (1), tarihe göre. Yazıda bulunan
+sonuçlarda `text_match: {term, snippet, parts:[{t, m}]}` (en çok sözcüğün eşleştiği satır, ≤ 90 karakter pencere;
+`m` vurgulanacak özgün sözcük), yanıtta `text_matches` (yazı eşleşmesi sayısı). `GET /v1/search/status` hizmet
+varken `ocr: {scanned, total, with_text}` da döner.
+
+**Uçlar:** `GET /v1/assets/{id}/text` (sahibi ya da paylaşılan albüm üyesi) →
+`{status: "done"|"none"|"pending"|"unavailable", text, lines[], words, lang, engine, computed_at}`.
+Kalıcı silmede satır silinir (`ocr_purge_asset`). ML `/health` → `ocr: bool` (+ `ocr_error`).
+
+**Arayüz:** web `web/assets/app/ocr.js` (karo rozeti `.tile-ocr`, başlıkta `.search-ocr`, bilgi panelinde katlanabilir
+`.i-ocr` + kopyala; kanca sınıfları dosyanın başında, üç temada stil), iOS `AssetInfoView` "Fotoğraftaki yazı"
+bölümü (seçilebilir metin, aramadan gelindiyse vurgu, "Yazıyı kopyala") ve arama hücresinde rozet;
+yönetim paneli "Fotoğraftaki yazı (OCR)" ilerlemesi.
+
+**Testler:** `tests/db/OcrTest.php`, `tests/unit/OcrFoldTest.php`, `ml/tests/test_ocr.py [--model-dir]`,
+`ml/tests/ocr_bench.py` (motor karşılaştırması), `tests/e2e/smoke.mjs` (`OM_E2E_OCR_Q=eczane` ile).

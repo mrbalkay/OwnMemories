@@ -15,6 +15,9 @@ Yüz tanıma (Kişiler; model yoksa kendiliğinden kapalı, CLIP etkilenmez):
 OM_FACE_MODEL (immich-app/buffalo_l; boş ya da "0" = kapalı), OM_FACE_MIN_SCORE (0.7, algılama eşiği),
 OM_FACE_MIN_SIZE (32 px, kaynak görüntüde en kısa kenar), OM_FACE_MAX_DISTANCE (0.5, kosinüs uzaklığı),
 OM_FACE_MIN_FACES (3, yeni kişi için gereken yüz), OM_FACE_BATCH (4, CLIP işi varken tur başına görüntü).
+Fotoğraftaki yazı (OCR; model yoksa kendiliğinden kapalı): OM_OCR (1; "0" = kapalı), OM_OCR_BATCH (8, tur başına
+görüntü; CLIP işi bitince çalışır), OM_OCR_MIN_CONF (0.80, satır güven eşiği), OM_OCR_DET_SIDE (1280, algılama çözünürlüğü),
+OM_OCR_MODEL_DIR (varsayılan <OM_ML_MODEL_DIR>/ppocr-v6).
 """
 from __future__ import annotations
 
@@ -66,6 +69,11 @@ class Config:
     face_max_distance: float = 0.5
     face_min_faces: int = 3
     face_batch: int = 4
+    ocr: bool = True
+    ocr_batch: int = 8
+    ocr_min_conf: float = 0.80
+    ocr_det_side: int = 1280
+    ocr_dir: str = ""  # boş: <model_root>/ppocr-v6
 
     @property
     def model_name(self) -> str:
@@ -84,6 +92,12 @@ class Config:
     @property
     def face_model_dir(self) -> str:
         return os.path.join(self.model_root, self.face_model_name) if self.face_model else ""
+
+    @property
+    def ocr_model_dir(self) -> str:
+        from .ocr import MODEL_NAME
+
+        return self.ocr_dir or os.path.join(self.model_root, MODEL_NAME)
 
 
 def _php_config(path: str) -> dict:
@@ -140,4 +154,9 @@ def load(env: dict | None = None) -> Config:
     c.face_max_distance = float(e.get("OM_FACE_MAX_DISTANCE") or c.face_max_distance)
     c.face_min_faces = max(1, int(e.get("OM_FACE_MIN_FACES") or c.face_min_faces))
     c.face_batch = max(1, min(64, int(e.get("OM_FACE_BATCH") or c.face_batch)))
+    c.ocr = (e.get("OM_OCR", "1") or "1").strip().lower() not in ("0", "false", "no", "off")
+    c.ocr_batch = max(1, min(64, int(e.get("OM_OCR_BATCH") or c.ocr_batch)))
+    c.ocr_min_conf = min(0.99, max(0.3, float(e.get("OM_OCR_MIN_CONF") or c.ocr_min_conf)))
+    c.ocr_det_side = max(640, min(2048, int(e.get("OM_OCR_DET_SIDE") or c.ocr_det_side)) // 32 * 32)
+    c.ocr_dir = e.get("OM_OCR_MODEL_DIR") or ""
     return c

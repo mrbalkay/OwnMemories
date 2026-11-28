@@ -374,3 +374,83 @@ CREATE TABLE IF NOT EXISTS cleanup_dismissed (
   created_at DATETIME NOT NULL,
   PRIMARY KEY (user_id, kind, item_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Geziler ve etkinlikler (009): trips, trip_assets.
+CREATE TABLE IF NOT EXISTS trips (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  kind ENUM('trip','event') NOT NULL DEFAULT 'trip',
+  label VARCHAR(24) NULL,
+  label_checked TINYINT(1) NOT NULL DEFAULT 0,
+  title VARCHAR(255) NOT NULL,
+  title_auto TINYINT(1) NOT NULL DEFAULT 1,
+  start_at DATETIME NOT NULL,
+  end_at DATETIME NOT NULL,
+  start_day DATE NOT NULL,
+  end_day DATE NOT NULL,
+  days SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+  place_summary TEXT NULL,
+  cover_asset_id CHAR(36) NULL,
+  cover_auto TINYINT(1) NOT NULL DEFAULT 1,
+  asset_count INT UNSIGNED NOT NULL DEFAULT 0,
+  photo_count INT UNSIGNED NOT NULL DEFAULT 0,
+  video_count INT UNSIGNED NOT NULL DEFAULT 0,
+  distance_km DECIMAL(8,1) NULL,
+  dismissed TINYINT(1) NOT NULL DEFAULT 0,
+  album_id CHAR(36) NULL,
+  fingerprint CHAR(40) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  KEY ix_trips_user (user_id, dismissed, start_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS trip_assets (
+  trip_id INT UNSIGNED NOT NULL,
+  asset_id CHAR(36) NOT NULL,
+  PRIMARY KEY (trip_id, asset_id),
+  KEY ix_trip_assets_asset (asset_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Bağlantıyla paylaşım (010): herkese açık paylaşım bağlantıları.
+CREATE TABLE IF NOT EXISTS share_links (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  token_hash CHAR(64) NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  kind VARCHAR(16) NOT NULL,
+  album_id CHAR(36) NULL,
+  title VARCHAR(255) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL,
+  expires_at DATETIME NULL,
+  password_hash VARCHAR(255) NULL,
+  allow_download TINYINT(1) NOT NULL DEFAULT 0,
+  show_location TINYINT(1) NOT NULL DEFAULT 0,
+  views INT UNSIGNED NOT NULL DEFAULT 0,
+  last_viewed_at DATETIME NULL,
+  revoked_at DATETIME NULL,
+  UNIQUE KEY uq_share_token (token_hash),
+  KEY ix_share_user (user_id, created_at),
+  KEY ix_share_album (album_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS share_link_assets (
+  link_id INT UNSIGNED NOT NULL,
+  asset_id CHAR(36) NOT NULL,
+  sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (link_id, asset_id),
+  KEY ix_sla_asset (asset_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Fotoğraftaki yazı / OCR (011): bkz. install/migrations/011_ocr.sql.
+CREATE TABLE IF NOT EXISTS asset_text (
+  asset_id CHAR(36) NOT NULL PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  text MEDIUMTEXT NOT NULL,
+  folded MEDIUMTEXT CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  lang VARCHAR(8) NULL,
+  words INT UNSIGNED NOT NULL DEFAULT 0,
+  engine VARCHAR(40) NOT NULL,
+  computed_at DATETIME NOT NULL,
+  KEY ix_at_user_words (user_id, words),
+  KEY ix_at_engine (engine),
+  FULLTEXT KEY ft_at_folded (folded)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

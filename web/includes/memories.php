@@ -90,7 +90,10 @@ function memories_for(int $userId, string $date): array
     }
     // 2b) Geziler (Yerler): yıldönümü bu haftaya düşen, evden uzakta geçen günler. Aynı yılın günlük anısı
     // gezinin içindeyse gezi anısı onun yerini alır ("Bozcaada'da bir hafta").
-    if (function_exists('places_trips')) {
+    // Geziler hesaplandıysa saklı geziler (ad, gizleme, albüm bağı) kullanılır; yoksa Yerler'in anlık gezileri.
+    if (function_exists('trips_memories') && trips_computed($userId)) {
+        $out = trips_memories($userId, $y, $mo, $d, $out);
+    } elseif (function_exists('places_trips')) {
         $out = memories_with_trips($userId, $y, $mo, $d, $out);
     }
     usort($out, fn($a, $b) => $a['years_ago'] <=> $b['years_ago']);

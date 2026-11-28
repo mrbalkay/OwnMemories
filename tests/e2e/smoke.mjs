@@ -190,6 +190,29 @@ try {
   } else {
     step('yerler atlandı (API yok)');
   }
+  // Geziler ve etkinlikler: kartlar → gezi sayfası (başlık, rota, süzülmüş zaman çizelgesi); yalnız okur
+  const tripsApi = await page.evaluate(async () => { const r = await fetch('/api/v1/trips'); return r.ok ? r.json() : { trips: null }; });
+  if (Array.isArray(tripsApi.trips)) {
+    await page.goto(base + '/app/#/trips');
+    await page.waitForSelector('.trip-card:not(.is-ghost), .trips-empty');
+    if (tripsApi.trips.length) {
+      const tr = tripsApi.trips[0];
+      await page.screenshot({ path: `${out}desktop-trips.png` });
+      await page.click(`.trip-card[data-id="${tr.id}"]`);
+      await page.waitForSelector('.trip-head .trip-title');
+      await page.waitForSelector('.timeline .tile');
+      const n = await page.evaluate(async (id) => (await (await fetch(`/api/v1/assets?trip=${id}&limit=500`)).json()).assets.length, tr.id);
+      if (n !== tr.count) throw new Error(`gezi öğe sayısı beklenmedik: ${n} / ${tr.count}`);
+      if (!(await page.$('.trip-actions .trip-album-make, .trip-actions .trip-album-open'))) throw new Error('Albüme dönüştür düğmesi yok');
+      await page.click('.trip-back');
+      await page.waitForURL('**/#/trips');
+      step(`geziler: ${tripsApi.trips.length} gezi/etkinlik, "${tr.title}" sayfası (${n} öğe)`);
+    } else {
+      step('geziler: boş durum');
+    }
+  } else {
+    step('geziler atlandı (API yok)');
+  }
   // Arama: öneri yongaları, sonuç ızgarası (akıllı ya da metin modu) ve sonuç listesinde görüntüleyici gezinmesi
   await page.goto(base + '/app/#/search');
   await page.waitForSelector('.search-start .search-chip');
@@ -214,6 +237,31 @@ try {
   await page.keyboard.press('Escape');
   await page.waitForSelector('.viewer', { state: 'detached' });
   step(`arama (${mode}): "${term}" → ${nTiles} sonuç, görüntüleyicide gezinme`);
+  // Fotoğraftaki yazı (OCR): OM_E2E_OCR_Q kütüphanede yazısı okunmuş bir sözcükse ("eczane") rozet, özet satırı,
+  // görüntüleyicide "Fotoğraftaki yazı" bölümü, vurgulu sözcük ve kopyala düğmesi denetlenir.
+  const ocrQ = process.env.OM_E2E_OCR_Q;
+  if (ocrQ) {
+    await page.goto(base + '/app/#/search?q=' + encodeURIComponent(ocrQ));
+    await page.waitForSelector('.search-view .tile.has-ocr .tile-ocr mark.tile-ocr-hit');
+    if (!(await page.$('.search-ocr'))) throw new Error('ocr: arama başlığında yazı özeti yok');
+    await page.evaluate(() => localStorage.setItem('om_info', '1'));
+    await page.click('.search-view .tile.has-ocr');
+    // Görüntüleyici kurulup bilgi paneli durumunu uygulayana dek bekle (yoksa "i" açık paneli kapatabilir).
+    await page.waitForSelector('.viewer .v-img, .viewer video');
+    if (!(await page.$('.viewer.with-info'))) await page.keyboard.press('i');
+    await page.waitForSelector('.viewer.with-info');
+    await page.waitForSelector('.i-ocr[data-state="done"] .i-ocr-body mark.i-ocr-hit');
+    if (!(await page.$('.i-ocr-copy[aria-label]'))) throw new Error('ocr: kopyala düğmesi yok');
+    const exp = await page.getAttribute('.i-ocr-toggle', 'aria-expanded');
+    await page.click('.i-ocr-toggle');
+    if ((await page.getAttribute('.i-ocr-toggle', 'aria-expanded')) === exp) throw new Error('ocr: bölüm katlanmıyor');
+    await page.screenshot({ path: `${out}desktop-ocr.png` });
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.viewer', { state: 'detached' });
+    step(`fotoğraftaki yazı: "${ocrQ}" rozeti, bilgi paneli, katlama`);
+  } else {
+    step('fotoğraftaki yazı atlandı (OM_E2E_OCR_Q yok)');
+  }
   // Temizlik: Ayarlar'dan ve menüden açılır, özet kartları sekme olarak çalışır, karşılaştırma açılıp kapanır (silmeden)
   await page.goto(base + '/app/#/settings');
   await page.click('.settings-cleanup-link');

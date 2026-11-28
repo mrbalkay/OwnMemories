@@ -750,3 +750,18 @@
   :root[data-skin="galeri"] .cl-card { border: 1px solid var(--g-cizgi); border-radius: var(--g-r1); }
   :root[data-skin="galeri"] .cl-card:first-child { border-left: 1px solid var(--g-cizgi); }
 }
+
+/* ------------------------------------------------------------ fotoğraftaki yazı (ocr.js) */
+/* Sergi etiketi: beyaz kart, ince çizgi, köşeli. */
+:root[data-skin="galeri"] .tile-ocr { background: rgba(255, 255, 255, .94); color: var(--g-murekkep); border-radius: var(--g-r1); box-shadow: 0 0 0 1px var(--g-cizgi); backdrop-filter: none; -webkit-backdrop-filter: none; font-weight: 500; }
+:root[data-skin="galeri"] .tile-ocr-ic { color: var(--g-muze); }
+:root[data-skin="galeri"] .tile-ocr-hit { background: var(--g-muze-acik); color: var(--g-muze); border-radius: 0; font-weight: 650; }
+:root[data-skin="galeri"] .search-ocr { color: var(--g-murekkep); font-weight: 400; }
+:root[data-skin="galeri"] .search-ocr .ic { background: var(--g-muze-acik); color: var(--g-muze); border-radius: var(--g-r1); }
+:root[data-skin="galeri"] .i-ocr { border-top-color: var(--g-cizgi); }
+:root[data-skin="galeri"] .i-ocr-ic { color: var(--g-muze); }
+:root[data-skin="galeri"] .i-ocr-title { font-weight: 500; letter-spacing: .01em; }
+:root[data-skin="galeri"] .i-ocr-toggle { border-radius: var(--g-r1); }
+:root[data-skin="galeri"] .i-ocr-body { background: var(--g-tas); border-radius: var(--g-r1); border-left: 2px solid var(--g-muze); font-family: var(--serif); font-size: 14px; }
+:root[data-skin="galeri"] .i-ocr-hit { background: var(--g-muze-acik); color: var(--g-muze); border-radius: 0; }
+:root[data-skin="galeri"] .i-ocr { margin-top: 6px; }

@@ -30,7 +30,7 @@ function loadScript(src) {
   });
 }
 
-function maplibre() {
+export function maplibre() {
   loading ??= (async () => {
     loadCss(`${CDN}/maplibre-gl.min.css`);
     await loadScript(`${CDN}/maplibre-gl.min.js`);
@@ -47,7 +47,7 @@ const darkQuery = () => window.matchMedia?.('(prefers-color-scheme: dark)');
 
 /** Temaya göre stil: Sinema koyu, Galeri sade açık, Yerel renkli (sistem koyu moddaysa koyu).
  *  `om:theme` olayı OM.user güncellenmeden önce gelir; bu yüzden tema olaydan da verilebilir. */
-function styleUrl(theme = currentTheme()) {
+export function styleUrl(theme = currentTheme()) {
   if (theme === 'sinema') return `${STYLES}/dark`;
   if (theme === 'galeri') return `${STYLES}/positron`;
   return darkQuery()?.matches ? `${STYLES}/dark` : `${STYLES}/liberty`;

@@ -39,6 +39,7 @@ export function albumHeader(album, { onChanged }) {
   if (isOwner) {
     tools.append(
       h('button', { class: 'btn btn-soft', onclick: () => shareDialog(album, onChanged) }, icon('share'), t('share')),
+      h('button', { class: 'btn btn-soft album-link-btn', onclick: () => import('./shares.js').then((m) => m.linkDialog({ kind: 'album', albumId: album.id, title: album.title })) }, icon('link'), t('share_link')),
       h('button', { class: 'btn btn-ghost', onclick: async () => {
         const title = await promptDialog(t('rename'), t('album_title'), album.title);
         if (!title) return;

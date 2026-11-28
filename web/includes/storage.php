@@ -119,4 +119,7 @@ function derived_delete(string $assetId, bool $includeVideo = true): void
     if ($includeVideo) {
         @unlink(derived_path($assetId, 'web', 'mp4'));
     }
+    if (function_exists('share_derived_delete')) {
+        share_derived_delete($assetId); // bağlantıyla paylaşım önbelleği (shares.php)
+    }
 }

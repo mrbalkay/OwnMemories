@@ -76,4 +76,9 @@ return [
     'geo' => 'Place names (GeoNames)', 'geo_state' => 'Status', 'geo_ready' => 'Installed', 'geo_missing' => 'Not installed', 'geo_places' => '{n} places',
     'geo_imported' => 'Last import', 'geo_located' => 'Items with location', 'geo_pending' => '{n} items waiting for a place', 'geo_run' => 'Find missing places now',
     'geo_queued' => 'Place lookup job queued.', 'geo_note' => 'Place names come from offline GeoNames data on this server (CC BY 4.0); locations are never sent to an outside service. The data is refreshed on every update (update.sh).',
+    // Text in photos (OCR)
+    'ocr_title' => 'Text in photos (OCR)', 'ocr_ready' => 'Running', 'ocr_off' => 'Off', 'ocr_waiting' => 'Starts when the smart search index is complete',
+    'ocr_scanned' => 'Scanned', 'ocr_with_text' => 'Photos with text', 'ocr_total' => 'Photos', 'ocr_progress' => 'Progress',
+    'ocr_off_hint' => 'Text in photos is not being read: {why}. On the server: sudo bash /var/www/ownmemories/server/install-ml.sh',
+    'ocr_note' => 'Turkish and English text on signs, documents, receipts and screenshots is read on this server (PP-OCRv6, nothing is sent out) and becomes searchable.',
 ];

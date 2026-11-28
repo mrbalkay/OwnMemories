@@ -6,6 +6,7 @@ import { h, t, icon } from './util.js';
 import { Timeline, clearAmbient } from './timeline.js';
 import { setAmbientFrom } from './theme.js';
 import { store } from './store.js';
+import { tileBadge, searchSummary } from './ocr.js';
 
 const PAGE = 60;
 const fmt = (n) => Number(n || 0).toLocaleString('tr-TR');
@@ -116,6 +117,10 @@ export class SearchView extends Timeline {
     const modeKey = smart ? 'search_mode_smart' : (r.status ? 'search_mode_text' : 'search_mode_text_fallback');
     this.mode.replaceChildren(icon(smart ? 'sparkle' : 'search'), h('span', {}, t(modeKey)));
     this.sortSeg.hidden = !smart;
+    // Fotoğraftaki yazı eşleşmeleri (ocr.js): "“fatura” yazısı 3 fotoğrafta bulundu"
+    this.ocrSum?.remove();
+    this.ocrSum = searchSummary(r, this.params.q);
+    if (this.ocrSum) this.mode.after(this.ocrSum);
     const st = r.status;
     if (st && st.total > 0 && st.indexed < st.total) {
       this.note.hidden = false;
@@ -228,6 +233,16 @@ export class SearchView extends Timeline {
     fresh.style.height = el.style.height;
     el.replaceWith(fresh);
     g.assets = g.assets.map((x) => (x.id === a.id ? a : x));
+  }
+
+  /** Karo + fotoğraftaki yazı rozeti (yazıda bulunduysa). */
+  tile(a) {
+    const el = super.tile(a);
+    if (a.text_match) {
+      el.classList.add('has-ocr');
+      el.append(tileBadge(a));
+    }
+    return el;
   }
 
   buildScrubber() { /* aramada yıl rayı yok */ }

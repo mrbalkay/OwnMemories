@@ -8,11 +8,14 @@
 # metin modelinin int8 kopyasını üretir (~600 MB daha az RAM), yüz tanıma modelini (Kişiler; immich-app/buffalo_l,
 # ~190 MB) indirir, /etc/ownmemories/ml.env yazar (web/config/config.php'den) ve ownmemories-ml systemd servisini
 # kurup başlatır. Yüz modeli indirilemezse servis yine kurulur; akıllı arama çalışır, yüz tanıma kapalı kalır.
+# Fotoğraftaki yazı (OCR): PP-OCRv6 algılama + tanıma modelleri (~23 MB, ModelScope; boyut + sha256 sabit) <models>/ppocr-v6
+# altına iner; ek Python paketi gerekmez (onnxruntime/numpy/pillow). İndirilemezse yalnızca yazıyla arama kapalı kalır.
 #
 # Ayarlar (ortam değişkeni ya da mevcut /etc/ownmemories/ml.env içinde korunur):
 #   OM_ML_MODEL    (varsayılan immich-app/ViT-B-16-SigLIP2__webli)   OM_ML_THREADS (varsayılan min(4, CPU))
 #   OM_FACE_MODEL  (varsayılan immich-app/buffalo_l; "0" = yüz tanıma kapalı. ~2.6 GB'tan az RAM'de kendiliğinden kapalı)
 #                  Not: InsightFace buffalo_l ağırlıkları yalnızca ticari olmayan kullanım içindir.
+#   OM_OCR         (varsayılan 1; "0" = fotoğraftaki yazı kapalı, model indirilmez)
 #   OM_ML=0 ya da /etc/ownmemories/ml.disabled dosyası  -> akıllı aramayı kurma / durdur
 # Çıkış kodu: 0 başarılı, 1 hata (update.sh bunu uyarıya çevirir, güncellemeyi durdurmaz).
 set -euo pipefail
@@ -128,6 +131,16 @@ if [[ "$FACE_MODEL" != "0" ]]; then
     warn "Yüz tanıma modeli indirilemedi; Kişiler'de otomatik yüz tanıma kapalı (elle etiketleme çalışır). Sonra tekrar deneyin."
   fi
 fi
+# Fotoğraftaki yazı (OCR) modeli (isteğe bağlı, ~23 MB): başarısızlık kurulumu durdurmaz.
+OCR="${OM_OCR-$(envval OM_OCR)}"; OCR="${OCR:-1}"
+if [[ "$OCR" != "0" ]]; then
+  echo "    Fotoğraftaki yazı (OCR) modeli indiriliyor / doğrulanıyor: $MODELS/ppocr-v6 (~23 MB)"
+  # İsteğe bağlı ayna: OM_OCR_MODEL_BASE (ortam ya da ml.env; sudo ortamı taşımadığı için ml.env'den de okunur).
+  OCR_BASE_URL="${OM_OCR_MODEL_BASE-$(envval OM_OCR_MODEL_BASE)}"
+  if ! ( cd "$APP" && env ${OCR_BASE_URL:+OM_OCR_MODEL_BASE="$OCR_BASE_URL"} "$VENV/bin/python" -m ownmemories_ml download --model ocr --dest "$MODELS" ); then
+    warn "OCR modeli indirilemedi; fotoğraftaki yazıyla arama kapalı (diğer aramalar çalışır). Sonra tekrar deneyin."
+  fi
+fi
 chown -R root:root "$MODELS"
 chmod -R u=rwX,go=rX "$MODELS"
 
@@ -157,9 +170,10 @@ TMP="$(mktemp)"
   echo "OM_ML_PORT=\"8765\""
   echo "OM_ML_THREADS=\"$THREADS\""
   echo "OM_FACE_MODEL=\"$FACE_MODEL\""
-  # Kullanıcının elle eklediği diğer OM_ML_* / OM_FACE_* ayarları (ör. OM_ML_MIN_SCORE, OM_FACE_MAX_DISTANCE) korunur.
+  echo "OM_OCR=\"$OCR\""
+  # Kullanıcının elle eklediği diğer OM_ML_* / OM_FACE_* / OM_OCR_* ayarları (ör. OM_ML_MIN_SCORE, OM_OCR_BATCH) korunur.
   if [[ -f "$ENVF" ]]; then
-    grep -E '^OM_(ML|FACE)_[A-Z_]+=' "$ENVF" | grep -vE '^OM_ML_(MODEL|MODEL_DIR|PORT|THREADS)=|^OM_FACE_MODEL=' || true
+    grep -E '^OM_(ML|FACE|OCR)_[A-Z_]+=' "$ENVF" | grep -vE '^OM_ML_(MODEL|MODEL_DIR|PORT|THREADS)=|^OM_FACE_MODEL=' || true
   fi
 } > "$TMP"
 install -o root -g www-data -m 0640 "$TMP" "$ENVF"

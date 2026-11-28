@@ -32,6 +32,7 @@ $skin = $boot['user']['theme'];
 <?php foreach (UI_THEMES as $th): ?>
 <link rel="stylesheet" id="skin-<?= e($th) ?>" href="<?= e(asset('app/theme-' . $th . '.css')) ?>"<?= $th === $skin ? '' : ' disabled' ?>>
 <?php endforeach; ?>
+<link rel="stylesheet" href="<?= e(asset('app/trips.css')) ?>">
 <meta name="theme-color" id="themeColor" content="<?= $skin === 'sinema' ? '#0b0b0e' : ($skin === 'galeri' ? '#f6f4f0' : '#f2f2f7') ?>">
 </head>
 <body>

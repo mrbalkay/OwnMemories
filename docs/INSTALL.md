@@ -445,6 +445,22 @@ Durum: **Yönetim → Sistem → Yer adları** (kaç yer yüklü, kaç fotoğraf
 Kapatmak için `OM_GEO=0 sudo bash server/update.sh` (veri indirilmez; Yerler sayfası boş kalır).
 
 Yer verisi: [GeoNames](https://www.geonames.org), Creative Commons Attribution 4.0 (CC BY 4.0).
+
+### Geziler ve etkinlikler
+
+Yer verisi kurulduktan sonra web'de menüde **Kitaplık → Geziler** (ya da Harita/Yerler sayfasındaki **Geziler** düğmesi),
+iPhone'da **Harita sekmesi → Geziler**: evden uzakta geçen günler kendiliğinden gezi albümü olur ("Bozcaada gezisi,
+12–15 Temmuz 2024", "İtalya: Roma, Floransa ve Venedik"), kısa sürede çok fotoğraf çektiğiniz anlar ve günübirlik
+çıkışlar etkinlik olur. Ek kurulum gerekmez: tablo (migration 009) ilk istekte eklenir, işçi gezileri arka planda
+hesaplar (yükleme/içe aktarmadan ~10 dk sonra ve her gece). Elle tetiklemek için:
+
+```bash
+cd /var/www/ownmemories && sudo -u www-data php -r 'define("OM_CLI",1); require "web/includes/bootstrap.php"; trips_enqueue_all();'
+```
+
+Gezi sayfasında **Albüme dönüştür** normal bir albüm oluşturur (paylaşılabilir), **Yeniden adlandır** verdiğiniz adı
+kalıcı yapar, **Gizle** öneriyi kaldırır (fotoğraflar silinmez; "Gizlenenler"den geri getirilir).
+
 ## H. Temizlik (benzer ve gereksiz fotoğraflar)
 
 Web'de menüdeki **Diğer → Temizlik** (ya da Ayarlar → Temizliği aç), iPhone'da **Ayarlar → Kütüphane → Temizlik**:
@@ -458,3 +474,82 @@ günceller, veritabanı tablosu (migration 008) ilk istekte eklenir. Servis gün
 netlik/parlaklık/algısal özet ölçümünü arka planda bir kez çıkarır (saatte ~30.000 fotoğraf; akıllı
 arama dizinlemesi sürüyorsa onunla dönüşümlü). Bu sürede Temizlik sayfası "Fotoğraflar inceleniyor: 1.200 / 30.000"
 gösterir. Durum: `journalctl -u ownmemories-ml | grep kalite`.
+
+## I. Bağlantıyla paylaş (Tailscale dışındaki kişiler: anneanne, arkadaşlar)
+
+Bir albümü veya seçtiğiniz fotoğrafları, Tailscale kullanmayan birine bir bağlantıyla gösterebilirsiniz. Sunucu
+yine internete açılmaz: **Tailscale Funnel** yalnızca ayrı bir paylaşım portunu (8443) açar; o porttaki Apache
+sitesinin kökü `web/s`'tir ve sadece `/s/<bağlantı>` sayfalarını sunar. Uygulama, giriş, yönetim ve API tailnet'e
+özel kalır.
+
+### I1. Kurulum (bir kez)
+
+1. Güncelleyin: `cd ~/OwnMemories && git pull && sudo bash server/update.sh` (veritabanı tablosu ilk istekte eklenir).
+2. Paylaşım ucunu kurun:
+   ```bash
+   sudo bash ~/OwnMemories/server/setup-share.sh
+   ```
+   Betik: Apache'de yalnızca `127.0.0.1:8091`'de dinleyen paylaşım sitesini kurar, ana uygulamanın bu porttan
+   açılmadığını kendisi dener, Tailscale adınızı bulup paylaşım adresini yapılandırmaya yazar
+   (`shares.public_url`, ör. `https://balkays.taild9431e.ts.net:8443`) ve Funnel'ı açmayı sorar (**e**).
+3. Funnel ilk kez açılıyorsa Tailscale izin ister:
+   - Ekranda `https://login.tailscale.com/f/funnel?...` bağlantısı çıkarsa tarayıcıda açıp **Enable** deyin, ya da
+   - <https://login.tailscale.com/admin/acls> (Access controls) sayfasında ilke dosyasına şunu ekleyip **Save** deyin:
+     ```json
+     "nodeAttrs": [
+       { "target": ["autogroup:member"], "attr": ["funnel"] }
+     ],
+     ```
+   - **DNS** sayfasında *MagicDNS* ve *HTTPS Certificates* açık olmalı (B2'de açmıştınız).
+   - Sonra: `sudo bash ~/OwnMemories/server/setup-share.sh --funnel`
+4. Kontrol: `sudo bash ~/OwnMemories/server/setup-share.sh --status` → `https://<makine>.ts.net:8443 (Funnel on)`
+   satırında yalnızca `127.0.0.1:8091` görünmeli. Telefonda Wi-Fi'ı ve Tailscale'i kapatıp bir bağlantıyı açarak
+   deneyin.
+
+Funnel'ı kapatmak: `sudo bash ~/OwnMemories/server/setup-share.sh --off` (bağlantılar o zaman yalnızca tailnet
+içinden açılır). Funnel kurulmadan da özellik çalışır; bağlantılar yalnızca tailnet'teki cihazlarda açılır ve
+uygulama bunu pencerede belirtir.
+
+### I2. Kullanım
+
+- **Web:** albüm başlığında **Bağlantıyla paylaş** ya da fotoğrafları seçince alttaki çubukta **Bağlantıyla paylaş**.
+  Başlık, süre (1 gün / 1 hafta / 1 ay / süresiz), isteğe bağlı parola, **İndirmeye izin ver** ve **Konumu göster**
+  seçilir → **Bağlantı oluştur** → **Kopyala**, QR kodu veya *Paylaş…*. Bağlantı WhatsApp'ta kapak fotoğrafıyla
+  önizlenir (parolalı bağlantılarda önizleme görseli gösterilmez).
+- **iPhone:** bir fotoğrafı açın → üstteki bağlantı (zincir) düğmesi → ayarlar → **Bağlantı oluştur** → **Paylaş…** (WhatsApp,
+  Mesajlar…). Bağlantılar: **Ayarlar → Kütüphane → Paylaşılan bağlantılar** (sola kaydırıp **Kapat**).
+- **Yönetim:** web menüsünde **Albümler → Bağlantılar**: görüntülenme sayısı, düzenleme (süre, parola, izinler),
+  **Yeni adres** (eskisi hemen çalışmaz) ve **Kapat**.
+- Güvenlik için bağlantının adresi yalnızca oluşturulurken gösterilir (sunucuda yalnızca özeti saklanır).
+  Kaybederseniz **Yeni adres** ile yenisini alın.
+
+### I3. Gizlilik ve güvenlik
+
+- Bağlantı 256 bit rastgele bir anahtardır; tahmin denemeleri IP başına sınırlanır. Parola denemeleri IP başına
+  15 dakikada 8, bağlantı başına saatte 40 ile sınırlıdır.
+- **Konumu göster kapalıyken** (varsayılan) gösterilen görüntüler metadatasızdır; indirilen orijinallerden GPS ve
+  konum etiketleri anında silinir (exiftool), videolar metadatasız kopyalanır
+  (`<depo>/derived/share-*`, orijinaller değişmez). Tarih ve kamera bilgisi korunur.
+- Bağlantıyı alan biri onu başkasına iletebilir; hassas albümlerde parola ve kısa süre kullanın, işiniz bitince
+  **Kapat**'a basın. Sayfalar arama motorlarına kapalıdır (noindex) ve dışarıdan hiçbir kaynak yüklemez.
+## I. Fotoğraftaki yazı (tabela, belge, fiş, ekran görüntüsü)
+
+Arama kutusuna **fotoğrafta yazan** bir sözcüğü yazın: "fatura", "pasaport", "eczane", "menü", "Kadıköy",
+bir dükkân adı… Yazısı eşleşen fotoğraflar sonuçların başına gelir ve karonun köşesinde bulunan sözcük vurgulu
+bir rozetle görünür ("“fatura” yazısı 3 fotoğrafta bulundu"). Fotoğrafı açıp **Ayrıntılar** (ⓘ ya da `i` tuşu)
+panelinde **Fotoğraftaki yazı** bölümünde okunan yazının tamamını görebilir, **Kopyala** ile panoya alabilirsiniz.
+iPhone'da: fotoğraf → ⓘ → "Fotoğraftaki yazı" → "Yazıyı kopyala".
+
+- Türkçe (ç ğ ı İ ö ş ü) ve İngilizce okunur. Arama Türkçe harflere duyarsızdır: "istanbul" = "İSTANBUL",
+  "cigkofte" = "çiğköfte"; ekler sorun değil ("fatura" → "FATURASI" da bulunur).
+- Yazıyı sunucudaki akıllı arama servisi okur (PP-OCRv6 modelleri, ~23 MB, ek Python paketi gerekmez);
+  fotoğraflar hiçbir yere gönderilmez. Ek kurulum yok: `update.sh` modeli indirir, tablo (migration 011) ilk
+  istekte eklenir.
+- Okuma, akıllı arama dizini bitince arka planda bir kez yapılır: yazısız fotoğraf ~0.1 sn, yazılı ~0.3–1 sn
+  (4 çekirdek). 30.000 fotoğraf ≈ 1,5–2 saat, 100.000 ≈ 5–6 saat. İlerleme: **Yönetim → Genel bakış →
+  Fotoğraftaki yazı (OCR)** ya da `journalctl -u ownmemories-ml | grep yazı`.
+- Kapatmak: `/etc/ownmemories/ml.env` içine `OM_OCR="0"` yazıp `sudo systemctl restart ownmemories-ml`.
+  Ayarlar: `OM_OCR_BATCH` (tur başına fotoğraf, 8), `OM_OCR_MIN_CONF` (satır güven eşiği, 0.80),
+  `OM_OCR_DET_SIDE` (algılama çözünürlüğü, 1280; küçük yazılar için 1600 daha iyi ama ~%40 daha yavaş).
+- Model indirilemediyse (ModelScope'a erişim yoksa) yalnızca yazıyla arama kapalı kalır; Yönetim sayfası
+  "Kapalı" ve nedenini gösterir. Tekrar denemek: `sudo bash /var/www/ownmemories/server/install-ml.sh`.
