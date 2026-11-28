@@ -36,7 +36,7 @@ dbtest('test_login_returns_token', function () {
     assert_eq(401, $e->status);
     assert_eq('invalid_credentials', $e->errorCode);
     assert_eq(401, call_err('GET', '/v1/me', null)->status);
-    assert_eq(['ok' => true, 'version' => OM_VERSION], call('GET', '/v1/ping', null)['json']);
+    assert_eq(['ok' => true, 'version' => OM_VERSION, 'schema' => SCHEMA_VERSION], call('GET', '/v1/ping', null)['json']);
 });
 
 dbtest('test_assets_pagination_keyset', function () {

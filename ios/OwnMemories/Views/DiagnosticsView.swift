@@ -11,6 +11,14 @@ struct DiagnosticsView: View {
     @State private var notifStatus = "…"
     @State private var refreshing = false
     @State private var copied = false
+    @State private var serverInfo: ServerPing?
+    @State private var serverError: String?
+    @EnvironmentObject private var session: Session
+
+    private struct ServerPing: Decodable {
+        let version: String
+        let schema: Int?
+    }
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -33,6 +41,21 @@ struct DiagnosticsView: View {
                     HStack { Text("Anıları ve widget'ı şimdi yenile"); if refreshing { Spacer(); ProgressView() } }
                 }
                 .disabled(refreshing)
+            }
+            .listRowBackground(theme.groupSurface)
+            Section("Sunucu") {
+                if let info = serverInfo {
+                    row("Sunucu sürümü", info.version)
+                    row("Veritabanı şeması", info.schema.map(String.init) ?? "eski", ok: (info.schema ?? 0) >= 4)
+                    if (info.schema ?? 0) < 4 {
+                        Text("Sunucu güncel değil: temalar sunucuya kaydedilemez. Sunucuda güncelleme komutunu çalıştırın.")
+                            .font(.footnote).foregroundStyle(.red)
+                    }
+                } else if let serverError {
+                    row("Bağlantı", serverError, ok: false)
+                } else {
+                    row("Bağlantı", "…")
+                }
             }
             .listRowBackground(theme.groupSurface)
             Section("Arka plan") {
@@ -77,6 +100,9 @@ struct DiagnosticsView: View {
             default: notifStatus = "Sorulmadı"
             }
             engine.refreshCounts()
+            if let client = session.client {
+                do { serverInfo = try await client.send("GET", "ping") } catch { serverError = error.localizedDescription }
+            }
         }
         .refreshable {
             snapshot = WidgetStore.load()

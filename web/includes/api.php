@@ -78,7 +78,7 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
     $path = '/' . trim($path, '/');
     $uuid = '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
     $routes = [
-        ['GET', '#^/v1/ping$#', fn() => api_ok(['ok' => true, 'version' => OM_VERSION])],
+        ['GET', '#^/v1/ping$#', fn() => api_ok(['ok' => true, 'version' => OM_VERSION, 'schema' => SCHEMA_VERSION])],
         ['POST', '#^/v1/auth/login$#', fn() => api_login($body)],
         ['POST', '#^/v1/auth/logout$#', fn() => api_logout(api_need_user($user))],
         ['GET', '#^/v1/me$#', fn() => api_ok(['user' => user_public(api_need_user($user))])],
