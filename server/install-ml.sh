@@ -66,8 +66,19 @@ REQ_SUM="$(cat "$APP/requirements.txt" "$APP/requirements-quantize.txt" | sha256
 if [[ "$(cat "$VENV/.requirements" 2>/dev/null)" != "$REQ_SUM" ]]; then
   echo "    Python paketleri kuruluyor (onnxruntime, numpy, tokenizers, pillow, pymysql)…"
   "$VENV/bin/pip" install -q --disable-pip-version-check --upgrade pip
-  "$VENV/bin/pip" install -q --disable-pip-version-check -r "$APP/requirements.txt" -r "$APP/requirements-quantize.txt"
-  echo "$REQ_SUM" > "$VENV/.requirements"
+  # Yalnızca hazır paketler (wheel): kaynaktan derleme (cmake, derleyici) sunucuda denenmez.
+  if ! "$VENV/bin/pip" install -q --disable-pip-version-check --only-binary=:all: -r "$APP/requirements.txt"; then
+    warn "Akıllı arama paketleri bu Python sürümü ($("$VENV/bin/python" -V 2>&1)) için hazır bulunamadı."
+    exit 1
+  fi
+  # İsteğe bağlı: int8 dönüşümü için (onnx). Kurulamazsa servis yine çalışır, yalnızca biraz daha fazla RAM kullanır.
+  QUANT_OK=1
+  "$VENV/bin/pip" install -q --disable-pip-version-check --only-binary=:all: -r "$APP/requirements-quantize.txt" || QUANT_OK=0
+  if (( QUANT_OK )); then
+    echo "$REQ_SUM" > "$VENV/.requirements"
+  else
+    warn "int8 dönüşüm aracı (onnx) kurulamadı; tam metin modeli kullanılacak (~600 MB daha fazla RAM)."
+  fi
 fi
 
 # --- 2) Model
@@ -89,6 +100,8 @@ if (( MODEL_OK )); then
     :
   elif (( TXT_MB < 200 )); then
     :  # harici ağırlıklı / küçük metin modeli: dönüşüm yok
+  elif ! "$VENV/bin/python" -c 'import onnx' >/dev/null 2>&1; then
+    :  # dönüşüm aracı yok (yukarıda uyarıldı)
   elif (( AVAIL_MB >= NEED_MB )); then
     ( cd "$APP" && "$VENV/bin/python" -m ownmemories_ml quantize --model-dir "$MODELS/$MODEL_NAME" ) \
       || warn "Metin modeli int8'e çevrilemedi; tam (fp32) model kullanılacak (~600 MB daha fazla RAM)."
