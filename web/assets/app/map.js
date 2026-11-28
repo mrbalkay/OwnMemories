@@ -9,6 +9,9 @@ import { currentTheme } from './theme.js';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.6.0';
 const STYLES = 'https://tiles.openfreemap.org/styles';
+const MAX_ZOOM = 19;
+// İşaretçiler ~60 px; yarıçap bundan küçük olursa komşu kümeler üst üste biner.
+const CLUSTER_RADIUS = 80;
 let loading = null;
 
 function loadCss(href) {
@@ -30,15 +33,20 @@ function maplibre() {
   loading ??= (async () => {
     loadCss(`${CDN}/maplibre-gl.min.css`);
     await loadScript(`${CDN}/maplibre-gl.min.js`);
-  })();
+  })().catch((e) => {
+    // Başarısız yükleme kalıcı olmasın: sonraki ziyaret yeniden dener.
+    document.querySelector(`script[src="${CDN}/maplibre-gl.min.js"]`)?.remove();
+    loading = null;
+    throw e;
+  });
   return loading;
 }
 
 const darkQuery = () => window.matchMedia?.('(prefers-color-scheme: dark)');
 
-/** Temaya göre stil: Sinema koyu, Galeri sade açık, Yerel renkli (sistem koyu moddaysa koyu). */
-function styleUrl() {
-  const theme = currentTheme();
+/** Temaya göre stil: Sinema koyu, Galeri sade açık, Yerel renkli (sistem koyu moddaysa koyu).
+ *  `om:theme` olayı OM.user güncellenmeden önce gelir; bu yüzden tema olaydan da verilebilir. */
+function styleUrl(theme = currentTheme()) {
   if (theme === 'sinema') return `${STYLES}/dark`;
   if (theme === 'galeri') return `${STYLES}/positron`;
   return darkQuery()?.matches ? `${STYLES}/dark` : `${STYLES}/liberty`;
@@ -73,9 +81,11 @@ export async function renderMap(root, onOpen) {
     container: box,
     style: styleUrl(),
     bounds,
-    fitBoundsOptions: { padding: 50, maxZoom: 14 },
+    fitBoundsOptions: { padding: 72, maxZoom: 14 },
     attributionControl: { compact: true },
     renderWorldCopies: true,
+    // Küme en yakın düzeyde de çözülmüyorsa (aynı yerde çekilmiş fotoğraflar) görüntüleyici açılır.
+    maxZoom: MAX_ZOOM,
     dragRotate: false,
     pitchWithRotate: false,
   });
@@ -87,12 +97,16 @@ export async function renderMap(root, onOpen) {
     features: points.map((p) => ({ type: 'Feature', properties: { id: p.id }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
   };
 
-  // Stil değişince (tema) kaynak yeniden eklenir; HTML işaretçiler kalır, yalnızca içerikleri yenilenir.
+  // clusterMaxZoom haritanın en yakın düzeyine eşit: aynı noktadaki fotoğraflar her düzeyde kümede kalır,
+  // genişleme düzeyleri MAX_ZOOM'u aşar ve dokunulunca görüntüleyicide açılır (üst üste yığılmaz).
+  // GeoJSON kaynağının maxzoom'u clusterMaxZoom'dan büyük olmalı (yoksa MapLibre kümeyi kırpar).
+  const SOURCE = { type: 'geojson', data, cluster: true, clusterRadius: CLUSTER_RADIUS, clusterMaxZoom: MAX_ZOOM, maxzoom: MAX_ZOOM + 1 };
+  // Görünmez katman: kaynağın döşenip sorgulanabilmesi için gerekli.
+  const LAYER = { id: 'photos-hit', type: 'circle', source: 'photos', paint: { 'circle-radius': 1, 'circle-opacity': 0 } };
   function addSource() {
     if (map.getSource('photos')) return;
-    map.addSource('photos', { type: 'geojson', data, cluster: true, clusterRadius: 56, clusterMaxZoom: 17 });
-    // Görünmez katman: kaynağın döşenip sorgulanabilmesi için gerekli.
-    map.addLayer({ id: 'photos-hit', type: 'circle', source: 'photos', paint: { 'circle-radius': 1, 'circle-opacity': 0 } });
+    map.addSource('photos', SOURCE);
+    map.addLayer(LAYER);
   }
 
   const markers = new Map();   // anahtar → { marker, el }
@@ -101,10 +115,9 @@ export async function renderMap(root, onOpen) {
   function openCluster(clusterId, count) {
     const src = map.getSource('photos');
     src.getClusterExpansionZoom(clusterId).then((zoom) => {
-      const maxed = zoom > map.getMaxZoom() || map.getZoom() >= 17;
-      if (!maxed) {
+      if (zoom <= map.getMaxZoom() && map.getZoom() < map.getMaxZoom()) {
         const f = markers.get('c' + clusterId);
-        if (f) map.easeTo({ center: f.marker.getLngLat(), zoom: Math.min(zoom, 18) });
+        if (f) map.easeTo({ center: f.marker.getLngLat(), zoom });
         return;
       }
       // Aynı noktada çok fotoğraf: hepsi görüntüleyicide.
@@ -161,28 +174,53 @@ export async function renderMap(root, onOpen) {
     onScreen = next;
   }
 
-  map.on('load', () => { addSource(); sync(); });
-  map.on('styledata', () => { if (map.isStyleLoaded()) addSource(); });
+  map.on('load', () => {
+    addSource();
+    sync();
+    // Dar ekranda atıf kutusu açık başlar ve haritanın altını kaplar: kapalı başlat (ⓘ ile açılır).
+    if (box.clientWidth < 640) {
+      const attrib = box.querySelector('.maplibregl-ctrl-attrib');
+      attrib?.classList.remove('maplibregl-compact-show');
+      attrib?.removeAttribute('open');
+    }
+  });
+  map.on('style.load', addSource);   // yedek: kaynak her durumda yeni stilde de bulunsun
   map.on('sourcedata', (e) => { if (e.sourceId === 'photos' && e.isSourceLoaded) sync(); });
   map.on('moveend', sync);
+  // Yakınlaşma sonrası eski düzeyin karoları solma süresince sorgu sonucunda kalır; son geçiş tüm
+  // karolar oturduğunda yapılır, yoksa eski kümeler ekranda takılı kalır.
+  map.on('idle', sync);
 
-  // Tema ya da sistem görünümü değişince stil değişir.
-  const restyle = () => {
+  // Tema ya da sistem görünümü değişince stil değişir; fotoğraf kaynağı ve katmanı yeni stile taşınır.
+  let styleName = currentTheme();
+  const restyle = (e) => {
     if (!box.isConnected) { cleanup(); return; }
-    map.setStyle(styleUrl());
+    if (e?.type === 'om:theme' && e.detail) styleName = e.detail;
+    map.setStyle(styleUrl(styleName), {
+      transformStyle: (prev, next) => ({
+        ...next,
+        sources: { ...next.sources, photos: SOURCE },
+        layers: [...next.layers, LAYER],
+      }),
+    });
   };
   const mq = darkQuery();
+  let watch = null;
+  let disposed = false;
+  // Tek sefer çalışır (gözlemci ve tema olayı aynı anda tetikleyebilir; map.remove() iki kez çağrılmaz).
   function cleanup() {
+    if (disposed) return;
+    disposed = true;
+    watch?.disconnect();
     document.removeEventListener('om:theme', restyle);
     mq?.removeEventListener?.('change', restyle);
+    markers.clear();
     map.remove();
   }
   document.addEventListener('om:theme', restyle);
   mq?.addEventListener?.('change', restyle);
   // Sayfadan çıkılınca harita ve dinleyiciler bırakılır.
   const host = document.getElementById('view') || root;
-  const watch = new MutationObserver(() => {
-    if (!box.isConnected) { watch.disconnect(); cleanup(); }
-  });
+  watch = new MutationObserver(() => { if (!box.isConnected) cleanup(); });
   watch.observe(host, { childList: true, subtree: true });
 }

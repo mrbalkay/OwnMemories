@@ -34,8 +34,9 @@ struct MapScreen: View {
                 theme.canvas.ignoresSafeArea()
                 switch state {
                 case .ready:
+                    // Harita cam başlığın ve sekme çubuğunun altına uzanır; kenar boşlukları PhotoMap.padding'de.
                     PhotoMap(points: points, theme: theme) { ids in open(ids) }
-                        .ignoresSafeArea(edges: [.horizontal, .bottom])
+                        .ignoresSafeArea()
                 case .loading:
                     ProgressView().tint(theme.muted).frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .empty:
@@ -137,6 +138,9 @@ private final class PhotoAnnotation: NSObject, MKAnnotation {
 }
 
 /// Fotoğraf ya da küme işaretçisi: yuvarlatılmış küçük resim, beyaz çerçeve, kümede sayı rozeti.
+/// İçerik `prepareForDisplay()` içinde güncel `annotation`'dan kurulur: MapKit kümenin üyeleri değişince
+/// aynı görünümün `annotation`'ını delegeye sormadan değiştirebilir; yalnızca `viewFor` içinde kurmak
+/// eski sayı/kapak bırakır.
 private final class PhotoMarkerView: MKAnnotationView {
     static let reuseId = "photo"
     static let clusterReuseId = "photo-cluster"
@@ -144,6 +148,7 @@ private final class PhotoMarkerView: MKAnnotationView {
     private let imageView = UIImageView()
     private let badge = UILabel()
     private var loadingId: String?
+    var client: APIClient?
     var accent: UIColor = .systemBlue { didSet { badge.backgroundColor = accent; badge.textColor = accent.isLight ? .black : .white } }
     var corner: CGFloat = 12 { didSet { imageView.layer.cornerRadius = corner } }
 
@@ -163,6 +168,7 @@ private final class PhotoMarkerView: MKAnnotationView {
         layer.shadowOpacity = 0.3
         layer.shadowRadius = 6
         layer.shadowOffset = CGSize(width: 0, height: 3)
+        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 12).cgPath   // binlerce görünümde ekran dışı gölge hesabı olmasın
         addSubview(imageView)
         badge.font = .systemFont(ofSize: 12, weight: .bold)
         badge.textAlignment = .center
@@ -173,6 +179,7 @@ private final class PhotoMarkerView: MKAnnotationView {
         badge.isHidden = true
         addSubview(badge)
         collisionMode = .rectangle
+        isAccessibilityElement = true
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) kullanılmaz") }
@@ -184,7 +191,17 @@ private final class PhotoMarkerView: MKAnnotationView {
         badge.isHidden = true
     }
 
-    func configure(assetId: String, count: Int, client: APIClient?) {
+    override func prepareForDisplay() {
+        super.prepareForDisplay()
+        if let cluster = annotation as? MKClusterAnnotation {
+            let first = cluster.memberAnnotations.lazy.compactMap { $0 as? PhotoAnnotation }.first
+            configure(assetId: first?.assetId, count: cluster.memberAnnotations.count)
+        } else if let photo = annotation as? PhotoAnnotation {
+            configure(assetId: photo.assetId, count: 1)
+        }
+    }
+
+    private func configure(assetId: String?, count: Int) {
         if count > 1 {
             badge.text = count >= 1000 ? "\(count / 1000)B+" : "\(count)"
             let w = max(22, badge.intrinsicContentSize.width + 12)
@@ -194,23 +211,41 @@ private final class PhotoMarkerView: MKAnnotationView {
             badge.isHidden = true
         }
         accessibilityLabel = count > 1 ? "\(count) fotoğraflık küme" : "Fotoğraf"
-        isAccessibilityElement = true
-        guard loadingId != assetId, let client else { return }
+        guard let assetId, !assetId.isEmpty, loadingId != assetId, let client else { return }
         loadingId = assetId
+        imageView.image = nil   // başka bir kümenin kapağı görünmesin
         let url = client.url("assets/\(assetId)/thumb")
         Task { @MainActor [weak self] in
             let img = await ImageLoader.shared.image(for: url, client: client)
             guard let self, self.loadingId == assetId else { return }
-            self.imageView.image = img
+            if let img {
+                self.imageView.image = img
+            } else {
+                self.loadingId = nil   // küçük resim henüz hazır değil / hata: sonraki gösterimde yeniden dene
+            }
         }
     }
 }
 
 private extension UIColor {
+    /// Göreli parlaklık (sRGB). getWhite RGB renklerde güvenilir değil; dinamik renk o anki görünüme çözülür.
     var isLight: Bool {
-        var w: CGFloat = 0
-        _ = getWhite(&w, alpha: nil)
-        return w > 0.7
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard resolvedColor(with: .current).getRed(&r, green: &g, blue: &b, alpha: &a) else { return false }
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6
+    }
+}
+
+/// İlk görünür alan, görünüm boyut kazanınca uygulanır (makeUIView'da çerçeve sıfırdır; o anda
+/// setVisibleMapRect/edgePadding yanlış yakınlaşma verir).
+private final class PhotoMKMapView: MKMapView {
+    var pendingFit: MKMapRect?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let rect = pendingFit, bounds.width > 0, bounds.height > 0 else { return }
+        pendingFit = nil
+        setVisibleMapRect(rect, edgePadding: PhotoMap.padding(for: self), animated: false)
     }
 }
 
@@ -220,38 +255,33 @@ private struct PhotoMap: UIViewRepresentable {
     var onOpen: ([String]) -> Void
     @EnvironmentObject private var session: Session
 
+    /// Cam başlık (üst güvenli alan + ~70 pt) ve sekme çubuğu (alt güvenli alan) altında kalmayacak boşluk.
+    static func padding(for map: MKMapView) -> UIEdgeInsets {
+        let s = map.safeAreaInsets
+        return UIEdgeInsets(top: s.top + 80, left: 50, bottom: s.bottom + 40, right: 50)
+    }
+
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeUIView(context: Context) -> MKMapView {
-        let map = MKMapView()
+    func makeUIView(context: Context) -> PhotoMKMapView {
+        let map = PhotoMKMapView()
         map.delegate = context.coordinator
         map.register(PhotoMarkerView.self, forAnnotationViewWithReuseIdentifier: PhotoMarkerView.reuseId)
         map.register(PhotoMarkerView.self, forAnnotationViewWithReuseIdentifier: PhotoMarkerView.clusterReuseId)
-        map.pointOfInterestFilter = .excludingAll
         map.showsCompass = false
         map.isRotateEnabled = false
         map.isPitchEnabled = false
-        let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: theme.name == .galeri ? .muted : .default)
-        config.pointOfInterestFilter = .excludingAll
-        map.preferredConfiguration = config
         context.coordinator.client = session.client
+        context.coordinator.applyTheme(to: map)
         context.coordinator.load(points, into: map)
         return map
     }
 
-    func updateUIView(_ map: MKMapView, context: Context) {
+    func updateUIView(_ map: PhotoMKMapView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.client = session.client
-        // Sinema koyu, Galeri açık; Yerel sistem görünümünü izler.
-        switch theme.name {
-        case .sinema: map.overrideUserInterfaceStyle = .dark
-        case .galeri: map.overrideUserInterfaceStyle = .light
-        case .yerel: map.overrideUserInterfaceStyle = .unspecified
-        }
         if context.coordinator.loadedCount != points.count { context.coordinator.load(points, into: map) }
-        for ann in map.annotations {
-            if let v = map.view(for: ann) as? PhotoMarkerView { context.coordinator.style(v) }
-        }
+        context.coordinator.applyTheme(to: map)
     }
 
     @MainActor
@@ -259,21 +289,55 @@ private struct PhotoMap: UIViewRepresentable {
         var parent: PhotoMap
         var client: APIClient?
         var loadedCount = -1
+        private var appliedTheme: ThemeName?
 
         init(_ parent: PhotoMap) { self.parent = parent }
 
-        func load(_ points: [MapPointsResponse.Point], into map: MKMapView) {
+        func load(_ points: [MapPointsResponse.Point], into map: PhotoMKMapView) {
             map.removeAnnotations(map.annotations)
             let anns = points.map { PhotoAnnotation(assetId: $0.id, coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng)) }
             map.addAnnotations(anns)
             loadedCount = points.count
-            if !anns.isEmpty {
-                var rect = MKMapRect.null
-                for a in anns {
-                    let p = MKMapPoint(a.coordinate)
-                    rect = rect.union(MKMapRect(x: p.x, y: p.y, width: 0.1, height: 0.1))
-                }
-                map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 110, left: 50, bottom: 60, right: 50), animated: false)
+            guard !anns.isEmpty else { return }
+            var rect = Self.rect(around: anns)
+            // Tek nokta (ya da hepsi aynı yerde): en az ~2 km'lik alan göster, en yakın düzeye zıplama.
+            let minSide = 2000 * MKMapPointsPerMeterAtLatitude(anns[0].coordinate.latitude)
+            if rect.width < minSide || rect.height < minSide {
+                let w = max(rect.width, minSide), h = max(rect.height, minSide)
+                rect = MKMapRect(x: rect.midX - w / 2, y: rect.midY - h / 2, width: w, height: h)
+            }
+            if map.bounds.width > 0, map.bounds.height > 0 {
+                map.setVisibleMapRect(rect, edgePadding: PhotoMap.padding(for: map), animated: false)
+            } else {
+                map.pendingFit = rect
+            }
+        }
+
+        static func rect(around anns: [PhotoAnnotation]) -> MKMapRect {
+            var rect = MKMapRect.null
+            for a in anns {
+                let p = MKMapPoint(a.coordinate)
+                rect = rect.union(MKMapRect(x: p.x, y: p.y, width: 0.1, height: 0.1))
+            }
+            return rect
+        }
+
+        /// Tema değişince harita görünümü ve görünür işaretçiler güncellenir (her updateUIView'da değil).
+        func applyTheme(to map: MKMapView) {
+            let t = parent.theme
+            guard appliedTheme != t.name else { return }
+            appliedTheme = t.name
+            // Sinema koyu, Galeri açık ve sade; Yerel sistem görünümünü izler.
+            switch t.name {
+            case .sinema: map.overrideUserInterfaceStyle = .dark
+            case .galeri: map.overrideUserInterfaceStyle = .light
+            case .yerel: map.overrideUserInterfaceStyle = .unspecified
+            }
+            let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: t.name == .galeri ? .muted : .default)
+            config.pointOfInterestFilter = .excludingAll
+            map.preferredConfiguration = config
+            for ann in map.annotations {
+                if let v = map.view(for: ann) as? PhotoMarkerView { style(v) }
             }
         }
 
@@ -281,23 +345,22 @@ private struct PhotoMap: UIViewRepresentable {
             let t = parent.theme
             v.accent = UIColor(t.accent)
             v.corner = t.name == .galeri ? 3 : 12
+            v.client = client
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            if let cluster = annotation as? MKClusterAnnotation {
+            if annotation is MKClusterAnnotation {
                 let v = mapView.dequeueReusableAnnotationView(withIdentifier: PhotoMarkerView.clusterReuseId, for: annotation) as! PhotoMarkerView
-                style(v)
-                let first = cluster.memberAnnotations.compactMap { $0 as? PhotoAnnotation }.first
-                v.configure(assetId: first?.assetId ?? "", count: cluster.memberAnnotations.count, client: client)
+                v.clusteringIdentifier = nil
                 v.displayPriority = .required
-                return v
+                style(v)
+                return v   // içerik prepareForDisplay()'de kurulur
             }
-            guard let photo = annotation as? PhotoAnnotation else { return nil }
+            guard annotation is PhotoAnnotation else { return nil }
             let v = mapView.dequeueReusableAnnotationView(withIdentifier: PhotoMarkerView.reuseId, for: annotation) as! PhotoMarkerView
-            v.clusteringIdentifier = "photos"
+            v.clusteringIdentifier = "photos"   // yeniden kullanımda da her seferinde
             v.displayPriority = .defaultHigh
             style(v)
-            v.configure(assetId: photo.assetId, count: 1, client: client)
             return v
         }
 
@@ -306,15 +369,13 @@ private struct PhotoMap: UIViewRepresentable {
             if let cluster = annotation as? MKClusterAnnotation {
                 let members = cluster.memberAnnotations.compactMap { $0 as? PhotoAnnotation }
                 // Üyeler farklı yerlerdeyse ve henüz çok yakın değilsek: kümeyi kapsayacak şekilde yakınlaş.
-                var rect = MKMapRect.null
-                for m in members {
-                    let p = MKMapPoint(m.coordinate)
-                    rect = rect.union(MKMapRect(x: p.x, y: p.y, width: 0.1, height: 0.1))
-                }
+                let rect = Self.rect(around: members)
                 let spreadMeters = MKMapPoint(x: rect.minX, y: rect.minY).distance(to: MKMapPoint(x: rect.maxX, y: rect.maxY))
                 let canZoom = spreadMeters > 30 && mapView.region.span.latitudeDelta > 0.002
                 if canZoom {
-                    mapView.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 140, left: 70, bottom: 90, right: 70), animated: true)
+                    var pad = PhotoMap.padding(for: mapView)
+                    pad.left += 20; pad.right += 20; pad.top += 20; pad.bottom += 20
+                    mapView.setVisibleMapRect(rect, edgePadding: pad, animated: true)
                 } else {
                     parent.onOpen(members.map(\.assetId))
                 }
