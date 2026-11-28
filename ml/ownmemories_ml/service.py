@@ -99,7 +99,7 @@ class DB:
                 pass
 
 
-MIN_N_FOR_CUT = 20  # bundan küçük kütüphanelerde dağılım istatistiği güvenilmez: kesme yok
+MIN_N_FOR_CUT = 50  # bundan küçük kütüphanelerde dağılım istatistiği güvenilmez: kesme yok
 
 
 def relevance_cut(scores: np.ndarray, min_z: float, abs_score: float | None) -> np.ndarray:

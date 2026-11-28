@@ -28,7 +28,7 @@ DEFAULT_CONFIG_PHP = "/var/www/ownmemories/web/config/config.php"
 # üstünde; z eşiği doğru görselin ~%92-99'unu tutar. Bilinmeyen model: (2.0, yok).
 CUTOFF = {
     "ViT-B-16-SigLIP2__webli": (2.0, 0.10),
-    "nllb-clip-base-siglip__v1": (2.5, 0.07),
+    "nllb-clip-base-siglip__v1": (2.0, 0.07),
 }
 
 
