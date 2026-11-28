@@ -980,3 +980,47 @@ a.i-place:hover { color: var(--accent); text-decoration: underline; text-underli
   .cl-cmp-layer, .cl-cmp, .cl-shot img, .cl-tile img { transition: none; }
   .cl-spinner { animation-duration: 2s; }
 }
+
+/* ------------------------------------------------------------ fotoğraftaki yazı (ocr.js) */
+/* Arama karosu rozeti: yazıda bulunan sözcük vurgulu, karonun sol altında. */
+.tile-ocr { position: absolute; left: 7px; bottom: 7px; max-width: calc(100% - 14px); display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; border-radius: 999px; background: rgba(12, 10, 22, .62); color: #fff; font-size: 11.5px; font-weight: 600; line-height: 1.35; backdrop-filter: blur(8px) saturate(1.2); -webkit-backdrop-filter: blur(8px) saturate(1.2); box-shadow: 0 1px 6px rgba(0, 0, 0, .25); pointer-events: none; z-index: 1; }
+.tile-ocr-ic { flex: none; }
+.tile-ocr-ic svg { width: 13px; height: 13px; stroke-width: 2; }
+.tile-ocr-text { display: flex; min-width: 0; overflow: hidden; white-space: pre; }
+/* Dar karoda önce bağlam kısalır, vurgulu sözcük en son. */
+.tile-ocr-text > span { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tile-ocr-hit { flex: 0 1 auto; min-width: 2.2em; overflow: hidden; text-overflow: ellipsis; background: #ffd84d; color: #1d1700; border-radius: 3px; padding: 0 2px; }
+.tile.selected .tile-ocr { opacity: .4; }
+/* Küçük karolarda yalnız vurgulu sözcük (bağlam gizli). */
+.tile.has-ocr { container-type: inline-size; }
+@container (max-width: 210px) { .tile-ocr-text > span { display: none; } }
+@container (max-width: 96px) { .tile-ocr-ic { display: none; } .tile-ocr { padding: 2px 4px; } }
+/* Arama başlığı: "“fatura” yazısı 3 fotoğrafta bulundu" (başlık satırının altında, tam genişlik). */
+.page-head p.search-ocr { order: 5; flex: 1 1 100%; display: flex; align-items: center; gap: 6px; margin: -4px 0 0; color: var(--ink); font-size: 13.5px; font-weight: 500; }
+.search-ocr .ic { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
+.search-ocr .ic svg { width: 14px; height: 14px; stroke-width: 2; }
+/* Bilgi paneli: katlanabilir "Fotoğraftaki yazı" + kopyala. */
+.i-ocr { padding: 8px 0 12px; border-top: 1px solid var(--line); }
+.i-ocr-head { display: flex; align-items: center; gap: 4px; }
+.i-ocr-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 6px; margin-left: -6px; border: 0; border-radius: 10px; background: none; cursor: pointer; text-align: left; color: var(--ink); }
+.i-ocr-toggle:hover { background: var(--sunken); }
+.i-ocr-ic { flex: none; color: var(--accent); }
+.i-ocr-ic svg { width: 18px; height: 18px; }
+.i-ocr-title { font-weight: 600; font-size: 14px; }
+.i-ocr-count { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.i-ocr-chev { margin-left: auto; color: var(--muted); transition: transform .2s ease; }
+.i-ocr-chev svg { width: 18px; height: 18px; }
+.i-ocr.is-open .i-ocr-chev { transform: rotate(180deg); }
+.i-ocr-copy { flex: none; width: 36px; height: 36px; color: var(--muted); }
+.i-ocr-copy svg { width: 18px; height: 18px; }
+.i-ocr-copy.done { color: var(--ok); }
+.i-ocr-body { margin-top: 6px; padding: 10px 12px; max-height: 42vh; overflow: auto; border-radius: 10px; background: var(--sunken); color: var(--ink); font-size: 13.5px; line-height: 1.55; -webkit-user-select: text; user-select: text; overscroll-behavior: contain; }
+.i-ocr-line { margin: 0; overflow-wrap: anywhere; }
+.i-ocr-line + .i-ocr-line { margin-top: 2px; }
+.i-ocr-hit { background: color-mix(in srgb, #ffd84d 55%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+@media (prefers-reduced-motion: reduce) { .i-ocr-chev { transition: none; } }
+@media (max-width: 600px) {
+  .tile-ocr { left: 5px; bottom: 5px; max-width: calc(100% - 10px); padding: 2px 6px 2px 5px; font-size: 10.5px; gap: 4px; }
+  .tile-ocr-ic svg { width: 11px; height: 11px; }
+  .i-ocr-body { max-height: 36vh; }
+}

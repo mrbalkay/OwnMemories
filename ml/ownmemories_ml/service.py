@@ -13,6 +13,10 @@ Temizlik (cleanup.py): dizinleyici her turda kalite ölçümü olmayan görünt�
 türetilmiş önizlemeden hesaplayıp asset_quality'ye yazar (migration 008 yoksa sessizce bekler). Gruplar istek
 anında CLIP vektörleri + çekim zamanı + phash ile hesaplanır ve kütüphane değişene kadar bellekte tutulur.
 
+Fotoğraftaki yazı (ocr.py): CLIP işi bitince her turda OM_OCR_BATCH fotoğrafın önizlemesinden (2048 px) yazı
+okunur ve asset_text'e yazılır (yazı yoksa boş satır: tarandı). OCR modeli (<models>/ppocr-v6) ya da tablo
+(migration 011) yoksa sessizce kapalı kalır. Model/son işleme sürümü (ocr.ENGINE) değişince yeniden okunur.
+
 Yüz tanıma (faces.py + clustering.py) aynı arka plan döngüsünde CLIP'le dönüşümlü çalışır: her turda bir CLIP
 toplu işi, ardından birkaç görüntülük yüz işi (CLIP işi bitince yüz işi büyür). Yüz modeli ya da tabloları
 (migration 006) yoksa yüz kısmı sessizce kapalı kalır; CLIP etkilenmez.
@@ -193,6 +197,14 @@ class Engine:
         self.cleanup_cache: dict[int, tuple[tuple, dict]] = {}
         self.cleanup_locks: dict[int, threading.Lock] = {}
         self.cleanup_lock = threading.Lock()
+        # fotoğraftaki yazı (OCR)
+        self.ocr = None  # ocr.OcrModel
+        self.ocr_error: str | None = None
+        self.ocr_tables: tuple[float, bool] = (0.0, False)
+        self.ocr_queue: list[tuple[str, int]] = []
+        self.ocr_cursor = ""
+        self.ocr_skip: dict[str, tuple[float, int]] = {}
+        self.ocr_session = 0
 
     # ---------- modeller ----------
     def load_text(self) -> None:
@@ -242,6 +254,47 @@ class Engine:
             self.faces = None
             self.face_error = f"yüz modeli yüklenemedi: {e}"
             log.exception("yüz modeli yüklenemedi; yüz tanıma kapalı")
+
+    def load_ocr(self) -> None:
+        from . import ocr as ocrmod
+
+        if not self.cfg.ocr:
+            self.ocr_error = "fotoğraftaki yazı kapalı (OM_OCR=0)"
+            return
+        d = self.cfg.ocr_model_dir
+        if not ocrmod.available(d):
+            self.ocr_error = f"OCR modeli yok: {d} (python -m ownmemories_ml download --model ocr)"
+            log.warning("%s; fotoğraftaki yazı kapalı, akıllı arama etkilenmez", self.ocr_error)
+            return
+        try:
+            t0 = time.time()
+            self.ocr = ocrmod.OcrModel(d, self.cfg.threads, min_conf=self.cfg.ocr_min_conf,
+                                       det_max_side=self.cfg.ocr_det_side)
+            malloc_trim()
+            self.ocr_error = None
+            log.info("OCR modeli yüklendi: %s (%.1f sn)", ocrmod.ENGINE, time.time() - t0)
+        except Exception as e:  # noqa: BLE001
+            self.ocr = None
+            self.ocr_error = f"OCR modeli yüklenemedi: {e}"
+            log.exception("OCR modeli yüklenemedi; fotoğraftaki yazı kapalı")
+
+    def ocr_tables_ok(self) -> bool:
+        """asset_text tablosu (migration 011) var mı? 5 dakikada bir yeniden denetlenir."""
+        t, ok = self.ocr_tables
+        if ok or time.time() - t < 300:
+            return ok
+        try:
+            ok = bool(self.db.query(
+                "SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() "
+                "AND table_name = 'asset_text'"))
+        except Exception as e:  # noqa: BLE001
+            log.warning("DB hatası (asset_text): %s", e)
+            self.db.drop()
+            ok = False
+        if not ok and t == 0.0:
+            log.info("asset_text tablosu henüz yok (migration 011); fotoğraftaki yazı bekliyor")
+        self.ocr_tables = (time.time(), ok)
+        return ok
 
     def faces_tables_ok(self) -> bool:
         """Yüz tabloları (migration 006) var mı? 5 dakikada bir yeniden denetlenir."""
@@ -486,6 +539,7 @@ class Engine:
             self.error = f"görsel model yüklenemedi: {e}"
             log.exception("görsel model yüklenemedi; CLIP dizinlemesi kapalı")
         self.load_faces()
+        self.load_ocr()
         if self.faces is not None:
             from .clustering import Clusterer
 
@@ -509,6 +563,9 @@ class Engine:
                     did = self._quality_step(self.cfg.batch * (2 if clip_busy else 8)) or did
                     if not did:
                         self._cleanup_warm()
+                if self.ocr is not None and not clip_busy and self.ocr_tables_ok():
+                    # Düşük öncelik: arama dizini (CLIP) dolunca; tur başına az görüntü (~0.3-1.5 sn CPU/görüntü).
+                    did = self._ocr_step(self.cfg.ocr_batch) or did
                 backoff = 5.0
             except Exception as e:  # noqa: BLE001
                 log.warning("DB hatası (dizinleyici): %s; %.0f sn sonra yeniden", e, backoff)
@@ -704,6 +761,58 @@ class Engine:
                 log.info("kalite ölçümü (bu oturum): %d görüntü", self.quality_session)
         return True
 
+    def _ocr_step(self, n: int) -> bool:
+        """En çok n fotoğrafta yazı oku (asset_text); True: iş yapıldı."""
+        from . import ocr as ocrmod
+
+        if not self.ocr_queue:
+            rows = self.db.query(
+                "SELECT a.id, a.user_id FROM assets a LEFT JOIN asset_text t ON t.asset_id = a.id "
+                "WHERE a.type = 'photo' AND a.thumb_state = 'ready' AND a.trashed_at IS NULL "
+                "AND (t.asset_id IS NULL OR t.engine <> %s) AND a.id > %s ORDER BY a.id LIMIT 256",
+                (ocrmod.ENGINE, self.ocr_cursor))
+            if not rows:
+                self.ocr_cursor = ""
+                return False
+            self.ocr_cursor = rows[-1][0]
+            now = time.time()
+            self.ocr_queue = [(a, u) for a, u in rows if self.ocr_skip.get(a, (0, 0))[0] <= now]
+            if not self.ocr_queue:
+                return False  # sayfanın hepsi ertelenmiş (dosyası yok): boşta dönmeyelim
+        batch, self.ocr_queue = self.ocr_queue[:n], self.ocr_queue[n:]
+        out = []
+        for aid, _uid in batch:
+            if self.stop.is_set():
+                break
+            p = self.face_source_path(aid)
+            if p is None:
+                self._defer_in(self.ocr_skip, aid)
+                continue
+            try:
+                r = self.ocr.analyze_file(p)
+            except Exception as e:  # noqa: BLE001
+                log.info("OCR: görüntü okunamadı %s: %s", aid, e)
+                self._defer_in(self.ocr_skip, aid)
+                continue
+            text = r["text"]
+            f = ocrmod.fold(text)
+            out.append((text, f" {f} " if f else "", r["lang"] if text else None, ocrmod.count_words(text),
+                        ocrmod.ENGINE, utcnow(), aid))
+        if out:
+            # INSERT … SELECT: bu arada kalıcı silinen fotoğrafa satır yazılmaz.
+            self.db.execute_many(
+                "INSERT INTO asset_text (asset_id, user_id, text, folded, lang, words, engine, computed_at) "
+                "SELECT id, user_id, %s, %s, %s, %s, %s, %s FROM assets WHERE id = %s "
+                "ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), text = VALUES(text), folded = VALUES(folded), "
+                "lang = VALUES(lang), words = VALUES(words), engine = VALUES(engine), computed_at = VALUES(computed_at)",
+                out)
+            for r in out:
+                self.ocr_skip.pop(r[-1], None)
+            self.ocr_session += len(out)
+            if self.ocr_session % 500 < len(out):
+                log.info("fotoğraftaki yazı (bu oturum): %d görüntü", self.ocr_session)
+        return True
+
     # ---------- temizlik: benzer gruplar ----------
     def cleanup_fingerprint(self, user_id: int) -> tuple:
         e = self.db.query("SELECT COUNT(*), MAX(created_at) FROM asset_embeddings WHERE user_id = %s AND model = %s",
@@ -853,7 +962,10 @@ def make_handler(engine: Engine):
                         engine.db.drop()
                     out = {"ok": True, "model": engine.cfg.model_name, "dim": engine.dim, **st,
                            "ready": engine.ready and db_ok, "indexer": engine.visual_ready.is_set(),
-                           "faces": engine.faces is not None, "cleanup": engine.quality_tables_ok()}
+                           "faces": engine.faces is not None, "cleanup": engine.quality_tables_ok(),
+                           "ocr": engine.ocr is not None and engine.ocr_tables_ok()}
+                    if engine.ocr_error:
+                        out["ocr_error"] = engine.ocr_error
                     if engine.error:
                         out["error"] = engine.error
                     if not db_ok:

@@ -130,4 +130,9 @@ return [
     'cl_settings_title' => 'Temizlik', 'cl_settings_note' => 'Benzer kareler, bulanık fotoğraflar ve ekran görüntüleri için öneriler. Silinenler önce Çöp kutusuna gider.',
     'cl_loading' => 'Kütüphaneniz inceleniyor…', 'cl_apply_confirm_one' => '{n} fotoğraf Çöp kutusuna taşınsın mı? En iyisi yerinde kalır.',
     'cl_confirm_selected' => 'Seçilen {n} öğe ({bytes}) Çöp kutusuna taşınsın mı? 30 gün içinde geri yükleyebilirsiniz.',
+    // Fotoğraftaki yazı (OCR)
+    'ocr_title' => 'Fotoğraftaki yazı', 'ocr_words' => '{n} sözcük', 'ocr_copy' => 'Yazıyı kopyala', 'ocr_copied' => 'Yazı panoya kopyalandı',
+    'ocr_copy_failed' => 'Kopyalanamadı', 'ocr_found' => '“{q}” yazısı bulundu', 'ocr_found_n' => '“{q}” yazısı {n} fotoğrafta bulundu',
+    'ocr_found_one' => '“{q}” yazısı 1 fotoğrafta bulundu', 'ocr_show_all' => 'Tümünü göster', 'ocr_show_less' => 'Daha az göster',
+    'ocr_badge_label' => 'Fotoğraftaki yazıda bulundu: {snippet}',
 ];

@@ -38,6 +38,25 @@ $lastRun = max($o['cron_last_run'], $o['worker_last_seen']);
   </tbody>
 </table>
 
+<?php $ocr = ocr_progress(); $ocrOn = $h !== null && !empty($h['ocr']); $ocrPending = $h !== null ? (int) ($h['pending'] ?? 0) : 0; ?>
+<h2><?= e(t('admin.ocr_title')) ?></h2>
+<p class="smart-health"><span class="pill <?= $ocrOn ? 'pill-done' : 'pill-paused' ?>"><?= e(t($ocrOn ? 'admin.ocr_ready' : 'admin.ocr_off')) ?></span>
+  <span class="muted small"><?= e(t('admin.ocr_with_text')) ?>: <?= number_format($ocr['all']['with_text'], 0, ',', '.') ?> · <?= e(t('admin.ocr_scanned')) ?>: <?= number_format($ocr['all']['scanned'], 0, ',', '.') ?> / <?= number_format($ocr['all']['total'], 0, ',', '.') ?><?php if ($ocrOn && $ocrPending > 0): ?> · <?= e(t('admin.ocr_waiting')) ?><?php endif; ?></span></p>
+<?php if ($h !== null && !$ocrOn): ?><div class="alert alert-warn"><?= e(t('admin.ocr_off_hint', ['why' => (string) ($h['ocr_error'] ?? 'asset_text / model')])) ?></div><?php endif; ?>
+<table class="tbl">
+  <thead><tr><th><?= e(t('admin.name')) ?></th><th class="num"><?= e(t('admin.ocr_scanned')) ?></th><th class="num"><?= e(t('admin.ocr_total')) ?></th><th class="num"><?= e(t('admin.ocr_with_text')) ?></th><th><?= e(t('admin.ocr_progress')) ?></th></tr></thead>
+  <tbody>
+  <?php foreach ($ocr['users'] as $u): $pct = $u['total'] ? (int) floor($u['scanned'] * 100 / $u['total']) : 100; ?>
+    <tr><td><?= e($u['name']) ?> <span class="muted"><?= e($u['email']) ?></span></td>
+      <td class="num"><?= number_format($u['scanned'], 0, ',', '.') ?></td>
+      <td class="num"><?= number_format($u['total'], 0, ',', '.') ?></td>
+      <td class="num"><?= number_format($u['with_text'], 0, ',', '.') ?></td>
+      <td><progress max="100" value="<?= $pct ?>" style="width:140px;vertical-align:middle" aria-label="<?= e(t('admin.ocr_progress')) ?>"></progress> <span class="small muted">%<?= $pct ?></span></td></tr>
+  <?php endforeach; ?>
+  </tbody>
+</table>
+<p class="muted small"><?= e(t('admin.ocr_note')) ?></p>
+
 <h2><?= e(t('admin.users')) ?></h2>
 <table class="tbl">
   <thead><tr><th><?= e(t('admin.name')) ?></th><th class="num"><?= e(t('admin.photos')) ?></th><th class="num"><?= e(t('admin.videos')) ?></th><th class="num"><?= e(t('admin.used')) ?></th><th><?= e(t('admin.quota')) ?></th><th><?= e(t('admin.last_seen')) ?></th></tr></thead>

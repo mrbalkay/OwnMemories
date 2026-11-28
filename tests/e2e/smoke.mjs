@@ -214,6 +214,31 @@ try {
   await page.keyboard.press('Escape');
   await page.waitForSelector('.viewer', { state: 'detached' });
   step(`arama (${mode}): "${term}" → ${nTiles} sonuç, görüntüleyicide gezinme`);
+  // Fotoğraftaki yazı (OCR): OM_E2E_OCR_Q kütüphanede yazısı okunmuş bir sözcükse ("eczane") rozet, özet satırı,
+  // görüntüleyicide "Fotoğraftaki yazı" bölümü, vurgulu sözcük ve kopyala düğmesi denetlenir.
+  const ocrQ = process.env.OM_E2E_OCR_Q;
+  if (ocrQ) {
+    await page.goto(base + '/app/#/search?q=' + encodeURIComponent(ocrQ));
+    await page.waitForSelector('.search-view .tile.has-ocr .tile-ocr mark.tile-ocr-hit');
+    if (!(await page.$('.search-ocr'))) throw new Error('ocr: arama başlığında yazı özeti yok');
+    await page.evaluate(() => localStorage.setItem('om_info', '1'));
+    await page.click('.search-view .tile.has-ocr');
+    // Görüntüleyici kurulup bilgi paneli durumunu uygulayana dek bekle (yoksa "i" açık paneli kapatabilir).
+    await page.waitForSelector('.viewer .v-img, .viewer video');
+    if (!(await page.$('.viewer.with-info'))) await page.keyboard.press('i');
+    await page.waitForSelector('.viewer.with-info');
+    await page.waitForSelector('.i-ocr[data-state="done"] .i-ocr-body mark.i-ocr-hit');
+    if (!(await page.$('.i-ocr-copy[aria-label]'))) throw new Error('ocr: kopyala düğmesi yok');
+    const exp = await page.getAttribute('.i-ocr-toggle', 'aria-expanded');
+    await page.click('.i-ocr-toggle');
+    if ((await page.getAttribute('.i-ocr-toggle', 'aria-expanded')) === exp) throw new Error('ocr: bölüm katlanmıyor');
+    await page.screenshot({ path: `${out}desktop-ocr.png` });
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.viewer', { state: 'detached' });
+    step(`fotoğraftaki yazı: "${ocrQ}" rozeti, bilgi paneli, katlama`);
+  } else {
+    step('fotoğraftaki yazı atlandı (OM_E2E_OCR_Q yok)');
+  }
   // Temizlik: Ayarlar'dan ve menüden açılır, özet kartları sekme olarak çalışır, karşılaştırma açılıp kapanır (silmeden)
   await page.goto(base + '/app/#/settings');
   await page.click('.settings-cleanup-link');

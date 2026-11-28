@@ -168,6 +168,11 @@ function api_search(array $user, array $q): array
     }
     $base = search_base_query($q);
     $ranked = ml_search($uid, $text, SEARCH_ML_LIMIT);
+    // Fotoğraftaki yazı (OCR, ocr.php): sözcük başı/tam sözcük eşleşmeleri en öne, sözcük içi eşleşmeler metin
+    // eşleşmelerinden sonra gelir. Eşleşen sonuçlar "text_match" ile döner (rozet + vurgulu satır).
+    $ocr = function_exists('ocr_search') ? ocr_search($user, $base, $text) : [];
+    $ocrStrong = array_keys(array_filter($ocr, fn($o) => $o['score'] >= 2));
+    $ocrWeak = array_keys(array_filter($ocr, fn($o) => $o['score'] < 2));
     // Sorguda adlandırılmış bir kişinin adı geçiyorsa ("Ali plajda"): o kişinin fotoğrafları önce gelir, kendi
     // aralarında kalan sözcüklerle akıllı sırada; diğer sonuçlar ardından korunur ("Deniz" adı "deniz kenarı"nı yutmasın).
     $personFirst = [];
@@ -194,6 +199,9 @@ function api_search(array $user, array $q): array
         foreach ($rows as $r) {
             $byId[$r['id']] = $r;
         }
+        foreach ($ocr as $id => $o) {
+            $byId[$id] ??= $o['row'];
+        }
         // Metin eşleşmeleri (dosya adı, açıklama, kamera, kişi) öne: akıllı sırada olanlar önce, kalanlar tarihe göre.
         [$tw, $ta] = api_asset_filters($user, $base + ['q' => $text]);
         $textRows = db_all("SELECT a.* FROM assets a WHERE $tw ORDER BY a.taken_at DESC, a.id DESC LIMIT " . SEARCH_TEXT_BOOST, $ta);
@@ -207,6 +215,9 @@ function api_search(array $user, array $q): array
             $byId[$id] ??= $r;
             $order[$id] = true;
         }
+        foreach ($ocrStrong as $id) {
+            $order[$id] = true;
+        }
         foreach ($ids as $id) {
             if (isset($byId[$id], $textIds[$id])) {
                 $order[$id] = true;
@@ -214,6 +225,9 @@ function api_search(array $user, array $q): array
         }
         foreach ($textRows as $r) {
             $order[$r['id']] = true;
+        }
+        foreach ($ocrWeak as $id) {
+            $order[$id] = true;
         }
         foreach ($ids as $id) {
             if (isset($byId[$id])) {
@@ -227,8 +241,22 @@ function api_search(array $user, array $q): array
             }
             $page = array_slice($list, $offset, $limit);
             $next = $offset + $limit < count($list) ? $offset + $limit : null;
-            return api_ok(['mode' => 'smart', 'assets' => assets_json($page), 'next_offset' => $next, 'total' => count($list), 'status' => $status]);
+            return api_ok(['mode' => 'smart', 'assets' => search_assets_json($page, $ocr, $text), 'next_offset' => $next, 'total' => count($list), 'status' => $status, 'text_matches' => count($ocr)]);
         }
+    }
+    if ($ocr) {
+        // Hizmet yok ya da akıllı sonuç yok, ama yazı eşleşmesi var: yazı (güçlü) → dosya adı/açıklama → yazı (zayıf).
+        [$where, $args] = api_asset_filters($user, $base + ['q' => $text]);
+        $textRows = db_all("SELECT a.* FROM assets a WHERE $where ORDER BY a.taken_at DESC, a.id DESC LIMIT " . OCR_SEARCH_LIMIT, $args);
+        $byId = array_map(fn($o) => $o['row'], $ocr) + array_column($textRows, null, 'id');
+        $order = array_merge($ocrStrong, array_column($textRows, 'id'), $ocrWeak);
+        $list = array_map(fn($id) => $byId[$id], array_keys(array_flip($order)));
+        if ($byDate) {
+            usort($list, fn($x, $y) => [$y['taken_at'], $y['id']] <=> [$x['taken_at'], $x['id']]);
+        }
+        $page = array_slice($list, $offset, $limit);
+        $next = $offset + $limit < count($list) ? $offset + $limit : null;
+        return api_ok(['mode' => 'text', 'assets' => search_assets_json($page, $ocr, $text), 'next_offset' => $next, 'total' => count($list), 'status' => $status, 'text_matches' => count($ocr)]);
     }
     // Metin araması (yedek): tarihe göre yeniden eskiye.
     [$where, $args] = api_asset_filters($user, $base + ['q' => $text]);
@@ -242,6 +270,18 @@ function api_search(array $user, array $q): array
     // Hizmet yanıt verdi ama ilgi eşiğini geçen yok ve metin eşleşmesi de yok: "akıllı arama: sonuç yok".
     $mode = $ranked !== null && $total === 0 ? 'smart' : 'text';
     return api_ok(['mode' => $mode, 'assets' => assets_json($rows), 'next_offset' => $next, 'total' => $total, 'status' => $status]);
+}
+
+/** assets_json + yazı eşleşmesi olanlara "text_match" ({term, snippet, parts}). */
+function search_assets_json(array $rows, array $ocr, string $q): array
+{
+    $out = assets_json($rows);
+    foreach ($out as $i => $a) {
+        if (isset($ocr[$a['id']])) {
+            $out[$i]['text_match'] = ocr_text_match($q, $ocr[$a['id']]['text']);
+        }
+    }
+    return $out;
 }
 
 /**
@@ -283,7 +323,12 @@ function search_fold(string $s): string
 function api_search_status(array $user): array
 {
     $s = ml_status((int) $user['id']);
-    return api_ok($s === null ? ['available' => false] : ['available' => true] + $s);
+    $out = $s === null ? ['available' => false] : ['available' => true] + $s;
+    if ($s !== null && function_exists('ocr_progress')) { // yazıyı da ML hizmeti okur
+        $p = ocr_progress((int) $user['id'])['all'];
+        $out['ocr'] = ['scanned' => $p['scanned'], 'total' => $p['total'], 'with_text' => $p['with_text']];
+    }
+    return api_ok($out);
 }
 
 /** Yönetim paneli: kullanıcı başına dizinlenmiş öğe sayısı (asset_embeddings yoksa boş). */

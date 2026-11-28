@@ -668,9 +668,41 @@ private struct SearchTile: View {
                 .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
                 .padding(5)
             }
+            .overlay(alignment: .bottomLeading) {
+                if let m = asset.textMatch { textBadge(m) }
+            }
             .contentShape(Rectangle())
-            .accessibilityLabel(Text(asset.isVideo ? "Video" : "Fotoğraf"))
+            .accessibilityLabel(Text(accessibilityText))
             .accessibilityAddTraits(.isButton)
+    }
+
+    private var accessibilityText: String {
+        let kind = asset.isVideo ? "Video" : "Fotoğraf"
+        guard let m = asset.textMatch else { return kind }
+        return "\(kind), “\(m.term)” yazısı bulundu: \(m.snippet)"
+    }
+
+    /// Fotoğraftaki yazıda bulunan sözcük: hücrenin sol altında küçük rozet (yalnız vurgulu sözcük).
+    private func textBadge(_ m: AssetTextMatch) -> some View {
+        let hit = m.parts.first(where: { $0.m })?.t ?? m.term
+        return HStack(spacing: 3) {
+            Image(systemName: "text.viewfinder").font(.system(size: 9, weight: .bold))
+            Text(hit)
+                .font(.system(size: 10, weight: .bold))
+                .lineLimit(1)
+                .padding(.horizontal, 3)
+                .background(theme.name == .galeri ? theme.accent.opacity(0.18) : Color.yellow.opacity(0.9),
+                            in: RoundedRectangle(cornerRadius: theme.name == .galeri ? 1 : 3, style: .continuous))
+                .foregroundStyle(theme.name == .galeri ? theme.accent : Color.black)
+        }
+        .foregroundStyle(theme.name == .galeri ? theme.ink : Color.white)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 3)
+        .background(theme.name == .galeri ? AnyShapeStyle(Color.white.opacity(0.94)) : AnyShapeStyle(Material.ultraThin),
+                    in: RoundedRectangle(cornerRadius: theme.name == .galeri ? 2 : 8, style: .continuous))
+        .environment(\.colorScheme, theme.name == .galeri ? .light : .dark)
+        .padding(4)
+        .accessibilityHidden(true)
     }
 }
 

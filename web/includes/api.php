@@ -132,6 +132,8 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['POST', '#^/v1/cleanup/dismiss$#', fn() => api_cleanup_dismiss(api_need_user($user), $body)],
         ['POST', '#^/v1/cleanup/reset$#', fn() => api_cleanup_reset(api_need_user($user))],
         ['POST', '#^/v1/devices/report$#', fn() => api_ok(device_report((int) api_need_user($user)['id'], $body))],
+        // Fotoğraftaki yazı (OCR, ocr.php)
+        ['GET', "#^/v1/assets/$uuid/text$#", fn($m) => api_asset_text(api_need_user($user), $m[1])],
     ];
     $methodMismatch = false;
     foreach ($routes as [$verb, $re, $fn]) {

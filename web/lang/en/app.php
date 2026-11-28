@@ -130,4 +130,9 @@ return [
     'cl_settings_title' => 'Clean up', 'cl_settings_note' => 'Suggestions for similar shots, blurry photos and screenshots. Deleted items go to the Bin first.',
     'cl_loading' => 'Looking through your library…', 'cl_apply_confirm_one' => 'Move {n} photos to the Bin? The best one stays.',
     'cl_confirm_selected' => 'Move the {n} selected items ({bytes}) to the Bin? You can restore them within 30 days.',
+    // Text in photos (OCR)
+    'ocr_title' => 'Text in photo', 'ocr_words' => '{n} words', 'ocr_copy' => 'Copy text', 'ocr_copied' => 'Text copied to clipboard',
+    'ocr_copy_failed' => 'Could not copy', 'ocr_found' => 'Text “{q}” found', 'ocr_found_n' => 'Text “{q}” found in {n} photos',
+    'ocr_found_one' => 'Text “{q}” found in 1 photo', 'ocr_show_all' => 'Show all', 'ocr_show_less' => 'Show less',
+    'ocr_badge_label' => 'Found in the text of the photo: {snippet}',
 ];
