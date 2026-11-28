@@ -178,3 +178,78 @@ final class MemoryModelTests: XCTestCase {
         XCTAssertEqual(r.memories[0].coverAssetId, "c")
     }
 }
+
+final class PeopleModelTests: XCTestCase {
+    func testDecodePeopleList() throws {
+        let json = """
+        {"people":[{"id":3,"name":"Ayşe","count":120,"cover_face_id":55,"cover_asset_id":"a1","hidden":false},
+        {"id":9,"name":null,"count":4,"cover_face_id":71,"cover_asset_id":"a2","hidden":true},
+        {"id":12,"name":"Ali","count":2,"cover_face_id":null,"cover_asset_id":null,"hidden":false}]}
+        """
+        let r = try JSONDecoder().decode(PeopleList.self, from: Data(json.utf8))
+        XCTAssertEqual(r.people.count, 3)
+        XCTAssertEqual(r.people[0].name, "Ayşe")
+        XCTAssertEqual(r.people[0].coverFaceId, 55)
+        XCTAssertTrue(r.people[0].isNamed)
+        XCTAssertNil(r.people[1].name)
+        XCTAssertFalse(r.people[1].isNamed)
+        XCTAssertEqual(r.people[1].displayName, "Adsız")
+        XCTAssertTrue(r.people[1].hidden)
+        XCTAssertNil(r.people[2].coverFaceId)
+        XCTAssertNil(r.people[2].coverAssetId)
+        let env = try JSONDecoder().decode(PersonEnvelope.self, from: Data(#"{"person":{"id":3,"name":"Ayşe","count":1,"cover_face_id":null,"cover_asset_id":"x","hidden":false}}"#.utf8))
+        XCTAssertEqual(env.person.id, 3)
+        XCTAssertEqual(env.person.coverAssetId, "x")
+    }
+
+    func testDecodeAssetPeople() throws {
+        let json = """
+        {"people":[{"id":3,"name":"Ayşe","source":"manual"},{"id":9,"name":null,"source":"face"},{"id":4,"name":null,"source":"manual"}],
+         "faces":[{"id":55,"x1":0.1,"y1":0.2,"x2":0.3,"y2":0.45,"person_id":3,"person_name":"Ayşe"},
+                  {"id":56,"x1":0.5,"y1":0.2,"x2":0.6,"y2":0.4,"person_id":9,"person_name":null},
+                  {"id":57,"x1":0.7,"y1":0.1,"x2":0.8,"y2":0.3,"person_id":null,"person_name":null}]}
+        """
+        let r = try JSONDecoder().decode(AssetPeople.self, from: Data(json.utf8))
+        XCTAssertEqual(r.people.map(\.id), [3, 9, 4])
+        XCTAssertEqual(r.people[0].source, "manual")
+        XCTAssertEqual(r.faces.count, 3)
+        XCTAssertEqual(r.faces[0].x2, 0.3, accuracy: 1e-9)
+        XCTAssertEqual(r.face(of: 3)?.id, 55)
+        XCTAssertTrue(r.faces[0].isNamed)
+        XCTAssertFalse(r.faces[1].isNamed)
+        XCTAssertNil(r.faces[2].personId)
+        XCTAssertEqual(r.unnamedFaces.map(\.id), [56, 57])
+        // Adsız küme (9) yüzüyle ayrıca gösterilir; yüzü olmayan adsız kişi (4) çip olarak kalır.
+        XCTAssertEqual(r.chips.map(\.id), [3, 4])
+        let empty = try JSONDecoder().decode(AssetPeople.self, from: Data("{}".utf8))
+        XCTAssertTrue(empty.people.isEmpty)
+        XCTAssertTrue(empty.faces.isEmpty)
+    }
+
+    func testDecodeFaceStatusAndConflict() throws {
+        let s = try JSONDecoder().decode(FaceScanStatus.self, from: Data(#"{"available":true,"scanned":1240,"total":6500,"faces":3000,"people":40,"ready":false}"#.utf8))
+        XCTAssertTrue(s.available)
+        XCTAssertEqual(s.scanned, 1240)
+        XCTAssertEqual(s.total, 6500)
+        XCTAssertTrue(s.isScanning)
+        let off = try JSONDecoder().decode(FaceScanStatus.self, from: Data(#"{"available":false}"#.utf8))
+        XCTAssertFalse(off.available)
+        XCTAssertFalse(off.isScanning)
+        let done = FaceScanStatus(scanned: 10, total: 10, ready: true)
+        XCTAssertFalse(done.isScanning)
+
+        let conflict = try JSONDecoder().decode(PersonNameConflict.self, from: Data("""
+        {"error":{"code":"name_exists","message":"Bu adda bir kişi zaten var.","person_id":7,
+         "person":{"id":7,"name":"Ayşe","count":3,"cover_face_id":null,"cover_asset_id":null,"hidden":false}}}
+        """.utf8))
+        XCTAssertEqual(conflict.error.code, "name_exists")
+        XCTAssertEqual(conflict.otherId, 7)
+        XCTAssertEqual(conflict.error.person?.name, "Ayşe")
+        let bare = try JSONDecoder().decode(PersonNameConflict.self, from: Data(#"{"error":{"code":"name_exists","message":"m","person_id":8}}"#.utf8))
+        XCTAssertEqual(bare.otherId, 8)
+
+        let bulk = try JSONDecoder().decode(BulkPeopleTagResponse.self, from: Data(#"{"count":2,"person":{"id":1,"name":"Ali","count":5,"cover_face_id":null,"cover_asset_id":null,"hidden":false}}"#.utf8))
+        XCTAssertEqual(bulk.count, 2)
+        XCTAssertEqual(bulk.person.name, "Ali")
+    }
+}

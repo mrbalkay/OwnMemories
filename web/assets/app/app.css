@@ -498,3 +498,168 @@ dialog.modal h3 { font-size: 14px; margin: 18px 0 6px; }
   .cal-num { width: 30px; height: 30px; }
   .cal-count { top: -5px; right: -4px; height: 18px; min-width: 19px; border-radius: 9px; font-size: 10.5px; line-height: 18px; }
 }
+
+/* ------------------------------------------------------------ kişiler (people.js) */
+/* Avatar: yüz kırpması / fotoğraf / baş harf. Boyut --ava ile. */
+.p-ava { --ava: 32px; position: relative; display: inline-grid; place-items: center; flex: none; width: var(--ava); height: var(--ava); border-radius: 50%; overflow: hidden; background: var(--sunken); color: var(--muted); isolation: isolate; }
+.p-ava img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .3s ease; }
+.p-ava img.in { opacity: 1; }
+.p-ava.is-empty { background: linear-gradient(145deg, var(--accent-soft), var(--sunken)); color: var(--accent); }
+.p-ava .p-ini { font-weight: 600; font-size: calc(var(--ava) * .38); letter-spacing: .01em; line-height: 1; }
+.p-ava .ic svg { width: calc(var(--ava) * .5); height: calc(var(--ava) * .5); }
+
+/* Kişi seçici (combobox) */
+.pp { position: relative; display: flex; align-items: center; min-width: 0; width: 100%; height: 40px; padding: 0 10px; gap: 8px; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); color: var(--ink); }
+.pp:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pp-ic { color: var(--muted); }
+.pp-ic svg { width: 17px; height: 17px; }
+.pp-input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 14px; }
+.pp-input::placeholder { color: var(--faint); }
+.pp input.pp-input:focus, .pp input.pp-input:focus-visible { outline: none; box-shadow: none; border: 0; background: transparent; }
+.pp.is-busy { opacity: .6; pointer-events: none; }
+.pp-compact { height: 34px; border-radius: 9px; padding: 0 8px; }
+.pp-list { position: absolute; z-index: 60; top: calc(100% + 6px); left: 0; min-width: 100%; width: max-content; max-width: min(320px, 86vw); max-height: 280px; overflow-y: auto; margin: 0; padding: 5px; list-style: none; border: 1px solid var(--line); border-radius: 13px; background: var(--raised); color: var(--text); box-shadow: var(--shadow-2); }
+.pp-list { text-align: left; }
+.pp-list.pp-up { top: auto; bottom: calc(100% + 6px); }
+.pp-list.pp-end { left: auto; right: 0; }
+.pp-host { display: grid; gap: 8px; min-width: 0; }
+.pp-host > .pp-list.pp-list-inline, dialog .pp-host > .pp-list.pp-list-inline { position: static; width: auto; max-width: none; min-width: 0; max-height: min(296px, 42vh); box-shadow: none; }
+.pp-list.pp-list-inline[hidden] { display: none; }
+.pp-opt { display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border-radius: 9px; cursor: pointer; font-size: 14px; }
+.pp-opt .p-ava { --ava: 28px; }
+.pp-opt:hover, .pp-opt[aria-selected="true"] { background: var(--sunken); }
+.pp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.pp-count { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pp-create .pp-name { color: var(--accent); font-weight: 550; }
+.pp-plus { --ava: 28px; }
+.pp-dialog { display: grid; gap: 12px; min-height: 64px; }
+.pp-dialog-hint { margin: 0; }
+.merge-from { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--sunken); }
+.merge-from .p-ava { --ava: 44px; }
+.merge-from strong { color: var(--ink); }
+
+/* Kişiler sayfası */
+.people-head .btn { flex: none; }
+.people-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 4px; padding: 10px 14px; border-radius: 12px; background: var(--sunken); color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.people-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: ppPulse 1.6s ease-in-out infinite; }
+.people-status-bar { flex: 1 1 120px; max-width: 240px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.people-status-bar i { display: block; height: 100%; width: calc(var(--p, 0) * 100%); min-width: 3px; background: var(--accent); border-radius: 2px; transition: width .6s ease; }
+@keyframes ppPulse { 50% { opacity: .35; transform: scale(.8); } }
+.people-section { padding-top: 18px; }
+.people-section + .people-section { margin-top: 26px; }
+.people-section-head { margin-bottom: 6px; }
+.people-section-head h2 { display: flex; align-items: baseline; gap: 10px; margin: 0; font-family: var(--serif); font-weight: 500; font-size: 24px; color: var(--ink); }
+.people-section-count { font-family: var(--sans); font-size: 13px; font-weight: 500; color: var(--faint); font-variant-numeric: tabular-nums; }
+.people-section-head p { margin: 4px 0 0; font-size: 14px; }
+.people-grid { --face: 136px; display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--face), 1fr)); gap: 26px 18px; padding-top: 14px; }
+.people-grid.is-unnamed { --face: 108px; gap: 22px 16px; }
+.person-card { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; text-align: center; color: var(--text); text-decoration: none; border-radius: 16px; outline-offset: 4px; }
+.person-face { position: relative; display: block; width: 100%; max-width: var(--face); aspect-ratio: 1; border-radius: 50%; color: inherit; }
+.person-face .p-ava { --ava: 100%; width: 100%; height: 100%; box-shadow: var(--shadow-1); transition: transform .3s cubic-bezier(.2, .8, .2, 1), box-shadow .3s; }
+.person-face .p-ava .p-ini { font-size: 34px; }
+.person-face .p-ava .ic svg { width: 40%; height: 40%; }
+a.person-card:hover .p-ava, .person-card a.person-face:hover .p-ava { transform: scale(1.035); box-shadow: var(--shadow-2); }
+.person-name { margin-top: 11px; max-width: 100%; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-count { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.is-cluster .person-count { margin-top: 9px; }
+.person-card.is-hidden .p-ava { filter: grayscale(.85); opacity: .55; }
+.person-hidden-badge { position: absolute; right: 4%; bottom: 4%; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--raised); color: var(--muted); box-shadow: var(--shadow-1); }
+.person-hidden-badge svg { width: 16px; height: 16px; }
+.who-slot { position: relative; width: 100%; display: flex; justify-content: center; margin-top: 4px; min-height: 34px; }
+.who-slot .pp { width: 100%; min-width: 150px; }
+.who-btn { padding: 5px 12px; border: 0; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; transition: filter .15s; }
+.who-btn:hover { filter: brightness(1.06); }
+.people-empty { max-width: 520px; }
+.people-empty h2 { margin: 18px 0 6px; font-family: var(--serif); font-weight: 500; font-size: 26px; color: var(--ink); }
+.people-empty-art { display: flex; justify-content: center; }
+.people-empty-art span { width: 64px; height: 64px; border-radius: 50%; margin: 0 -9px; border: 3px solid var(--bg); background: linear-gradient(150deg, var(--sunken), var(--accent-soft)); }
+.people-empty-art span:nth-child(2) { width: 78px; height: 78px; margin-top: -8px; position: relative; z-index: 1; background: linear-gradient(150deg, var(--accent-soft), var(--sunken)); }
+
+/* Kişi sayfası başlığı */
+.person-head { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "back back" "face info"; align-items: center; gap: 6px 24px; padding: 14px 0 22px; }
+.person-back { grid-area: back; justify-self: start; display: inline-flex; align-items: center; gap: 2px; margin-left: -6px; padding: 4px 10px 4px 4px; border-radius: 999px; color: var(--muted); font-size: 14px; font-weight: 500; text-decoration: none; }
+.person-back:hover { color: var(--ink); background: var(--sunken); }
+.person-hero-face { grid-area: face; }
+.person-hero-face .p-ava { --ava: 112px; box-shadow: var(--shadow-2); }
+.person-hero-face .p-ava .p-ini { font-size: 40px; }
+.person-info { grid-area: info; min-width: 0; }
+.person-name-box { min-height: 48px; display: flex; align-items: center; max-width: 520px; margin-left: -8px; }
+.person-title { flex: 1 1 auto; margin: 0; min-width: 0; font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.1; letter-spacing: -.015em; color: var(--ink); }
+.person-title-btn { display: inline-block; max-width: 100%; margin: 0; padding: 2px 8px; border: 0; border-radius: 10px; background: none; font: inherit; color: inherit; cursor: text; text-align: left; }
+.person-title-btn:hover { background: var(--sunken); }
+.person-title-text { overflow-wrap: break-word; }
+.person-title-btn { position: relative; }
+.person-title-edit { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); display: inline-flex; margin-left: 2px; }
+.person-title-text.is-unnamed { color: var(--faint); font-style: italic; }
+.person-title-edit { opacity: 0; color: var(--muted); transition: opacity .15s; }
+.person-title-btn:hover .person-title-edit, .person-title-btn:focus-visible .person-title-edit { opacity: 1; }
+.person-title-picker { height: 48px; font-size: 18px; }
+.person-title-picker .pp-input { font-size: 20px; font-weight: 550; }
+.person-meta { display: flex; align-items: center; gap: 10px; margin: 2px 0 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.person-hidden-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; background: var(--sunken); font-size: 12px; }
+.person-hidden-pill svg { width: 14px; height: 14px; }
+.person-head.is-hidden .person-hero-face .p-ava { filter: grayscale(.8); }
+.person-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.person-actions .btn svg { width: 18px; height: 18px; }
+.btn.danger, .btn-ghost.danger { color: var(--danger); }
+
+/* Görüntüleyici bilgi paneli: Kişiler */
+.i-row.i-row-people { display: block; }
+.i-people-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.i-people-head h3 { margin: 0; font-size: inherit; font-weight: inherit; color: var(--muted); }
+.i-faces-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+.i-faces-toggle svg { width: 16px; height: 16px; }
+.i-faces-toggle:hover { color: var(--ink); }
+.i-faces-toggle.on { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.i-people-loading { display: flex; padding: 4px 0; }
+.p-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.p-chip { display: inline-flex; align-items: center; max-width: 100%; border-radius: 999px; background: var(--sunken); color: var(--ink); transition: background .15s, box-shadow .15s; }
+.p-chip:hover { box-shadow: 0 0 0 1px var(--line) inset; }
+.p-chip-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 4px 3px 3px; border: 0; background: none; color: inherit; font: inherit; font-size: 13.5px; font-weight: 550; text-decoration: none; cursor: pointer; border-radius: 999px; }
+.p-chip-main .p-ava { --ava: 28px; }
+.p-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-chip.is-unnamed .p-chip-name { color: var(--accent); }
+.p-chip-x { display: grid; place-items: center; width: 26px; height: 26px; margin-right: 3px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+.p-chip-x svg { width: 14px; height: 14px; }
+.p-chip-x:hover { background: var(--line); color: var(--ink); }
+.p-add-slot { position: relative; }
+.p-add { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px 6px 9px; border: 1px dashed var(--faint); border-radius: 999px; background: none; color: var(--muted); font-size: 13.5px; font-weight: 550; cursor: pointer; }
+.p-add svg { width: 16px; height: 16px; }
+.p-add:hover { color: var(--accent); border-color: var(--accent); }
+.f-loose-head { margin: 14px 0 8px; }
+.f-loose { display: flex; flex-wrap: wrap; gap: 10px 12px; }
+.f-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 72px; }
+.f-item > .p-ava { --ava: 52px; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--line); }
+.f-item:hover > .p-ava { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent); }
+.f-name-btn { padding: 2px 8px; border: 0; border-radius: 999px; background: none; color: var(--accent); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.f-name-btn:hover { background: var(--accent-soft); }
+.f-item .pp { position: absolute; top: 60px; left: 0; width: 220px; z-index: 5; background: var(--raised); box-shadow: var(--shadow-2); }
+.i-people .pp-list { max-height: 220px; }
+
+/* Görüntüleyici: yüz kutuları */
+.v-faces { grid-area: 1 / 1; position: relative; z-index: 2; pointer-events: none; place-self: center; }
+.v-stage.zoom .v-faces { display: none; }
+.v-face { position: absolute; padding: 0; border: 2px solid rgba(255, 255, 255, .85); border-radius: 8px; background: transparent; box-shadow: 0 0 0 1px rgba(0, 0, 0, .25), 0 2px 10px rgba(0, 0, 0, .25); cursor: pointer; pointer-events: auto; transition: border-color .15s, opacity .2s, transform .15s; }
+.v-face.is-unknown { border-style: dashed; border-color: rgba(255, 255, 255, .7); }
+.v-face:hover, .v-face.is-hot, .v-face:focus-visible { border-color: #fff; border-style: solid; transform: scale(1.03); }
+.v-faces.has-hot .v-face:not(.is-hot) { opacity: .35; }
+.v-face-label { position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%); padding: 3px 9px; border-radius: 999px; background: rgba(12, 12, 16, .72); color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); pointer-events: none; }
+
+@media (max-width: 860px) {
+  .people-grid { --face: 96px; gap: 20px 12px; }
+  .people-grid.is-unnamed { --face: 84px; }
+  .person-face .p-ava .p-ini { font-size: 26px; }
+  .person-name { font-size: 14px; margin-top: 8px; }
+  .person-head { grid-template-columns: 1fr; grid-template-areas: "back" "face" "info"; justify-items: center; text-align: center; gap: 10px; }
+  .person-hero-face .p-ava { --ava: 104px; }
+  .person-info { display: flex; flex-direction: column; align-items: center; width: 100%; }
+  .person-name-box { justify-content: center; width: 100%; margin-left: 0; }
+  .person-title { font-size: 30px; }
+  .person-title-edit { opacity: 1; }
+  .person-meta { justify-content: center; }
+  .person-actions { justify-content: center; }
+  .people-head .btn span:not(.ic) { display: none; }
+  .who-slot .pp { min-width: 0; }
+}
+/* Seçici açılır listesi pencere kenarında kırpılmasın */
+dialog.modal:has(.pp-dialog) { overflow: visible; }

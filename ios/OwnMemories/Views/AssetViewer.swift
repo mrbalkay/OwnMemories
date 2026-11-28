@@ -89,6 +89,7 @@ struct AssetViewer: View {
         .sheet(isPresented: $showInfo) {
             if let id = selectedId, let a = asset(id) {
                 AssetInfoView(asset: a)
+                    .environmentObject(session)
                     .environment(\.theme, theme)
                     .preferredColorScheme(theme.colorScheme)
                     .presentationDetents([.medium, .large])
@@ -600,12 +601,40 @@ private struct VideoControls: View {
 
 private struct AssetInfoView: View {
     let asset: Asset
+    @EnvironmentObject private var session: Session
     @Environment(\.theme) private var theme
+    /// GET /v1/assets/{id}/people: etiketli kişiler ve bulunan yüzler (nil: yükleniyor).
+    @State private var people: AssetPeople?
+    @State private var peopleLoadFailed = false
+    @State private var picker: PeoplePicker?
+    @State private var pendingPick: (target: PeoplePicker, choice: PersonPickerSheet.Choice)?
+    @State private var mergeOffer: MergeOffer?
+    @State private var peopleError: String?
+    @State private var peopleBusy = false
+    /// Sunucu bu öğenin kişilerini vermiyor (başkasının öğesi: 404): bölüm gizlenir.
+    @State private var peopleUnavailable = false
+
+    /// Kişi seçicinin amacı: fotoğrafa kişi ekle ya da bir yüzü adlandır.
+    private enum PeoplePicker: Identifiable {
+        case add
+        case face(DetectedFace)
+
+        var id: String {
+            switch self {
+            case .add: return "add"
+            case .face(let f): return "face-\(f.id)"
+            }
+        }
+    }
+
+    /// Kişiler yalnızca kendi fotoğraflarında düzenlenir (paylaşılan albümden görüntülenenlerde değil).
+    private var canEditPeople: Bool { asset.access != "view" }
 
     var body: some View {
         NavigationStack {
             List {
                 if let c = asset.caption, !c.isEmpty { Section { Text(c) } }
+                if canEditPeople && !peopleUnavailable { peopleSection }
                 Section("Çekim") {
                     Text(dateText)
                     if let src = asset.dateSource { Text(sourceText(src)).font(.footnote).foregroundStyle(.secondary) }
@@ -630,6 +659,183 @@ private struct AssetInfoView: View {
             .themedList(theme)
             .navigationTitle("Ayrıntılar")
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .task(id: asset.id) {
+            guard canEditPeople else { return }
+            await loadPeople()
+        }
+        .sheet(item: $picker, onDismiss: applyPendingPick) { target in
+            PersonPickerSheet(title: pickerTitle(target), excluding: pickerExcluding(target)) { choice in
+                pendingPick = (target, choice)
+            }
+            .environmentObject(session)
+            .environment(\.theme, theme)
+        }
+        .mergeOfferAlert($mergeOffer) { o in Task { await mergeCluster(o) } }
+        .peopleErrorAlert($peopleError)
+    }
+
+    // MARK: - Kişiler
+
+    @ViewBuilder
+    private var peopleSection: some View {
+        Section("Kişiler") {
+            if let people {
+                if !people.chips.isEmpty {
+                    PeopleChipFlow(spacing: 8) {
+                        ForEach(people.chips) { p in personChip(p, faceId: people.face(of: p.id)?.id) }
+                    }
+                    .padding(.vertical, 4)
+                }
+                if !people.unnamedFaces.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: 14) {
+                            ForEach(people.unnamedFaces) { f in unnamedFace(f) }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+                Button { picker = .add } label: {
+                    Label("Kişi ekle", systemImage: "person.badge.plus")
+                        .foregroundStyle(theme.name == .yerel ? theme.accent : theme.ink)
+                }
+                .buttonStyle(.borderless)
+                .disabled(peopleBusy)
+            } else if peopleLoadFailed {
+                Button("Kişiler yüklenemedi. Tekrar dene") { Task { await loadPeople() } }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(theme.muted)
+            } else {
+                ProgressView().tint(theme.muted)
+            }
+        }
+    }
+
+    private func personChip(_ p: AssetPersonTag, faceId: Int?) -> some View {
+        HStack(spacing: 6) {
+            FaceAvatar(faceId: faceId, name: p.name, size: 26)
+            Text(p.displayName)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(theme.ink)
+                .lineLimit(1)
+            Button { Task { await removePerson(p) } } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(theme.muted)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .disabled(peopleBusy)
+            .accessibilityLabel(Text(verbatim: "\(p.displayName) kişisini bu fotoğraftan çıkar"))
+        }
+        .padding(.leading, 3)
+        .padding(.trailing, 4)
+        .frame(height: 32)
+        .background(theme.name == .galeri ? AnyShapeStyle(Color.clear) : AnyShapeStyle(Color.primary.opacity(0.08)),
+                    in: RoundedRectangle(cornerRadius: theme.name == .galeri ? 2 : 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: theme.name == .galeri ? 2 : 16, style: .continuous)
+            .stroke(theme.hairline, lineWidth: theme.name == .yerel ? 0 : 1))
+    }
+
+    private func unnamedFace(_ f: DetectedFace) -> some View {
+        Button { picker = .face(f) } label: {
+            VStack(spacing: 5) {
+                FaceAvatar(faceId: f.id, size: 52)
+                Text("Adlandır")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.name == .yerel ? theme.accent : theme.ink)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .disabled(peopleBusy)
+        .accessibilityLabel("Bu yüzü adlandır")
+    }
+
+    private func pickerTitle(_ t: PeoplePicker) -> String {
+        switch t {
+        case .add: return "Kişi ekle"
+        case .face: return "Bu kim?"
+        }
+    }
+
+    private func pickerExcluding(_ t: PeoplePicker) -> Set<Int> {
+        switch t {
+        case .add:
+            return Set((people?.people ?? []).filter(\.isNamed).map(\.id))
+        case .face(let f):
+            if let pid = f.personId { return [pid] }
+            return []
+        }
+    }
+
+    private func loadPeople() async {
+        guard let client = session.client else { return }
+        do {
+            people = try await client.send("GET", "assets/\(asset.id)/people", as: AssetPeople.self)
+            peopleLoadFailed = false
+        } catch let APIError.server(status, _, _, _) where status == 404 {
+            peopleUnavailable = true
+        } catch {
+            if people == nil { peopleLoadFailed = true }
+        }
+    }
+
+    /// Seçici kapandıktan sonra uygulanır (birleştirme sorusu sayfa kapanırken kaybolmasın diye).
+    private func applyPendingPick() {
+        guard let pending = pendingPick else { return }
+        pendingPick = nil
+        Task { await apply(pending.target, pending.choice) }
+    }
+
+    private func apply(_ target: PeoplePicker, _ choice: PersonPickerSheet.Choice) async {
+        guard let client = session.client else { return }
+        peopleBusy = true
+        defer { peopleBusy = false }
+        do {
+            switch target {
+            case .add:
+                people = try await client.send("POST", "assets/\(asset.id)/people", body: PeopleAPI.body(for: choice), as: AssetPeople.self)
+            case .face(let f):
+                if let pid = f.personId, case .new(let name) = choice {
+                    // Adsız kümedeki yüze yeni ad: kümenin tamamı adlandırılır (ad başkasındaysa birleştirme önerilir).
+                    // Var olan bir kişi seçilirse yalnızca bu yüz atanır (web ile aynı; küme sessizce birleştirilmez).
+                    switch try await PeopleAPI.rename(client, pid, name: name) {
+                    case .done:
+                        await loadPeople()
+                    case let .conflict(otherId, otherName):
+                        mergeOffer = MergeOffer(sourceId: pid, targetId: otherId, targetName: otherName)
+                    }
+                } else {
+                    people = try await client.send("PATCH", "faces/\(f.id)", body: PeopleAPI.body(for: choice), as: AssetPeople.self)
+                }
+            }
+        } catch {
+            peopleError = error.localizedDescription
+        }
+    }
+
+    private func mergeCluster(_ o: MergeOffer) async {
+        guard let client = session.client else { return }
+        peopleBusy = true
+        defer { peopleBusy = false }
+        do {
+            _ = try await PeopleAPI.merge(client, o.sourceId, into: o.targetId)
+        } catch {
+            peopleError = error.localizedDescription
+        }
+        await loadPeople()
+    }
+
+    private func removePerson(_ p: AssetPersonTag) async {
+        guard let client = session.client else { return }
+        peopleBusy = true
+        defer { peopleBusy = false }
+        do {
+            people = try await client.send("DELETE", "assets/\(asset.id)/people/\(p.id)", as: AssetPeople.self)
+        } catch {
+            peopleError = error.localizedDescription
         }
     }
 

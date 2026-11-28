@@ -133,6 +133,37 @@ try {
   await page.waitForSelector('.album-card, .empty');
   await page.screenshot({ path: `${out}desktop-albums.png` });
   step('albümler');
+  // Kişiler: görüntüleyicide elle kişi ekle → Kişiler sayfası → kişi sayfası → kişiyi kaldır (API yoksa atlanır)
+  const peopleApi = await page.evaluate(async () => (await fetch('/api/v1/people')).status);
+  if (peopleApi === 200) {
+    const pname = `E2E Kişi ${Date.now() % 100000}`;
+    await page.goto(base + '/app/#/photos');
+    await page.waitForSelector(`.tile[data-id="${firstId}"]`);
+    await page.click(`.tile[data-id="${firstId}"]`);
+    await page.waitForSelector('.viewer .v-img, .viewer video');
+    await page.waitForSelector('.viewer .icon-btn[aria-label="Bilgi"]'); // varlık yüklendi
+    if (!(await page.$('.viewer.with-info'))) await page.click('.viewer .icon-btn[aria-label="Bilgi"]');
+    await page.click('.v-info .p-add');
+    await page.fill('.v-info .pp-input', pname);
+    await page.waitForSelector('.v-info .pp-opt.pp-create');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector(`.v-info .p-chip:has-text("${pname}")`);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.viewer', { state: 'detached' });
+    await page.waitForTimeout(300);
+    await page.goto(base + '/app/#/people');
+    await page.click(`.person-card:has-text("${pname}")`);
+    await page.waitForSelector(`.person-head .person-title-text:has-text("${pname}")`);
+    await page.waitForSelector(`.tile[data-id="${firstId}"]`);
+    await page.screenshot({ path: `${out}desktop-person.png` });
+    await page.click('.person-actions button.danger');
+    await page.click('dialog button[value="ok"]');
+    await page.waitForURL('**/#/people');
+    await page.waitForSelector(`.person-card:has-text("${pname}")`, { state: 'detached' });
+    step('kişiler: elle etiket, kişi sayfası, kaldırma');
+  } else {
+    step(`kişiler atlandı (API ${peopleApi})`);
+  }
   // Arama: öneri yongaları, sonuç ızgarası (akıllı ya da metin modu) ve sonuç listesinde görüntüleyici gezinmesi
   await page.goto(base + '/app/#/search');
   await page.waitForSelector('.search-start .search-chip');

@@ -2,6 +2,7 @@
 import { api, previewUrl, videoUrl, originalUrl, thumbUrl } from './api.js';
 import { h, t, icon, toast, formatDateTime, formatBytes } from './util.js';
 import { store } from './store.js';
+import { fetchAssetPeople, peopleSection, faceBoxes } from './people.js';
 
 let current = null;
 
@@ -23,6 +24,10 @@ class Viewer {
   constructor(id, ctx) {
     this.ctx = ctx;
     this.infoOpen = window.innerWidth > 1100 && localStorage.getItem('om_info') === '1';
+    try { this.showFaces = localStorage.getItem('om_faces') === '1'; } catch { this.showFaces = false; }
+    this.people = null; // {id, data} — assets/{id}/people
+    this.boxes = null;
+    this.focusFace = null;
     this.prevFocus = document.activeElement;
     this.el = h('div', { class: 'viewer', role: 'dialog', 'aria-modal': 'true', tabindex: '-1' });
     this.stage = h('div', { class: 'v-stage' });
@@ -121,6 +126,8 @@ class Viewer {
 
   async show(id) {
     this.id = id;
+    this.people = null;
+    this.focusFace = null;
     const base = store.byId(id);
     const i = store.list.findIndex((a) => a.id === id);
     this.prevBtn.hidden = i <= 0;
@@ -133,6 +140,7 @@ class Viewer {
       this.renderBar();
       this.renderInfo();
       if (base && base.type !== r.asset.type) this.renderStage(r.asset);
+      this.loadPeople();
     } catch {
       toast(t('load_failed'));
     }
@@ -142,6 +150,8 @@ class Viewer {
   }
 
   renderStage(a) {
+    this.boxes?.destroy();
+    this.boxes = null;
     this.stage.replaceChildren();
     if (a.type === 'video') {
       const v = h('video', { src: videoUrl(a.id), controls: true, autoplay: true, playsinline: true, poster: previewUrl(a.id), preload: 'metadata' });
@@ -158,6 +168,7 @@ class Viewer {
     img.addEventListener('load', () => low.remove());
     img.addEventListener('dblclick', () => this.stage.classList.toggle('zoom'));
     this.stage.append(low, img);
+    this.drawFaces();
     if (a.live_pair_id) {
       const live = h('button', { class: 'v-live', 'aria-label': t('play_live') }, icon('live'), 'LIVE');
       const play = () => {
@@ -197,7 +208,7 @@ class Viewer {
   toggleInfo() {
     this.infoOpen = !this.infoOpen;
     localStorage.setItem('om_info', this.infoOpen ? '1' : '0');
-    if (this.asset) { this.renderBar(); this.renderInfo(); }
+    if (this.asset) { this.renderBar(); this.renderInfo(); this.loadPeople(); }
   }
 
   renderInfo() {
@@ -215,6 +226,8 @@ class Viewer {
       toast(t('saved'));
     });
     rows.push(desc);
+    // Kişiler (sahibin fotoğrafı): açıklamanın hemen altında, Apple/Google Fotoğraflar'daki gibi üstte.
+    if (own && !a.trashed_at) rows.push(this.peopleSlot = h('div', { class: 'i-row i-row-people' }, this.peopleBody()));
     row(t('taken'), formatDateTime(a), h('div', { class: 'muted small' }, t('date_source_' + a.date_source)));
     row(t('file'), a.filename, h('div', { class: 'muted small' }, [a.width && a.height ? `${a.width} × ${a.height}` : null, formatBytes(a.size)].filter(Boolean).join('  ·  ')));
     if (a.camera_model || a.camera_make) row(t('camera'), [a.camera_make, a.camera_model].filter(Boolean).join(' '), a.lens ? h('div', { class: 'muted small' }, a.lens) : null);
@@ -224,10 +237,74 @@ class Viewer {
     } else {
       row(t('location'), h('span', { class: 'muted' }, t('no_location')));
     }
-    if (a.people?.length) row(t('people'), a.people.join(', '));
+    if (!(own && !a.trashed_at) && a.people?.length) row(t('people'), a.people.join(', '));
     if (a.albums?.length) row(t('in_albums'), ...a.albums.map((al) => h('a', { class: 'chip', href: `#/album/${al.id}` }, al.title)));
     if (a.owner_name) row(t('owner'), a.owner_name);
     this.info.replaceChildren(h('h2', {}, t('details')), ...rows);
+  }
+
+  /* ------------------------------------------------ Kişiler ve yüzler */
+
+  /** Sahibin fotoğrafında kişiler/yüzler (bilgi paneli açıksa ya da yüz kutuları gösteriliyorsa). */
+  async loadPeople(force = false) {
+    const a = this.asset;
+    if (!a || a.access !== 'own' || a.trashed_at) return;
+    if (!this.infoOpen && !(this.showFaces && a.type === 'photo')) return;
+    if (this.people?.id === a.id && !force) return;
+    const id = a.id;
+    try {
+      const data = await fetchAssetPeople(id);
+      if (this.id !== id) return;
+      this.setPeople(data);
+    } catch {
+      if (this.id === id && this.peopleSlot) this.peopleSlot.replaceChildren(h('div', { class: 'muted small' }, t('load_failed')));
+    }
+  }
+
+  setPeople(data) {
+    this.people = { id: this.asset.id, data };
+    this.asset.people = (data.people || []).filter((p) => p.name).map((p) => p.name);
+    if (this.peopleSlot?.isConnected) this.peopleSlot.replaceChildren(this.peopleBody());
+    this.drawFaces();
+    this.ctx.onPeopleChanged?.(this.asset.id, data);
+  }
+
+  peopleBody() {
+    if (this.people?.id !== this.asset?.id) return h('div', { class: 'i-people-loading' }, h('span', { class: 'spinner' }));
+    const sec = peopleSection(this.people.data, {
+      assetId: this.asset.id,
+      showFaces: this.showFaces,
+      focusFaceId: this.focusFace,
+      onData: (d) => this.setPeople(d),
+      onToggleFaces: () => this.toggleFaces(),
+      onHover: (fid) => this.boxes?.highlight(fid),
+    });
+    this.focusFace = null;
+    return sec;
+  }
+
+  toggleFaces() {
+    this.showFaces = !this.showFaces;
+    try { localStorage.setItem('om_faces', this.showFaces ? '1' : '0'); } catch { /* yok say */ }
+    if (this.peopleSlot?.isConnected) this.peopleSlot.replaceChildren(this.peopleBody());
+    this.drawFaces();
+  }
+
+  drawFaces() {
+    this.boxes?.destroy();
+    this.boxes = null;
+    const img = this.stage.querySelector('.v-img');
+    const data = this.people?.id === this.id ? this.people.data : null;
+    if (!this.showFaces || !img || !data?.faces?.length) return;
+    this.boxes = faceBoxes(img, data, {
+      onPick: (f) => {
+        if (f.person_id && f.person_name) { location.hash = `#/person/${f.person_id}`; return; }
+        this.focusFace = f.id;
+        if (!this.infoOpen) this.toggleInfo();
+        else if (this.peopleSlot?.isConnected) this.peopleSlot.replaceChildren(this.peopleBody());
+      },
+    });
+    img.after(this.boxes.el);
   }
 
   async toggleFav() {

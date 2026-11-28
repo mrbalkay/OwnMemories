@@ -42,7 +42,7 @@ dbtest('test_import_counts_and_results', function () {
     assert_eq(1, (int) $a1['is_favorite']);
     assert_eq('38.420000', (string) $a1['latitude']);
     assert_eq('takeout', $a1['source']);
-    assert_eq(['Ayşe'], db()->query("SELECT name FROM asset_people WHERE asset_id = '{$a1['id']}'")->fetchAll(PDO::FETCH_COLUMN));
+    assert_eq(['Ayşe'], db()->query("SELECT p.name FROM asset_person ap JOIN people p ON p.id = ap.person_id WHERE ap.asset_id = '{$a1['id']}' AND ap.source = 'takeout' AND p.user_id = $u")->fetchAll(PDO::FETCH_COLUMN));
     $a3 = db_row('SELECT * FROM assets WHERE id = ?', [tk_result($id, 'IMG_3.jpg')['asset_id']]);
     assert_eq('Üçüncü', $a3['description']);
     assert_eq('no_metadata', tk_result($id, 'nometa.jpg')['result']);

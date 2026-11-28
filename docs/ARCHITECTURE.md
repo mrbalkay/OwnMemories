@@ -49,6 +49,7 @@ tests/                php tests/run.php
 | `blobs/aa/bb/<sha1>.<uzantı>` | Orijinaller. İçerik özetine göre **tek kopya** (`blobs.ref_count`); asla değiştirilmez |
 | `derived/thumb/<id[0:2]>/<asset id>.webp\|jpg` | 360 px küçük resim |
 | `derived/preview/<id[0:2]>/<asset id>.webp\|jpg` | 2048 px önizleme |
+| `derived/face/<yüz id[0:2]>/<yüz id>.jpg` | 256 px kare yüz kırpması (önizlemeden, ilk istekte; asset kalıcı silinince silinir) |
 | `uploads/<upload id>.part` | Yarım kalan yüklemeler (48 saat) |
 | `import/` | Takeout zip'leri için varsayılan klasör |
 | `imports/<id>/index.json` | İçe aktarma sırasında giriş indeksi |
@@ -61,7 +62,12 @@ tests/                php tests/run.php
 - `blobs` — sha1 PK, size, mime, ext, path, ref_count
 - `assets` — id (UUID), user_id, blob_sha1 (user_id ile unique), type (`photo`/`video`), original_filename, mime, size, width/height (**ekranda görünen**, yön uygulanmış), duration_ms, taken_at (UTC), taken_tz_offset (dk), date_source (`takeout`/`exif`/`filename`/`file`/`user`), latitude/longitude/altitude, camera_make/model, lens, description, is_favorite, is_archived, shared_from_others, trashed_at, source (`takeout`/`ios`/`web`), source_ref (iOS localIdentifier veya Takeout yolu), live_pair_id, edited_of_id, thumb_state (`pending`/`ready`/`placeholder`/`failed`), version
 - `deleted_checksums` — kalıcı silinenlerin SHA-1'i: tekrar içe aktarılmaz/yüklenmez
-- `albums` (source `takeout`/`user`), `album_assets`, `album_members` (role `viewer`/`contributor`), `asset_people`
+- `albums` (source `takeout`/`user`), `album_assets`, `album_members` (role `viewer`/`contributor`), `asset_people` (eski Takeout adları; 006'dan beri okunmaz/yazılmaz)
+- `people` — id, user_id, name (NULL = adlandırılmamış yüz kümesi), cover_face_id, hidden, created_at, updated_at. Adlar kullanıcı başına tekildir (kodla; karşılaştırma `utf8mb4_unicode_ci`)
+- `asset_person` — (asset_id, person_id) PK, source `manual`/`takeout`/`face`: "bu fotoğrafta kim var"ın tek kaynağı. Yüz ataması `face` satırı açar (manual/takeout varsa dokunmaz); kişinin o fotoğrafta yüzü kalmazsa `face` satırı silinir. Elle etiketleme mevcut satırı `manual` yapar
+- `faces` — id, asset_id, user_id, person_id, rejected_person_id (kullanıcının "bu o değil" dediği kişi; kümeleme tekrar atamaz), x1/y1/x2/y2 (0..1, ekranda görünen yönlendirilmiş görüntüye göre), score, embedding (BLOB, float32 LE, 512, L2-normalize), model, assigned_by (`auto`/`user`; `user` olanları kümeleme taşımaz). ownmemories-ml yazar ve kümeler
+- `face_scans` — asset_id PK, user_id, model, faces (0 dahil), scanned_at: taranan asset'ler
+- Kişiler temizliği: asset kalıcı silinince yüzleri, taramaları, etiketleri ve yüz kırpmaları silinir; satırı ve yüzü kalmamış **adsız** kümeler silinir, adlı kişiler fotoğrafsız da kalır (listede görünmez). Migrasyon 006 `asset_people`'ı kullanıcı+ad başına bir kişiye ve `takeout` satırlarına taşır
 - `jobs` — iş kuyruğu (`render`, `import_step`); 3 deneme, sonra `failed`
 - `imports`, `import_items` — her içe aktarma ve her medya dosyasının sonucu (`imported`/`duplicate`/`no_metadata`/`skipped_trashed`/`failed`)
 - `uploads`, `site_settings`, `rate_limits`, `audit_log`
@@ -115,7 +121,7 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | POST | `auth/login` | `{email,password,device_name,platform}` | `{token,user}` (10 deneme/15 dk) |
 | POST | `auth/logout` | – | `{ok}` (token silinir / web oturumu kapanır) |
 | GET | `me` | – | `{user}` |
-| GET | `assets` | `limit≤500 (200)`, `before` (ISO), `before_id`, `favorite=1`, `archived=1`, `trashed=1`, `album=<id>`, `q`, `from`, `to`, `has_location=1`, `type=photo\|video` | `{assets:[…], next:{before,before_id}\|null}` — `taken_at DESC, id DESC`, anahtar kümesi sayfalama |
+| GET | `assets` | `limit≤500 (200)`, `before` (ISO), `before_id`, `favorite=1`, `archived=1`, `trashed=1`, `album=<id>`, `person=<id>` (kendi kişisi; değilse 404), `q` (dosya adı/açıklama/kamera/kişi adı), `from`, `to`, `has_location=1`, `type=photo\|video` | `{assets:[…], next:{before,before_id}\|null}` — `taken_at DESC, id DESC`, anahtar kümesi sayfalama |
 | GET | `assets/summary` | aynı süzgeçler | `{months:[{month:"2019-07",count}]}` (ay, yerel çekim gününe göre) |
 | GET | `assets/days` | süzgeçler + `month=YYYY-MM` (zorunlu; hatalıysa 422) | `{month, days:[{day:"2019-07-14",count,cover_asset_id,before}]}` — yerel güne göre (`taken_at + taken_tz_offset`, yoksa UTC; gün başlıklarıyla aynı), yeni gün önce; `before` o güne atlamak için `assets?before=` imleci (günün en yeni `taken_at`'i + 1 sn). Web takvimi kullanır. |
 | GET | `assets/map` | süzgeçler + `bbox=minLng,minLat,maxLng,maxLat` | `{points:[{id,lat,lng}]}` (≤ 5000) |
@@ -140,8 +146,27 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | GET | `assets/random?count=12` | – | `{assets:[…]}` — son 30 gün dışındaki rastgele fotoğraflar (widget) |
 | GET | `memories?date=YYYY-MM-DD` | (varsayılan: kullanıcının bugünü) | `{date, memories:[{id,kind,title,years_ago,date,count,cover_asset_id,asset_ids,assets}]}` — `kind`: `on_this_day` / `this_week` (bugün yoksa ±3 gün) / `favorites` |
 | POST | `devices/report` | `{device_id,name,model,os_version,app_version,pending,uploaded_total,last_backup_at,last_error}` | `{ok,server_time}` — iOS yedekleme durumu (Yönetim → Genel bakış) |
-| GET | `search` | `q` (≤ 200 karakter), `from`, `to` (ISO), `favorite=1`, `sort=relevance\|date` (varsayılan relevance), `limit≤200 (60)`, `offset` | `{mode:"smart"\|"text", assets:[…], next_offset:int\|null, total, status:{indexed,total,pending,model,ready}\|null}` — akıllı mod: ML hizmetinden (config `ml.url`, varsayılan `http://127.0.0.1:8765`, zaman aşımı `ml.timeout` 3 sn, isteğe bağlı `ml.min_score`) en fazla 500 sıralı kimlik alınır; zaman çizelgesi görünürlük kurallarıyla (yalnız kendi kütüphanesi, çöp/arşiv hariç, tek kare kuralı) süzülür, sıra korunur. Dosya adı/açıklama/kamera/kişi eşleşmeleri öne alınır (hibrit). Hizmet yok, hata ya da sonuç yoksa `assets?q=` ile aynı metin araması (`mode:"text"`, tarihe göre); hizmet yanıt verip ilgi eşiğini geçen olmadığında metin araması da boşsa `mode:"smart"`, boş liste. Boş `q` → boş liste. `status` yalnız ilk sayfada (offset=0) |
+| GET | `search` | `q` (≤ 200 karakter), `from`, `to` (ISO), `favorite=1`, `sort=relevance\|date` (varsayılan relevance), `limit≤200 (60)`, `offset` | `{mode:"smart"\|"text", assets:[…], next_offset:int\|null, total, status:{indexed,total,pending,model,ready}\|null}` — akıllı mod: ML hizmetinden (config `ml.url`, varsayılan `http://127.0.0.1:8765`, zaman aşımı `ml.timeout` 3 sn, isteğe bağlı `ml.min_score`) en fazla 500 sıralı kimlik alınır; zaman çizelgesi görünürlük kurallarıyla (yalnız kendi kütüphanesi, çöp/arşiv hariç, tek kare kuralı) süzülür, sıra korunur. Dosya adı/açıklama/kamera/kişi eşleşmeleri öne alınır (hibrit). Sorguda adlandırılmış (gizli olmayan) bir kişinin adı tam sözcük olarak geçerse (`Ali plajda`; büyük/küçük harf ve i/ı duyarsız, en uzun ad) o kişinin fotoğrafları en başa gelir, kendi aralarında kalan sözcüklerle (`plajda`) akıllı sırada; diğer sonuçlar ardından korunur (ör. `Deniz` adlı kişi varken `deniz kenarı` aramasında manzaralar kaybolmaz). Hizmet yok, hata ya da sonuç yoksa `assets?q=` ile aynı metin araması (`mode:"text"`, tarihe göre); hizmet yanıt verip ilgi eşiğini geçen olmadığında metin araması da boşsa `mode:"smart"`, boş liste. Boş `q` → boş liste. `status` yalnız ilk sayfada (offset=0) |
 | GET | `search/status` | – | ML `/status` vekili: `{available:true,indexed,total,pending,model,ready}` ya da `{available:false}` |
+| GET | `people?include_hidden=0\|1` | – | `{people:[Person]}` — önce adlılar (fotoğraf sayısına göre azalan), sonra en az 2 fotoğraflı adsız kümeler; gizliler yalnız `include_hidden=1` ile; fotoğrafsız adlılar görünmez |
+| GET | `people/{id}` | – | `{person}` |
+| PATCH | `people/{id}` | `{name?:string\|null, hidden?:bool, cover_face_id?:int\|null}` | `{person}`; ad başka kişinin adıysa 409 `name_exists` + `person_id` ve `person` (istemci birleştirmeyi önerir); kapak bu kişinin yüzü değilse 422 |
+| POST | `people/{id}/merge` | `{into:id}` | `{person}` (hedef) — yüzler, etiketler (`manual` > `takeout` > `face`) ve retler hedefe taşınır, kaynak silinir; hedef adsızsa kaynağın adını alır |
+| DELETE | `people/{id}` | – | `{ok}` — etiketleri silinir, yüzleri atanmamış + reddedilmiş olur |
+| GET | `people/status` | – | ML `/faces/status` vekili: `{available:true,scanned,total,faces,people,ready}` ya da `{available:false}` |
+| GET | `assets/{id}/people` | – | `{people:[{id,name\|null,source}], faces:[{id,x1,y1,x2,y2,person_id\|null,person_name\|null}]}` (yalnız sahibi; kişiler adlılar önce, yüzler soldan sağa) |
+| POST | `assets/{id}/people` | `{person_id?}` veya `{name?}` (yoksa oluşturulur) | aynı yük — `manual` etiket |
+| DELETE | `assets/{id}/people/{personId}` | – | aynı yük — etiket silinir; kişinin bu fotoğraftaki yüzleri ayrılır ve reddedilir |
+| POST | `assets/people` | `{ids:[…≤500], person_id? \| name?}` | `{count, person}` — toplu elle etiket (yalnız kendi asset'leri sayılır; hiçbiri kendisinin değilse 404 ve kişi oluşturulmaz) |
+| PATCH | `faces/{id}` | `{person_id:int}` · `{name:string}` · `{person_id:null}` | asset'in kişi yükü — atama `assigned_by='user'` (o kişiye ret varsa kalkar); `null` ayırır ve `rejected_person_id` yapar |
+| GET | `faces/{id}/thumb` | – | 256×256 JPEG yüz kırpması (kutunun uzun kenarı + her yana %35 dolgu, görüntü içinde kalır), `private, max-age=31536000, immutable`; önizleme yoksa 404 |
+
+**Person nesnesi:** `{"id":12,"name":"Ayşe"|null,"count":42,"cover_face_id":881|null,"cover_asset_id":"uuid"|null,"hidden":false}` —
+`count` çöpte olmayan fotoğraflar; kapak: seçilmiş `cover_face_id` (hâlâ bu kişinin yüzüyse), yoksa en yüksek puanlı yüz, yüz yoksa
+en yeni fotoğraf (`cover_face_id` null). `GET assets/{id}`'deki `people[]` geriye uyumluluk için adlı kişilerin adlarıdır.
+Yeniden adlandırma, birleştirme, yüz atama/ayırma, kişi silme ve yüzü olan etiket çıkarma sonrası PHP ML'e
+`POST /faces/recluster {user_id}` gönderir (ateşle-unut, `ml.recluster_timeout` 0.5 sn). Tüm kişi/yüz uçları
+yalnız kendi verisine açıktır; başkasının kişi, yüz veya asset kimliği 404.
 
 Yetki: asset uçları yalnız sahibine; paylaşılan albüm üyesi albümdeki asset'leri görüntüler/indirir (salt okunur).
 Katkıda bulunan yalnız kendi asset'lerini ekler/çıkarır; sahip herkesinkini çıkarır. Yükleme kaynağı Bearer ile `ios`, oturumla `web`.
@@ -240,20 +265,91 @@ birebir aynı ön işleme korundu.
 | GET | `/health` | – | `{ok:true, model, dim:768, indexed, pending, ready, indexer[, error]}` — `ready`: metin modeli yüklü ve DB erişilebilir; `indexed`/`pending` tüm kullanıcılar (5 sn önbellek) |
 | POST | `/search` | `{user_id, text, limit≤500 (100), min_score:float\|null}` | `{results:[{id, score}], model, took_ms}` — skora göre azalan. Model yüklenmeden 503, hatalı istek 400 |
 | GET | `/status?user_id=N` | – | `{indexed, total, pending, model, ready}` — `total`: kullanıcının `thumb_state='ready'` asset sayısı; `ready`: model hazır ve en az bir vektör var |
+| GET | `/faces/status?user_id=N` | – | `{available, model, ready, scanned, total, faces, people[, error]}` — `total`: `thumb_state='ready'`, çöpte olmayan, canlı fotoğrafın video yarısı olmayan asset; `scanned`: bunlardan `face_scans` satırı olan (bu yüz modeliyle); `people`: gizli olmayan kişiler; `available`/`ready`: yüz modeli yüklü (ve tablolar var). 3 sn önbellek |
+| POST | `/faces/recluster` | `{user_id}` | `{queued:true, available:true}` — kullanıcı için tam kümeleme geçişini kuyruğa alır (dizinleyici iş parçacığında, birkaç saniye içinde). Yüz modeli yoksa `{queued:false, available:false}` |
+
+`/health` ayrıca `faces: bool` (yüz modeli yüklü mü) döndürür.
+
+### Yüz tanıma (Kişiler)
+
+Aynı süreç, aynı arka plan döngüsünde (`service.py` `index_loop`) yüz algılama + tanıma + kümeleme yapar
+(`faces.py`, `clustering.py`). Model: Immich'in `immich-app/buffalo_l` ONNX paketi (InsightFace SCRFD
+`det_10g` algılayıcı + ArcFace `w600k_r50` tanıyıcı, `<OM_ML_MODEL_DIR>/buffalo_l/{detection,recognition}/model.onnx`,
+~190 MB). **Lisans: InsightFace buffalo_l ağırlıkları yalnızca ticari olmayan araştırma/kişisel kullanım
+içindir** (kod Apache-2.0/MIT, ağırlıklar değil); OwnMemories kişisel, kendi sunucunuzda çalışan bir uygulama
+olarak bu koşula uyar, ticari kullanımda `OM_FACE_MODEL=0` yapın.
+
+- **Ön işleme Immich ile birebir** (`immich_ml/models/facial_recognition/{detection,recognition,_ops}.py`): kaynak
+  türetilmiş önizleme (yoksa video kapağı, yoksa küçük resim; zaten EXIF'e göre döndürülmüş), RGB; uzun kenar 640
+  olacak şekilde ölçeklenip 640×640 tuvalin sol üstüne (letterbox), `(x−127.5)/128`; SCRFD çözümü (adım 8/16/32,
+  hücre başına 2 çapa, kutu = merkez ∓ uzaklık·adım, 5 nokta = merkez + ofset·adım), skor ≥ `OM_FACE_MIN_SCORE`
+  (0.7), NMS IoU 0.4. Her yüz 5 noktadan standart ArcFace şablonuna Umeyama benzerlik dönüşümüyle 112×112
+  hizalanır, `(x−127.5)/127.5`, 512 boyutlu vektör L2-normalize edilir. OpenCV yerine numpy + Pillow: NMS açgözlü
+  numpy, `warpAffine` PIL affine ile (OpenCV piksel merkezi kuralına göre düzeltilmiş). Immich'in cv2 tabanlı
+  koduyla karşılaştırma (LFW, 40 görüntü): kutular ≤ 1 px, hizalanmış kesit ortalama 0.49/255 fark, vektör kosinüsü
+  ≥ 0.998 (ortalama 0.9997). Tek fark: letterbox ölçeklemesi PIL bilinear (kenar yumuşatmalı), cv2 `INTER_LINEAR` değil.
+- En kısa kenarı `OM_FACE_MIN_SIZE` (32 px, kaynak görüntüde) altındaki yüzler atılır (kalabalıktaki minik yüzler).
+- Yazım (tek işlem): `faces` satırları (kutu 0..1, görüntülenen görüntüye göre) + `face_scans` (yüz yoksa da,
+  `faces=0`). Varlık arada silinmişse hiçbir şey yazılmaz (`INSERT … SELECT … FROM assets`). Dosya yoksa ya da
+  okunamıyorsa üstel geri çekilmeyle ertelenir (CLIP gibi). Çöpteki varlıklar ve canlı fotoğrafların video yarısı
+  taranmaz.
+- **Kümeleme** (Immich `recognizeFaces`, `person.service.ts`): kullanıcı başına bellekte tutulan vektörlerle
+  kosinüs uzaklığı. Her atanmamış yüz için eşleşmeler = uzaklığı < `OM_FACE_MAX_DISTANCE` (0.5) en yakın
+  `OM_FACE_MIN_FACES` (3) yüz (kendisi dahil); yalnız kendisiyle eşleşen atlanır; eşleşme sayısı ≥ min_faces
+  ise "çekirdek", değilse geçişin sonuna ertelenir. Kişi = eşleşmelerdeki kişilerin en sık olanı (eşitlikte en
+  yakın), yoksa eşik içindeki en yakın kişili yüz; yüzün `rejected_person_id`'si asla seçilmez. Kişi yoksa ve yüz
+  çekirdekse ve eşleşmelerin ≥ min_faces'i atanmamışsa adsız kişi (`people.name` NULL, kapak = en yüksek skorlu
+  yüz) oluşturulup hepsi atanır. Atama koşulludur (`UPDATE faces JOIN people … WHERE person_id IS NULL AND NOT
+  rejected_person_id <=> p.id`): PHP aynı anda birleştirme/silme yaparsa yarış zararsızdır. Atanan yüz için
+  `asset_person`'a `INSERT IGNORE … source='face'` (elle/takeout satırı varsa dokunulmaz). `assigned_by='user'`
+  ya da zaten kişisi olan yüzler hiç taşınmaz. Geçiş sonunda kapağı olmayan / kapağı artık kendisine ait olmayan
+  kişilere en iyi yüzleri kapak yapılır.
+- Ne zaman: her yüz toplu işinden sonra **artımlı** (yeni yüzler + eşik içindeki atanmamış komşuları); tarama
+  kuyruğu boşalınca yeni yüzü olan kullanıcılar ve açılışta bir kez atanmamış yüzü olan herkes için **tam geçiş**;
+  ayrıca `POST /faces/recluster` (PHP, adlandırma/birleştirme sonrası). Tam geçiş büyük kütüphanede saniyeler
+  sürer (50 bin yüz, 20 bin atanmamış: ~5 sn), bu yüzden istek kaynaklı tam geçiş kullanıcı başına en çok 30 sn'de
+  bir (arada gelen istekler birleşir), kuyruk boşalması kaynaklı en çok 30 dk'da bir. Immich'in "force" yeniden
+  kümelemesi (tüm otomatik atamaları sıfırlama) yok.
+- **CLIP'i aç bırakmamak:** her turda bir CLIP toplu işi (16) + `OM_FACE_BATCH` (4) görüntülük yüz işi; CLIP
+  kuyruğu boşsa yüz işi 16'ya çıkar. Aynı düşük öncelikli iş parçacığı (nice +5, systemd Nice=10), aynı ONNX iş
+  parçacığı sayısı; ayrı iş parçacığı yok (CPU aşırı yüklenmez). Ölçüm (4 CPU): SigLIP2 141 ms/görüntü, yüz
+  algılama 114 ms/görüntü + tanıma ~100 ms/yüz → dizinleme sırasında CLIP hızı 7.1 → ~5.9 görüntü/sn.
+- Model ya da tablolar (migration 006) yoksa yüz kısmı sessizce kapalıdır (tablolar 5 dk'da bir yeniden
+  denetlenir); CLIP etkilenmez. CLIP modeli yüklenemezse yüz kısmı yine çalışır.
+
+**Ölçümler** (`ml/tests/face_eval.py`, LFW, 4 CPU, Python 3.13, onnxruntime 1.25):
+
+| Ölçüm | Sonuç |
+|---|---|
+| Aynı kişi çiftleri (40 kişi × 8 foto, 1113 çift) | uzaklık < 0.5: %93.4 (medyan 0.31, < 0.6: %98.7) |
+| Farklı kişi çiftleri (49 608) | uzaklık > 0.5: %100 (en küçük 0.70, medyan 0.99) |
+| Kümeleme, 10 kişi × 4–8 foto (65 yüz) | 10 küme, saflık %100, 64 kimlik yüzünden 63'ü kendi kümesinde (1 atanmamış), bölünme yok |
+| Kümeleme, 30 kişi × 4–15 foto + 150 çeldirici kişi (1–2 foto) + 49 arka plan yüzü (515 yüz), rastgele sırayla artımlı geliş | 30 küme, saflık %100, kimlik yüzlerinin %99.5'i kendi kümesinde (2 atanmamış), bölünme yok, çeldirici/arka plan yüzlerinden hiçbiri kümelenmedi (min_faces 2'de çeldiricilerin 2 fotoğraflık çiftleri de — doğru olarak — küme olur). Tek tam geçişle aynı sonuç |
+| Gecikme | 1 yüzlü görüntü ~0.27–0.3 sn; yüzsüz ~0.11 sn (algılama); her ek yüz ~0.08–0.1 sn (25 yüzlü 1440×960: 2.1 sn, algılama 0.16 sn) |
+| RAM | model yükü +367 MB RSS, çıkarım sonrası +377 MB, tepe ~560 MB (süreç toplamı, CLIP'siz) |
+| Kümeleme süresi | 515 yüz tam geçiş 3–24 ms (numpy, bellekte; benzerlik matrisi ~32 MB'lık parçalarla) |
+
+Not: LFW yüzleri 250×250 kırpılmış ünlü fotoğraflarıdır; gerçek aile albümlerinde (yaş farkı, profil, düşük ışık)
+aynı kişinin bazı yüzleri ayrı kümelere düşebilir — Kişiler sayfasındaki birleştirme bunun için.
 
 ### Yapılandırma (`/etc/ownmemories/ml.env`, 0640 root:www-data)
 
 `server/install-ml.sh` yazar: `OM_DB_HOST/PORT/NAME/USER/PASS`, `OM_STORAGE` (web/config/config.php'den),
 `OM_ML_MODEL`, `OM_ML_MODEL_DIR` (`/var/lib/ownmemories/models`), `OM_ML_PORT` (8765), `OM_ML_THREADS`
 (min(4, CPU)). İsteğe bağlı: `OM_ML_BATCH` (16), `OM_ML_IDLE` (20), `OM_ML_TEXT_QUANT` (1), `OM_ML_INDEX` (1),
-`OM_ML_LANG` (tr), `OM_ML_MIN_Z` / `OM_ML_MIN_SCORE` (varsayılan ilgi eşiği, yukarıda). Kurulum betiği
-kendi yazmadığı `OM_ML_*` satırlarını korur. DB/depolama değişkenleri yoksa servis `OM_CONFIG_PHP`'yi (`php -r`) okur. `localhost`
+`OM_ML_LANG` (tr), `OM_ML_MIN_Z` / `OM_ML_MIN_SCORE` (varsayılan ilgi eşiği, yukarıda). Yüz tanıma:
+`OM_FACE_MODEL` (`immich-app/buffalo_l`; `0` = kapalı, kurulum ~2.6 GB'tan az RAM'de `0` yazar),
+`OM_FACE_MIN_SCORE` (0.7), `OM_FACE_MIN_SIZE` (32), `OM_FACE_MAX_DISTANCE` (0.5), `OM_FACE_MIN_FACES` (3),
+`OM_FACE_BATCH` (4). Kurulum betiği kendi yazmadığı `OM_ML_*` / `OM_FACE_*` satırlarını korur. DB/depolama değişkenleri yoksa servis `OM_CONFIG_PHP`'yi (`php -r`) okur. `localhost`
 verilirse PHP gibi MySQL Unix soketi kullanılır.
 
 ### Dosyalar
 
 `ml/ownmemories_ml/`: `service.py` (HTTP + dizinleyici + bellek içi dizin), `model.py` (ön işleme, ONNX),
+`faces.py` (yüz algılama/hizalama/tanıma), `clustering.py` (yüz kümeleme),
 `download.py` (HF indirici: sürdürme, boyut + sha256), `quantize.py`, `config.py`, `__main__.py`
 (`serve` / `download` / `quantize` / `embed-text`). Testler: `ml/tests/eval_samples.py` (kalite, gecikme, RAM),
 `ml/tests/test_service.py` (geçici DB ile uçtan uca), `ml/tests/test_cutoff.py` (ilgi eşiği, DB/model gerekmez),
-`ml/tests/xm3600_bench.py` (Türkçe kalite karşılaştırması, yukarıda).
+`ml/tests/xm3600_bench.py` (Türkçe kalite karşılaştırması, yukarıda), `ml/tests/test_faces.py` (yüz tanıma,
+geçici DB + LFW ile uçtan uca), `ml/tests/face_eval.py` (LFW uzaklık/kümeleme/gecikme/RAM ölçümü),
+`ml/tests/test_face_ops.py` (NMS, Umeyama, hizalama, kümeleme birim testleri; model/DB gerekmez).

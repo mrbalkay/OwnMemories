@@ -1,18 +1,20 @@
-# ownmemories-ml — akıllı arama servisi
+# ownmemories-ml — akıllı arama + yüz tanıma servisi
 
 Hazırlayan: Mehmet BALKAY
 
 OwnMemories için doğal dil ile fotoğraf arama ("kumsalda köpek", "karlı dağ"). Immich'in ONNX'e aktardığı
 CLIP/SigLIP modelleriyle görüntü vektörlerini üretir (`asset_embeddings` tablosu) ve sorgu metnini aynı uzaya
 kodlayıp kullanıcının fotoğraflarını benzerliğe göre sıralar. Python 3.10+, web çatısı yok (stdlib
-`ThreadingHTTPServer`), yalnızca `127.0.0.1:8765` dinler. Ayrıntılı sözleşme: `docs/ARCHITECTURE.md` §7,
+`ThreadingHTTPServer`), yalnızca `127.0.0.1:8765` dinler. Aynı süreç Kişiler için yüz algılama + tanıma +
+kümeleme yapar (Immich `buffalo_l` ONNX; `faces.py`, `clustering.py`; `faces`/`face_scans`/`people`/`asset_person`
+tabloları). buffalo_l ağırlıkları yalnızca ticari olmayan kullanım içindir. Ayrıntılı sözleşme: `docs/ARCHITECTURE.md` §7,
 kurulum: `docs/INSTALL.md` G.
 
 ## Üretim
 
 `sudo bash server/install-ml.sh` (update.sh/install-ubuntu.sh kendiliğinden çağırır): sanal ortam
 `/opt/ownmemories-ml`, modeller `/var/lib/ownmemories/models/<model>`, ayarlar `/etc/ownmemories/ml.env`,
-systemd birimi `ownmemories-ml.service` (www-data, Nice=10, MemoryHigh=2500M).
+systemd birimi `ownmemories-ml.service` (www-data, Nice=10, MemoryHigh=3000M).
 
 ## Geliştirme
 
@@ -22,6 +24,7 @@ python3 -m venv /tmp/mlvenv
 cd ml
 /tmp/mlvenv/bin/python -m ownmemories_ml download --dest /tmp/models            # ~1.5 GB
 /tmp/mlvenv/bin/python -m ownmemories_ml quantize --model-dir /tmp/models/ViT-B-16-SigLIP2__webli
+/tmp/mlvenv/bin/python -m ownmemories_ml download --model immich-app/buffalo_l --dest /tmp/models  # yüz, ~190 MB
 OM_DB_HOST=127.0.0.1 OM_DB_NAME=om_dev OM_DB_USER=om OM_DB_PASS=om OM_STORAGE=/srv/omdevstore \
 OM_ML_MODEL_DIR=/tmp/models OM_ML_THREADS=4 /tmp/mlvenv/bin/python -m ownmemories_ml serve
 ```
@@ -30,6 +33,8 @@ OM_ML_MODEL_DIR=/tmp/models OM_ML_THREADS=4 /tmp/mlvenv/bin/python -m ownmemorie
 curl -s 127.0.0.1:8765/health
 curl -s 127.0.0.1:8765/search -d '{"user_id":1,"text":"kumsalda köpek","limit":20}'
 curl -s '127.0.0.1:8765/status?user_id=1'
+curl -s '127.0.0.1:8765/faces/status?user_id=1'
+curl -s 127.0.0.1:8765/faces/recluster -d '{"user_id":1}'
 ```
 
 ## Testler
@@ -45,6 +50,14 @@ python -I ml/tests/test_service.py --model-dir /tmp/models/ViT-B-16-SigLIP2__web
 python -I ml/tests/test_cutoff.py
 # Türkçe kalite karşılaştırması: Crossmodal-3600 (indirme komutları dosyanın başında)
 python -I ml/tests/xm3600_bench.py --data <xm3600 klasörü> --model-dir /tmp/models/ViT-B-16-SigLIP2__webli
+# Yüz: birim testleri (NMS, Umeyama, hizalama, kümeleme; model/DB gerekmez)
+python -I ml/tests/test_face_ops.py
+# Yüz: uçtan uca (geçici DB om_facetest_<pid>, LFW görselleri, CLIP modeli olmadan)
+#   LFW: curl -L -o lfw.tgz https://ndownloader.figshare.com/files/5976018 && tar xzf lfw.tgz
+OM_TEST_DB_HOST=127.0.0.1 OM_TEST_DB_USER=om OM_TEST_DB_PASS=om \
+python -I ml/tests/test_faces.py --face-model-dir /tmp/models/buffalo_l --lfw <lfw>
+# Yüz: LFW ölçümü (uzaklıklar, kümeleme saflığı, gecikme, RAM; --out ile çizilmiş kutular)
+python -I ml/tests/face_eval.py --model-dir /tmp/models/buffalo_l --lfw <lfw> --out /tmp/face-eval
 ```
 
 Sonuç sayısı: istekte `min_score` yoksa servis yalnızca sorguyla belirgin şekilde eşleşenleri döner

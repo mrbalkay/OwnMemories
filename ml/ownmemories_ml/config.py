@@ -11,6 +11,10 @@ OM_ML_INDEX (1: dizinleyiciyi çalıştır), OM_ML_LANG (tr; yalnızca NLLB mode
 OM_CONFIG_PHP (DB/depolama değişkenleri yoksa okunacak config.php).
 Sonuç eşiği (istekte min_score yoksa; bkz. service.relevance_cut): OM_ML_MIN_Z (0 = kapalı),
 OM_ML_MIN_SCORE (bu puanın üstü her zaman tutulur); varsayılanlar modele göre, bkz. CUTOFF.
+Yüz tanıma (Kişiler; model yoksa kendiliğinden kapalı, CLIP etkilenmez):
+OM_FACE_MODEL (immich-app/buffalo_l; boş ya da "0" = kapalı), OM_FACE_MIN_SCORE (0.7, algılama eşiği),
+OM_FACE_MIN_SIZE (32 px, kaynak görüntüde en kısa kenar), OM_FACE_MAX_DISTANCE (0.5, kosinüs uzaklığı),
+OM_FACE_MIN_FACES (3, yeni kişi için gereken yüz), OM_FACE_BATCH (4, CLIP işi varken tur başına görüntü).
 """
 from __future__ import annotations
 
@@ -21,6 +25,7 @@ import subprocess
 from dataclasses import dataclass
 
 DEFAULT_MODEL = "immich-app/ViT-B-16-SigLIP2__webli"
+DEFAULT_FACE_MODEL = "immich-app/buffalo_l"
 DEFAULT_CONFIG_PHP = "/var/www/ownmemories/web/config/config.php"
 
 # Modele göre varsayılan ilgi eşiği (min_z, kesin-ilgili puan); Crossmodal-3600'ün 1000 görüntüsü ve
@@ -55,6 +60,12 @@ class Config:
     language: str = "tr"
     min_z: float = 2.0
     min_score: float | None = None  # "kesin ilgili" puan (OM_ML_MIN_SCORE), bkz. CUTOFF
+    face_model: str = DEFAULT_FACE_MODEL  # "" = yüz tanıma kapalı
+    face_min_score: float = 0.7
+    face_min_size: float = 32.0
+    face_max_distance: float = 0.5
+    face_min_faces: int = 3
+    face_batch: int = 4
 
     @property
     def model_name(self) -> str:
@@ -64,6 +75,15 @@ class Config:
     @property
     def model_dir(self) -> str:
         return os.path.join(self.model_root, self.model_name)
+
+    @property
+    def face_model_name(self) -> str:
+        """DB'deki faces.model / face_scans.model değeri (kısa ad); "" = kapalı."""
+        return model_short(self.face_model) if self.face_model else ""
+
+    @property
+    def face_model_dir(self) -> str:
+        return os.path.join(self.model_root, self.face_model_name) if self.face_model else ""
 
 
 def _php_config(path: str) -> dict:
@@ -112,4 +132,12 @@ def load(env: dict | None = None) -> Config:
     c.min_z = max(0.0, float(mz)) if mz not in (None, "") else dz
     ms = e.get("OM_ML_MIN_SCORE")
     c.min_score = float(ms) if ms not in (None, "") else ds
+    fm = e.get("OM_FACE_MODEL")
+    if fm is not None:
+        c.face_model = "" if fm.strip().lower() in ("", "0", "false", "no", "off") else fm.strip()
+    c.face_min_score = float(e.get("OM_FACE_MIN_SCORE") or c.face_min_score)
+    c.face_min_size = max(0.0, float(e.get("OM_FACE_MIN_SIZE") or c.face_min_size))
+    c.face_max_distance = float(e.get("OM_FACE_MAX_DISTANCE") or c.face_max_distance)
+    c.face_min_faces = max(1, int(e.get("OM_FACE_MIN_FACES") or c.face_min_faces))
+    c.face_batch = max(1, min(64, int(e.get("OM_FACE_BATCH") or c.face_batch)))
     return c

@@ -35,9 +35,9 @@ function ml_url(): string
 
 /**
  * ML hizmetine JSON isteği. Hata, zaman aşımı, 2xx dışı yanıt ya da bozuk JSON → null.
- * GET'te $payload sorgu dizesi olur.
+ * GET'te $payload sorgu dizesi olur. $timeout verilmezse config ml.timeout (3 sn).
  */
-function ml_request(string $method, string $path, array $payload = []): ?array
+function ml_request(string $method, string $path, array $payload = [], ?float $timeout = null): ?array
 {
     $fn = ml_client_override(null, false);
     if ($fn !== null) {
@@ -46,7 +46,7 @@ function ml_request(string $method, string $path, array $payload = []): ?array
     if (defined('OM_TESTING')) {
         return null; // testler asla gerçek ağa çıkmaz
     }
-    $timeout = (float) config('ml.timeout', 3.0);
+    $timeout ??= (float) config('ml.timeout', 3.0);
     $url = ml_url() . $path;
     $body = null;
     if ($method === 'GET') {
@@ -168,6 +168,24 @@ function api_search(array $user, array $q): array
     }
     $base = search_base_query($q);
     $ranked = ml_search($uid, $text, SEARCH_ML_LIMIT);
+    // Sorguda adlandırılmış bir kişinin adı geçiyorsa ("Ali plajda"): o kişinin fotoğrafları önce gelir, kendi
+    // aralarında kalan sözcüklerle akıllı sırada; diğer sonuçlar ardından korunur ("Deniz" adı "deniz kenarı"nı yutmasın).
+    $personFirst = [];
+    if ($ranked !== null && ($hit = search_person_in_query($uid, $text)) !== null) {
+        [$pw, $pa] = api_asset_filters($user, $base + ['person' => (string) $hit['id']]);
+        $prow = db_all("SELECT a.* FROM assets a WHERE $pw ORDER BY a.taken_at DESC, a.id DESC LIMIT " . SEARCH_ML_LIMIT, $pa);
+        $pById = array_column($prow, null, 'id');
+        $sub = $hit['rest'] !== '' ? (ml_search($uid, $hit['rest'], SEARCH_ML_LIMIT) ?? []) : [];
+        foreach ($sub as $row) {
+            if (isset($pById[$row['id']])) {
+                $personFirst[$row['id']] = $pById[$row['id']];
+            }
+        }
+        $personFirst += $pById;
+        if (!$ranked && $personFirst) {
+            $ranked = [['id' => array_key_first($personFirst), 'score' => 0.0]];
+        }
+    }
     if ($ranked) {
         [$where, $args] = api_asset_filters($user, $base);
         $ids = array_values(array_unique(array_column($ranked, 'id')));
@@ -185,6 +203,10 @@ function api_search(array $user, array $q): array
             $byId[$r['id']] ??= $r;
         }
         $order = [];
+        foreach ($personFirst as $id => $r) {
+            $byId[$id] ??= $r;
+            $order[$id] = true;
+        }
         foreach ($ids as $id) {
             if (isset($byId[$id], $textIds[$id])) {
                 $order[$id] = true;
@@ -220,6 +242,42 @@ function api_search(array $user, array $q): array
     // Hizmet yanıt verdi ama ilgi eşiğini geçen yok ve metin eşleşmesi de yok: "akıllı arama: sonuç yok".
     $mode = $ranked !== null && $total === 0 ? 'smart' : 'text';
     return api_ok(['mode' => $mode, 'assets' => array_map('asset_to_json', $rows), 'next_offset' => $next, 'total' => $total, 'status' => $status]);
+}
+
+/**
+ * Sorgudaki en uzun adlandırılmış kişi adını bulur (tam sözcük, büyük/küçük harf duyarsız; gizli kişiler dahil değil).
+ * ['id' => kişi, 'rest' => adın çıkarıldığı sorgu] ya da null. 006 kurulmadıysa null.
+ */
+function search_person_in_query(int $userId, string $text): ?array
+{
+    $low = search_fold($text);
+    if ($low === '') {
+        return null;
+    }
+    try {
+        $rows = db_all('SELECT id, name FROM people WHERE user_id = ? AND name IS NOT NULL AND hidden = 0', [$userId]);
+    } catch (PDOException $e) {
+        return null;
+    }
+    $best = null;
+    foreach ($rows as $r) {
+        $name = search_fold((string) $r['name']);
+        if ($name === '' || ($best !== null && mb_strlen($name) <= mb_strlen($best['name']))) {
+            continue;
+        }
+        if (preg_match('/(?<![\p{L}\p{N}])' . strtr(preg_quote($name, '/'), ['ı' => '[iı]', 'i' => '[iı]']) . '(?![\p{L}\p{N}])/u', $low, $m, PREG_OFFSET_CAPTURE)) {
+            $rest = substr($low, 0, $m[0][1]) . ' ' . substr($low, $m[0][1] + strlen($m[0][0]));
+            $best = ['id' => (int) $r['id'], 'name' => $name, 'rest' => trim((string) preg_replace('/\s+/u', ' ', $rest))];
+        }
+    }
+    return $best === null ? null : ['id' => $best['id'], 'rest' => $best['rest']];
+}
+
+/** Türkçe duyarlı küçük harf + boşluk sadeleştirme (İ→i, I→ı). */
+function search_fold(string $s): string
+{
+    $s = str_replace(['İ', 'I'], ['i', 'ı'], trim($s));
+    return (string) preg_replace('/\s+/u', ' ', mb_strtolower($s, 'UTF-8'));
 }
 
 function api_search_status(array $user): array

@@ -7,7 +7,7 @@
  * S = sinema, G = galeri, Y = yerel (beklenen kullanım).
  *
  * Kabuk (web/app/index.php)
- *   #app.app[data-route="photos|favorites|albums|album|shared|map|archive|trash|search|settings"]  her rotada güncellenir
+ *   #app.app[data-route="photos|favorites|people|person|albums|album|shared|map|archive|trash|search|settings"]  her rotada güncellenir
  *   .ambient#ambient          #app'in ilk çocuğu, tam ekran katman (gizli). --ambient / --ambient-rgb ile boya   S
  *   .sidebar .logo .nav .nav-item .nav-settings .me .me-name .me-usage .me-links   (mevcut)
  *   .me-avatar                .me-name içinde baş harf (gizli)   Y
@@ -22,9 +22,9 @@
  *   .upload-btn .btn .btn-primary  Yükle düğmesi (mevcut)
  *   .selbar, .v-bar, .story-top    diğer cam yüzeyler (mevcut)
  *
- * Menü (#nav, main.js renderNav) — düz liste, sırası: nav-h[library], photos, favorites, nav-h[albums], albums, shared,
+ * Menü (#nav, main.js renderNav) — düz liste, sırası: nav-h[library], photos, favorites, people, nav-h[albums], albums, shared,
  *   map, .nav-sep, nav-h[other], archive, trash
- *   .nav-item[data-nav="photos|favorites|albums|shared|map|archive|trash"][data-group="library|albums|other"] > .ic + .nav-label
+ *   .nav-item[data-nav="photos|favorites|people|albums|shared|map|archive|trash"][data-group="library|albums|other"] > .ic + .nav-label
  *   .nav-h[data-group="library|albums|other"]   grup başlığı "Kitaplık/Albümler/Diğer" (gizli)   Y
  *       Y, Harita'yı Kitaplık grubuna almak için #nav{display:flex} içinde CSS `order` kullanır.
  *   .nav-sep                  Arşiv'den önce ayraç (gizli)   S G
@@ -84,7 +84,29 @@
  *                             "Duraklat"/"Oynat") + .story-next   G (sayaç/oklar) S Y (duraklat)
  *
  * Görüntüleyici (.viewer .v-bar .v-stage .v-img .v-nav .v-info), albümler (.album-card ...), ayarlar (.settings .theme-card)
- *   mevcut sınıflarıyla biçimlenir; ek kanca yok.
+ *   mevcut sınıflarıyla biçimlenir.
+ *
+ * Kişiler (people.js) — #app[data-route="people|person"]; menüde .nav-item[data-nav="people"][data-group="library"]
+ *   (favorites'ten sonra; Y `order` ile Harita'dan önce tutar).
+ *   .p-ava(.is-empty | .is-photo) > img(.in) | .p-ini (baş harf) | .ic   yuvarlak avatar; boyut --ava (G: kare)   S G Y
+ *   .pp (kişi seçici combobox; .pp-compact, .is-busy) > .pp-ic + input.pp-input + ul.pp-list > li.pp-opt(.pp-create)[aria-selected]
+ *       > .p-ava + .pp-name + .pp-count
+ *   Kişiler sayfası: .page-head.people-head > div > h1 + p.people-sub | button.people-hidden-toggle[aria-pressed]
+ *     .people-status (yüz tarama sürüyorsa) > .people-status-dot + .people-status-text + .people-status-bar(--p 0..1) > i
+ *     .people-body > section.people-section > .people-grid(--face) > a.person-card(.is-hidden)[data-id]
+ *                                                > .person-face > .p-ava (+ .person-hidden-badge) | .person-name | .person-count
+ *                  > section.people-section.people-unnamed > .people-section-head > h2 (+ .people-section-count) + p
+ *                      > .people-grid.is-unnamed > div.person-card.is-cluster > a.person-face + .person-count
+ *                          + .who-slot > button.who-btn ("Bu kim?") | .pp
+ *     .empty.people-empty > .people-empty-art > span×3 | h2 | p
+ *   Kişi sayfası (zaman çizelgesi başlığı): .person-head(.is-hidden) > a.person-back | .person-hero-face > .p-ava
+ *     | .person-info > .person-name-box > h1.person-title > button.person-title-btn > .person-title-text(.is-unnamed) + .person-title-edit
+ *                    (düzenlerken .pp.person-title-picker) | p.person-meta (+ .person-hidden-pill) | .person-actions > .btn…
+ *     Y: başlık ortalı, üst çubuktaki .page-title bu rotada gizlenir.
+ *   Bilgi paneli: .i-row.i-row-people > section.i-people > .i-people-head > h3 + button.i-faces-toggle(.on)
+ *     > .p-chips > .p-chip(.is-unnamed)[data-person][data-source] > a|button.p-chip-main > .p-ava + .p-chip-name | button.p-chip-x
+ *     > .p-add-slot > button.p-add | .pp   > .f-loose-head + .f-loose > .f-item[data-face] > .p-ava.f-ava + button.f-name-btn | .pp
+ *   Yüz kutuları: .v-stage > .v-faces(.has-hot) > button.v-face(.is-named|.is-cluster|.is-unknown|.is-hot) > .v-face-label
  */
 import { api } from './api.js';
 import { OM } from './util.js';

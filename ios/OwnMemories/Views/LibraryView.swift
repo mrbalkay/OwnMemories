@@ -115,6 +115,7 @@ struct LibraryView: View {
     @State private var calendarMonth: CalendarTarget?
     @State private var pendingScroll: String?
     @State private var searching = false
+    @State private var showingPeople = false
 
     struct CalendarTarget: Identifiable { let id: String }   // "YYYY-MM" ya da "" (en yeni ay)
 
@@ -127,7 +128,7 @@ struct LibraryView: View {
           ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
-                    LibraryHeader(title: "Fotoğraflar", initial: session.user?.name, onSearch: { searching = true }, onCalendar: {
+                    LibraryHeader(title: "Fotoğraflar", initial: session.user?.name, onSearch: { searching = true }, onPeople: { showingPeople = true }, onCalendar: {
                         calendarMonth = CalendarTarget(id: model.sections.first.map { String($0.id.prefix(7)) } ?? "")
                     })
                     .id("library-top")
@@ -265,6 +266,11 @@ struct LibraryView: View {
                     .environmentObject(session)
                     .environment(\.theme, theme)
             }
+            .fullScreenCover(isPresented: $showingPeople) {
+                PeopleView(onChange: { model.update($0) })
+                    .environmentObject(session)
+                    .environment(\.theme, theme)
+            }
           }
         }
     }
@@ -329,6 +335,7 @@ struct LibraryHeader: View {
     var subtitle: String? = nil
     var initial: String? = nil
     var onSearch: (() -> Void)? = nil
+    var onPeople: (() -> Void)? = nil
     var onCalendar: (() -> Void)? = nil
     @Environment(\.theme) private var theme
 
@@ -346,6 +353,9 @@ struct LibraryHeader: View {
             Spacer(minLength: 8)
             if let onSearch {
                 headerButton("magnifyingglass", label: "Ara", action: onSearch)
+            }
+            if let onPeople {
+                headerButton("person.2", label: "Kişiler", action: onPeople)
             }
             if let onCalendar {
                 headerButton("calendar", label: "Takvim", action: onCalendar)

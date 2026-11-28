@@ -111,6 +111,18 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['GET', '#^/v1/search$#', fn() => api_search(api_need_user($user), $query)],
         ['GET', '#^/v1/search/status$#', fn() => api_search_status(api_need_user($user))],
         ['GET', '#^/v1/memories$#', fn() => api_memories(api_need_user($user), $query)],
+        ['GET', '#^/v1/people$#', fn() => api_people_list(api_need_user($user), $query)],
+        ['GET', '#^/v1/people/status$#', fn() => api_people_status(api_need_user($user))],
+        ['GET', '#^/v1/people/(\d+)$#', fn($m) => api_person_get(api_need_user($user), $m[1])],
+        ['PATCH', '#^/v1/people/(\d+)$#', fn($m) => api_person_patch(api_need_user($user), $m[1], $body)],
+        ['DELETE', '#^/v1/people/(\d+)$#', fn($m) => api_person_delete(api_need_user($user), $m[1])],
+        ['POST', '#^/v1/people/(\d+)/merge$#', fn($m) => api_person_merge(api_need_user($user), $m[1], $body)],
+        ['POST', '#^/v1/assets/people$#', fn() => api_assets_people_bulk(api_need_user($user), $body)],
+        ['GET', "#^/v1/assets/$uuid/people$#", fn($m) => api_asset_people_get(api_need_user($user), $m[1])],
+        ['POST', "#^/v1/assets/$uuid/people$#", fn($m) => api_asset_people_add(api_need_user($user), $m[1], $body)],
+        ['DELETE', "#^/v1/assets/$uuid/people/(\d+)$#", fn($m) => api_asset_people_remove(api_need_user($user), $m[1], $m[2])],
+        ['PATCH', '#^/v1/faces/(\d+)$#', fn($m) => api_face_patch(api_need_user($user), $m[1], $body)],
+        ['GET', '#^/v1/faces/(\d+)/thumb$#', fn($m) => api_face_thumb(api_need_user($user), $m[1])],
         ['POST', '#^/v1/devices/report$#', fn() => api_ok(device_report((int) api_need_user($user)['id'], $body))],
     ];
     $methodMismatch = false;
@@ -195,6 +207,14 @@ function api_asset_filters(array $user, array $q): array
             $where[] = 'NOT EXISTS (SELECT 1 FROM assets ed WHERE ed.edited_of_id = a.id AND ed.trashed_at IS NULL)';
         }
     }
+    $personId = (string) ($q['person'] ?? '');
+    if ($personId !== '') {
+        if (!ctype_digit($personId) || db_val('SELECT 1 FROM people WHERE id = ? AND user_id = ?', [(int) $personId, $uid]) === null) {
+            api_not_found();
+        }
+        $where[] = 'a.id IN (SELECT asset_id FROM asset_person WHERE person_id = ?)';
+        $args[] = (int) $personId;
+    }
     if (api_bool($q['favorite'] ?? null)) {
         $where[] = 'a.is_favorite = 1';
     }
@@ -216,7 +236,7 @@ function api_asset_filters(array $user, array $q): array
     $text = trim((string) ($q['q'] ?? ''));
     if ($text !== '') {
         $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], mb_substr($text, 0, 100)) . '%';
-        $where[] = '(a.original_filename LIKE ? OR a.description LIKE ? OR a.camera_model LIKE ? OR a.camera_make LIKE ? OR EXISTS (SELECT 1 FROM asset_people p WHERE p.asset_id = a.id AND p.name LIKE ?))';
+        $where[] = '(a.original_filename LIKE ? OR a.description LIKE ? OR a.camera_model LIKE ? OR a.camera_make LIKE ? OR EXISTS (SELECT 1 FROM asset_person ap JOIN people p ON p.id = ap.person_id WHERE ap.asset_id = a.id AND p.name LIKE ?))';
         array_push($args, $like, $like, $like, $like, $like);
     }
     return [implode(' AND ', $where), $args];
@@ -402,7 +422,7 @@ function api_asset_get(array $user, string $id): array
     [$level, $a] = $acc;
     $json = asset_to_json($a);
     $json['access'] = $level;
-    $json['people'] = array_column(db_all('SELECT name FROM asset_people WHERE asset_id = ? ORDER BY name', [$id]), 'name');
+    $json['people'] = asset_person_names($id);
     $json['albums'] = db_all('SELECT al.id, al.title FROM album_assets aa JOIN albums al ON al.id = aa.album_id
             LEFT JOIN album_members m ON m.album_id = al.id AND m.user_id = ?
             WHERE aa.asset_id = ? AND (al.user_id = ? OR m.user_id IS NOT NULL) ORDER BY al.title', [$user['id'], $id, $user['id']]);
