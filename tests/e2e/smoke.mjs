@@ -214,6 +214,27 @@ try {
   await page.keyboard.press('Escape');
   await page.waitForSelector('.viewer', { state: 'detached' });
   step(`arama (${mode}): "${term}" → ${nTiles} sonuç, görüntüleyicide gezinme`);
+  // Temizlik: Ayarlar'dan ve menüden açılır, özet kartları sekme olarak çalışır, karşılaştırma açılıp kapanır (silmeden)
+  await page.goto(base + '/app/#/settings');
+  await page.click('.settings-cleanup-link');
+  await page.waitForURL('**/#/cleanup');
+  await page.waitForSelector('.cl-cards .cl-card[data-tab="similar"]');
+  if ((await page.locator('.cl-cards .cl-card').count()) !== 5) throw new Error('temizlik: 5 özet kartı bekleniyordu');
+  if (!(await page.$('.nav-item[data-nav="cleanup"].active'))) throw new Error('temizlik: menü öğesi etkin değil');
+  await page.click('.cl-card[data-tab="screenshots"]');
+  await page.waitForSelector('.cl-panel[data-tab="screenshots"]');
+  if (!page.url().includes('tab=screenshots')) throw new Error('temizlik: sekme adreste yok');
+  await page.click('.cl-card[data-tab="similar"]');
+  await page.waitForSelector('.cl-panel[data-tab="similar"]');
+  const nGroups = await page.locator('.cl-group').count();
+  if (nGroups) {
+    await page.locator('.cl-group').first().locator('.cl-group-actions .btn').first().click();
+    await page.waitForSelector('.cl-cmp .cl-cmp-side.is-best');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.cl-cmp', { state: 'detached' });
+  }
+  await page.screenshot({ path: `${out}desktop-cleanup.png` });
+  step(`temizlik: özet, sekmeler, ${nGroups} benzer grup${nGroups ? ', karşılaştırma' : ''}`);
   // API hatasında sonsuz "Yükleniyor" yerine "Tekrar dene" görünmeli
   const errPage = await browser.newPage();
   await errPage.context().addCookies(await page.context().cookies());

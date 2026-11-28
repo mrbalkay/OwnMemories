@@ -5,7 +5,9 @@
 
 Yapar: om_mltest_<pid> veritabanını kurar (schema.sql), örnek görselleri varlık + derived/thumb olarak ekler,
 dizinleyicinin asset_embeddings'i doldurmasını bekler, /health /status /search'i, eksik dosya ertelemesini,
-silme sonrası bellek önbelleğinin yenilenmesini ve hatalı istekleri dener. Sonunda veritabanını siler.
+silme sonrası bellek önbelleğinin yenilenmesini ve hatalı istekleri dener; Temizlik için kalite ölçümlerini
+(asset_quality) ve /cleanup/groups'u (WhatsApp benzeri kopya, aynı anda çekilmiş farklı fotoğraflar) denetler.
+Sonunda veritabanını siler.
 """
 from __future__ import annotations
 
@@ -53,6 +55,56 @@ def sql_statements(sql: str) -> list[str]:
 
     sql = re.sub(r"^\s*--.*$", "", sql, flags=re.M)
     return [p.strip() for p in re.split(r";\s*$", sql, flags=re.M) if p.strip()]
+
+
+def test_cleanup(eng, port, cur, ids, storage, images) -> None:
+    """Temizlik: kalite ölçümleri (asset_quality) ve /cleanup/groups."""
+    from PIL import Image
+
+    eng.quality_skip.clear()  # p12 dosyası sonradan geldi: erteleme süresini bekleme
+
+    def wait(sql, want, secs=120):
+        t0 = time.time()
+        while time.time() - t0 < secs:
+            cur.execute(sql)
+            v = cur.fetchone()[0]
+            if v == want:
+                return v
+            time.sleep(0.5)
+        return v
+
+    n = wait("SELECT COUNT(*) FROM asset_quality", 18)
+    check(n == 18, f"kalite ölçümü: dosyası olan 18 varlık ({n})")
+    cur.execute("SELECT MIN(LENGTH(color)), MIN(sharpness), MAX(is_screenshot), COUNT(phash) FROM asset_quality")
+    cl, sh, shot, ph = cur.fetchone()
+    check(cl == 48 and sh > 20 and shot == 0 and ph == 18, f"renk imzası 48 bayt, netlik, phash ({cl}, {sh}, {ph})")
+    # Aynı anda "çekilmiş" (güvenilir zaman) ama farklı fotoğraflar gruplanmaz
+    cur.execute("UPDATE assets SET date_source = 'exif', width = 800, height = 600")
+    st, r = http(port, "POST", "/cleanup/groups", {"user_id": 1})
+    check(st == 200 and r["groups"] == [] and r["cached"] is False, f"farklı fotoğraflar: grup yok ({r.get('groups')})")
+    st, r2 = http(port, "POST", "/cleanup/groups", {"user_id": 1})
+    check(r2.get("cached") is True, "değişiklik yoksa önbellekten")
+    # WhatsApp benzeri kopya (küçültülmüş, düşük kalite, dosya tarihi): zamandan bağımsız eşleşir
+    aid = str(uuid.uuid4())
+    cur.execute("INSERT INTO assets (id, user_id, blob_sha1, type, original_filename, taken_at, date_source, width, "
+                "height, source, thumb_state, created_at, updated_at) VALUES (%s,1,%s,'photo','IMG-WA0001.jpg',"
+                "'2001-01-01','file',600,450,'web','ready',UTC_TIMESTAMP(),UTC_TIMESTAMP())", (aid, "c" * 40))
+    d = os.path.join(storage, "derived", "thumb", aid[:2])
+    os.makedirs(d, exist_ok=True)
+    im = Image.open(os.path.join(images, "p3.jpg")).convert("RGB")
+    im.resize((600, 450), Image.Resampling.LANCZOS).save(os.path.join(d, aid + ".jpg"), "JPEG", quality=35)
+    wait(f"SELECT COUNT(*) FROM asset_quality q JOIN asset_embeddings e ON e.asset_id = q.asset_id "
+         f"WHERE q.asset_id = '{aid}'", 1)
+    st, r = http(port, "POST", "/cleanup/groups", {"user_id": 1})
+    g = r.get("groups") or []
+    check(len(g) == 1 and sorted(g[0]["assets"]) == sorted([ids["p3"], aid]) and g[0]["reason"] == "duplicate",
+          f"WhatsApp kopyası orijinalle 'duplicate' grubu ({g}, {r.get('indexed')}/{r.get('total')})")
+    check(http(port, "POST", "/cleanup/groups", {"user_id": 2})[1]["groups"] == [], "başka kullanıcı: grup yok")
+    cur.execute("UPDATE assets SET trashed_at = UTC_TIMESTAMP(), version = version + 1 WHERE id = %s", (aid,))
+    check(http(port, "POST", "/cleanup/groups", {"user_id": 1})[1]["groups"] == [], "çöpe giden kopya grubu bozar")
+    check(http(port, "POST", "/cleanup/groups", {"user_id": 0})[0] == 400, "/cleanup/groups user_id=0 -> 400")
+    st, h = http(port, "GET", "/health")
+    check(h.get("cleanup") is True, "/health cleanup: true")
 
 
 def main() -> int:
@@ -184,6 +236,7 @@ def main() -> int:
         check(http(port, "GET", "/yok")[0] == 404, "bilinmeyen yol -> 404")
         st, r = http(port, "POST", "/search", {"user_id": 1, "text": "deniz", "limit": 10000})
         check(st == 200 and len(r["results"]) <= service.MAX_LIMIT, "limit 500 ile sınırlı")
+        test_cleanup(eng, port, cur, ids, storage, a.images)
         eng.stop.set()
         srv.shutdown()
     finally:

@@ -181,6 +181,7 @@ function asset_purge(int $userId, array $ids): int
         people_purge_asset($id);
         asset_embedding_delete($id);
         asset_place_delete($id);
+        cleanup_purge_asset($id);
         db_exec('UPDATE assets SET live_pair_id = NULL WHERE live_pair_id = ?', [$id]);
         db_exec('UPDATE assets SET edited_of_id = NULL WHERE edited_of_id = ?', [$id]);
         db_exec('UPDATE albums SET cover_asset_id = NULL WHERE cover_asset_id = ?', [$id]);

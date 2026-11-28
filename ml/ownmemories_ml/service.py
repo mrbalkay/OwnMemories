@@ -6,6 +6,12 @@ Uç noktalar (yalnızca 127.0.0.1):
   GET  /status?user_id=N     {"indexed","total","pending","model","ready"}
   GET  /faces/status?user_id=N  {"scanned","total","faces","people","ready","available","model"}
   POST /faces/recluster      {"user_id"} -> {"queued":true}  (tam kümeleme geçişi; ör. birleştirme/adlandırma sonrası)
+  POST /cleanup/groups       {"user_id"} -> {"groups":[{"assets":[id…],"reason","min_sim","max_hamming"}],
+                             "analyzed","total","cached","took_ms"}  (Temizlik: benzer/yinelenen fotoğraf grupları)
+
+Temizlik (cleanup.py): dizinleyici her turda kalite ölçümü olmayan görüntülerin phash/netlik/parlaklık değerlerini
+türetilmiş önizlemeden hesaplayıp asset_quality'ye yazar (migration 008 yoksa sessizce bekler). Gruplar istek
+anında CLIP vektörleri + çekim zamanı + phash ile hesaplanır ve kütüphane değişene kadar bellekte tutulur.
 
 Yüz tanıma (faces.py + clustering.py) aynı arka plan döngüsünde CLIP'le dönüşümlü çalışır: her turda bir CLIP
 toplu işi, ardından birkaç görüntülük yüz işi (CLIP işi bitince yüz işi büyür). Yüz modeli ya da tabloları
@@ -178,6 +184,15 @@ class Engine:
         self.face_queue: list[tuple[str, int]] = []
         self.face_cursor = ""
         self.faces_session = 0
+        # temizlik
+        self.quality_tables: tuple[float, bool] = (0.0, False)
+        self.quality_queue: list[tuple[str, int, str, str, str, int, int]] = []
+        self.quality_cursor = ""
+        self.quality_skip: dict[str, tuple[float, int]] = {}
+        self.quality_session = 0
+        self.cleanup_cache: dict[int, tuple[tuple, dict]] = {}
+        self.cleanup_locks: dict[int, threading.Lock] = {}
+        self.cleanup_lock = threading.Lock()
 
     # ---------- modeller ----------
     def load_text(self) -> None:
@@ -245,6 +260,24 @@ class Engine:
         if not ok and t == 0.0:
             log.info("yüz tabloları henüz yok (migration 006); yüz tanıma bekliyor")
         self.face_tables = (time.time(), ok)
+        return ok
+
+    def quality_tables_ok(self) -> bool:
+        """asset_quality tablosu (migration 008) var mı? 5 dakikada bir yeniden denetlenir."""
+        t, ok = self.quality_tables
+        if ok or time.time() - t < 300:
+            return ok
+        try:
+            ok = bool(self.db.query(
+                "SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() "
+                "AND table_name = 'asset_quality'"))
+        except Exception as e:  # noqa: BLE001
+            log.warning("DB hatası (asset_quality): %s", e)
+            self.db.drop()
+            ok = False
+        if not ok and t == 0.0:
+            log.info("asset_quality tablosu henüz yok (migration 008); temizlik ölçümleri bekliyor")
+        self.quality_tables = (time.time(), ok)
         return ok
 
     def request_recluster(self, user_id: int) -> None:
@@ -458,8 +491,6 @@ class Engine:
 
             self.clusterer = Clusterer(self.db, self.cfg.face_model_name, self.cfg.face_max_distance,
                                        self.cfg.face_min_faces)
-        if self.visual is None and self.faces is None:
-            return
         backoff = 5.0
         while not self.stop.is_set():
             try:
@@ -473,6 +504,11 @@ class Engine:
                     n = self.cfg.face_batch if clip_busy else max(self.cfg.face_batch, self.cfg.batch)
                     did = self._face_step(n) or did
                     did = self._cluster_step() or did
+                if self.quality_tables_ok():
+                    # Kalite ölçümü ucuzdur (~50-100 ms/görüntü): CLIP işi varken de tur başına bir toplu iş.
+                    did = self._quality_step(self.cfg.batch * (2 if clip_busy else 8)) or did
+                    if not did:
+                        self._cleanup_warm()
                 backoff = 5.0
             except Exception as e:  # noqa: BLE001
                 log.warning("DB hatası (dizinleyici): %s; %.0f sn sonra yeniden", e, backoff)
@@ -617,6 +653,136 @@ class Engine:
             did = True
         return did
 
+    def _quality_step(self, n: int) -> bool:
+        """En çok n görüntünün kalite ölçümü (asset_quality); True: iş yapıldı."""
+        from . import cleanup
+
+        if not self.quality_queue:
+            rows = self.db.query(
+                "SELECT a.id, a.user_id, a.original_filename, a.mime, a.camera_make, a.width, a.height FROM assets a "
+                "LEFT JOIN asset_quality q ON q.asset_id = a.id "
+                "WHERE a.thumb_state = 'ready' AND a.trashed_at IS NULL AND (q.asset_id IS NULL OR q.algo < %s) "
+                "AND NOT (a.type = 'video' AND a.live_pair_id IS NOT NULL) AND a.id > %s "
+                "ORDER BY a.id LIMIT 512", (cleanup.ALGO, self.quality_cursor))
+            if not rows:
+                self.quality_cursor = ""
+                return False
+            self.quality_cursor = rows[-1][0]
+            now = time.time()
+            self.quality_queue = [r for r in rows if self.quality_skip.get(r[0], (0, 0))[0] <= now]
+            if not self.quality_queue:
+                return True
+        batch, self.quality_queue = self.quality_queue[:n], self.quality_queue[n:]
+        out = []
+        for aid, uid, fname, mime, make, w, h in batch:
+            if self.stop.is_set():
+                break
+            p = self.face_source_path(aid)
+            if p is None:
+                self._defer_in(self.quality_skip, aid)
+                continue
+            try:
+                m = cleanup.analyze_file(p)
+            except Exception as e:  # noqa: BLE001
+                log.info("kalite ölçümü: görüntü okunamadı %s: %s", aid, e)
+                self._defer_in(self.quality_skip, aid)
+                continue
+            shot = 1 if cleanup.is_screenshot(fname, mime, make, w, h) else 0
+            out.append((aid, int(uid), m["phash"], m["sharpness"], m["brightness"], m["color"], shot, cleanup.ALGO,
+                        utcnow()))
+        if out:
+            self.db.execute_many(
+                "INSERT INTO asset_quality (asset_id, user_id, phash, sharpness, brightness, color, is_screenshot, "
+                "algo, computed_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE "
+                "user_id = VALUES(user_id), phash = VALUES(phash), sharpness = VALUES(sharpness), "
+                "brightness = VALUES(brightness), color = VALUES(color), is_screenshot = VALUES(is_screenshot), algo = VALUES(algo), "
+                "computed_at = VALUES(computed_at)", out)
+            for r in out:
+                self.quality_skip.pop(r[0], None)
+            self.quality_session += len(out)
+            if self.quality_session % 1000 < len(out):
+                log.info("kalite ölçümü (bu oturum): %d görüntü", self.quality_session)
+        return True
+
+    # ---------- temizlik: benzer gruplar ----------
+    def cleanup_fingerprint(self, user_id: int) -> tuple:
+        e = self.db.query("SELECT COUNT(*), MAX(created_at) FROM asset_embeddings WHERE user_id = %s AND model = %s",
+                          (user_id, self.cfg.model_name))[0]
+        q = self.db.query("SELECT COUNT(*), MAX(computed_at) FROM asset_quality WHERE user_id = %s", (user_id,))[0]
+        a = self.db.query("SELECT COUNT(*), MAX(version) FROM assets WHERE user_id = %s", (user_id,))[0]
+        return tuple(str(x) for x in (*e, *q, *a, self.text is not None))
+
+    def _cleanup_warm(self) -> None:
+        """Boşta: Temizlik'i daha önce açmış kullanıcıların grupları kütüphane değiştiyse arka planda yenilenir
+        (büyük kütüphanede hesap saniyeler sürer; sayfa açılışı beklemesin)."""
+        now = time.time()
+        if now - getattr(self, "_warm_at", 0.0) < 60:
+            return
+        self._warm_at = now
+        for uid in list(self.cleanup_cache):
+            if self.stop.is_set():
+                return
+            try:
+                if self.cleanup_cache[uid][0] != self.cleanup_fingerprint(uid):
+                    self.cleanup_groups(uid)
+            except Exception as e:  # noqa: BLE001
+                log.warning("temizlik ön hesaplaması: %s", e)
+                self.db.drop()
+
+    def cleanup_groups(self, user_id: int) -> dict:
+        from . import cleanup
+
+        with self.cleanup_lock:
+            lock = self.cleanup_locks.setdefault(user_id, threading.Lock())
+        with lock:
+            fp = self.cleanup_fingerprint(user_id)
+            hit = self.cleanup_cache.get(user_id)
+            if hit and hit[0] == fp:
+                return {**hit[1], "cached": True}
+            t0 = time.perf_counter()
+            rows = self.db.query(
+                "SELECT a.id, UNIX_TIMESTAMP(a.taken_at), a.date_source, q.phash, q.sharpness, q.brightness, q.color, "
+                "a.width, a.height, q.is_screenshot "
+                "FROM assets a LEFT JOIN asset_quality q ON q.asset_id = a.id "
+                "WHERE a.user_id = %s AND a.trashed_at IS NULL AND a.is_archived = 0 AND a.type = 'photo' "
+                "AND a.thumb_state = 'ready' AND COALESCE(LEAST(a.width, a.height), 9999) >= %s "
+                "AND NOT EXISTS (SELECT 1 FROM assets ed WHERE ed.edited_of_id = a.id AND ed.trashed_at IS NULL)",
+                (user_id, cleanup.MIN_EDGE))
+            ui = self.user_index(user_id)
+            with ui.lock:
+                pos = {a: i for i, a in enumerate(ui.ids)}
+                mat = ui.mat
+            ids, taken, rel, ph, sh, br, co, ar, rows_idx, shot = [], [], [], [], [], [], [], [], [], []
+            for aid, ts, src, phash, sharp, bright, color, w, h, is_shot in rows:
+                i = pos.get(aid)
+                if i is None:
+                    continue
+                ids.append(aid)
+                rows_idx.append(i)
+                taken.append(float(ts or 0))
+                rel.append(src in ("exif", "takeout", "filename", "user"))
+                ph.append(int(phash) if phash is not None else None)
+                sh.append(float(sharp) if sharp is not None else None)
+                br.append(float(bright) if bright is not None else None)
+                co.append(bytes(color) if color is not None else None)
+                ar.append(float(w) / float(h) if w and h else None)
+                shot.append(bool(is_shot))
+            vecs = mat[rows_idx] if rows_idx else np.zeros((0, self.dim), dtype=np.float32)
+            texty = np.asarray(shot, dtype=bool)
+            if self.text is not None and len(ids):
+                # Belge/slayt/fiş gibi yazı ağırlıklı kareler: yalnız birebir kopyalar gruplanır (bkz. cleanup.py).
+                try:
+                    texty |= cleanup.texty_mask(vecs, self.embed_query(cleanup.TEXT_PROMPT),
+                                                self.embed_query(cleanup.PHOTO_PROMPT))
+                except Exception as e:  # noqa: BLE001
+                    log.warning("temizlik: yazı denetimi yapılamadı: %s", e)
+            groups = cleanup.group_assets(ids, np.array(taken), vecs, ph, reliable=rel, sharp=sh, bright=br, color=co,
+                                          aspect=ar, texty=texty.tolist())
+            res = {"groups": groups, "analyzed": sum(1 for x in ph if x is not None), "total": len(rows),
+                   "indexed": len(ids), "took_ms": round((time.perf_counter() - t0) * 1000, 1)}
+            self.cleanup_cache[user_id] = (fp, res)
+            return {**res, "cached": False}
+
     def _index_batch(self, batch: list[tuple[str, int]]) -> None:
         arrays, meta = [], []
         for aid, uid in batch:
@@ -687,7 +853,7 @@ def make_handler(engine: Engine):
                         engine.db.drop()
                     out = {"ok": True, "model": engine.cfg.model_name, "dim": engine.dim, **st,
                            "ready": engine.ready and db_ok, "indexer": engine.visual_ready.is_set(),
-                           "faces": engine.faces is not None}
+                           "faces": engine.faces is not None, "cleanup": engine.quality_tables_ok()}
                     if engine.error:
                         out["error"] = engine.error
                     if not db_ok:
@@ -731,7 +897,7 @@ def make_handler(engine: Engine):
 
         def do_POST(self):
             u = urlparse(self.path)
-            if u.path not in ("/search", "/faces/recluster"):
+            if u.path not in ("/search", "/faces/recluster", "/cleanup/groups"):
                 return self._send(404, {"error": "bulunamadı"})
             try:
                 n = int(self.headers.get("Content-Length") or 0)
@@ -739,6 +905,22 @@ def make_handler(engine: Engine):
                 n = 0
             if n <= 0 or n > 65536:
                 return self._send(400, {"error": "geçersiz gövde"})
+            if u.path == "/cleanup/groups":
+                try:
+                    req = json.loads(self.rfile.read(n).decode("utf-8"))
+                    uid = int(req.get("user_id") or 0)
+                except (ValueError, TypeError, AttributeError):
+                    return self._send(400, {"error": "geçersiz istek"})
+                if uid <= 0:
+                    return self._send(400, {"error": "user_id gerekli"})
+                if not engine.quality_tables_ok():
+                    return self._send(503, {"error": "asset_quality tablosu yok (migration 008)", "groups": []})
+                try:
+                    return self._send(200, engine.cleanup_groups(uid))
+                except Exception as e:  # noqa: BLE001
+                    log.exception("temizlik grupları")
+                    engine.db.drop()
+                    return self._send(500, {"error": str(e), "groups": []})
             if u.path == "/faces/recluster":
                 try:
                     req = json.loads(self.rfile.read(n).decode("utf-8"))

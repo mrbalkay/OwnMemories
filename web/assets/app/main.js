@@ -23,11 +23,12 @@ const NAV = [
   ['map', 'map', '#/map'],
   ['places', 'pin', '#/places'],
   ['archive', 'archive', '#/archive'],
+  ['cleanup', 'broom', '#/cleanup'],
   ['trash', 'trash', '#/trash'],
 ];
 
 // Menü grupları: temalar başlıkları (.nav-h) gösterebilir ve öğeleri CSS `order` ile yeniden dizebilir.
-const NAV_GROUP = { photos: 'library', favorites: 'library', people: 'library', map: 'library', places: 'library', albums: 'albums', shared: 'albums', archive: 'other', trash: 'other' };
+const NAV_GROUP = { photos: 'library', favorites: 'library', people: 'library', map: 'library', places: 'library', albums: 'albums', shared: 'albums', archive: 'other', trash: 'other', cleanup: 'other' };
 
 function renderNav() {
   document.getElementById('navSettings')?.classList.toggle('active', route.name === 'settings');
@@ -197,14 +198,14 @@ async function render() {
   store.clear();
   route = parseRoute();
   document.getElementById('app').dataset.route = route.name;
-  const TITLES = { people: 'people', person: 'people', favorites: 'favorites', archive: 'archive', trash: 'trash', search: 'search_results', albums: 'albums', shared: 'shared', settings: 'settings', map: 'map', album: 'albums', places: 'places', place: 'places' };
+  const TITLES = { people: 'people', person: 'people', favorites: 'favorites', archive: 'archive', trash: 'trash', search: 'search_results', albums: 'albums', shared: 'shared', settings: 'settings', map: 'map', album: 'albums', places: 'places', place: 'places', cleanup: 'cleanup' };
   setPageTitle(t(TITLES[route.name] || 'photos'));
   renderNav();
   document.getElementById('app').classList.remove('nav-open');
   view.scrollTop = 0;
   const title = (s) => h('div', { class: 'page-head' }, h('h1', {}, s));
   // Zaman çizelgesi olmayan görünümler: önceki rotadan kalan ortam rengini sıfırla.
-  if (['albums', 'shared', 'settings', 'map', 'people', 'person', 'places'].includes(route.name)) clearAmbient();
+  if (['albums', 'shared', 'settings', 'map', 'people', 'person', 'places', 'cleanup'].includes(route.name)) clearAmbient();
   // Kendi içinde eşzamansız yazan görünümler (albüm listesi, harita) ayrı bir kutuya çizilir:
   // daha yeni bir rota #view'i değiştirirse kutu DOM'dan kopar ve geç gelen yazımlar görünmez kalır.
   const box = () => { const b = h('div', { class: 'view-box' }); view.replaceChildren(b); return b; };
@@ -286,6 +287,11 @@ async function render() {
       }
       break;
     }
+    case 'cleanup':
+      import('./cleanup.js').then((m) => {
+        if (current()) m.renderCleanup(box(), { tab: route.params?.tab, setSub: (s) => { if (current()) document.getElementById('pageSub').textContent = s; } });
+      });
+      break;
     case 'settings':
       import('./settings.js').then((m) => { if (current()) m.renderSettings(view); });
       break;
@@ -352,7 +358,7 @@ window.addEventListener('drop', (e) => {
 }
 document.addEventListener('keydown', (e) => {
   // "/" arama kutusuna odaklanır (.search-kbd ipucu)
-  if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.closest?.('input, textarea, select, [contenteditable]') && !document.querySelector('.viewer, .story, dialog[open]')) {
+  if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.closest?.('input, textarea, select, [contenteditable]') && !document.querySelector('.viewer, .story, dialog[open], .cl-cmp-layer')) {
     e.preventDefault();
     document.getElementById('searchInput').focus();
     return;

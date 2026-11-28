@@ -445,3 +445,16 @@ Durum: **Yönetim → Sistem → Yer adları** (kaç yer yüklü, kaç fotoğraf
 Kapatmak için `OM_GEO=0 sudo bash server/update.sh` (veri indirilmez; Yerler sayfası boş kalır).
 
 Yer verisi: [GeoNames](https://www.geonames.org), Creative Commons Attribution 4.0 (CC BY 4.0).
+## H. Temizlik (benzer ve gereksiz fotoğraflar)
+
+Web'de menüdeki **Diğer → Temizlik** (ya da Ayarlar → Temizliği aç), iPhone'da **Ayarlar → Kütüphane → Temizlik**:
+seri çekimler, yeniden kaydedilmiş / WhatsApp'tan gelmiş kopyalar, bulanık ve çok karanlık kareler, ekran
+görüntüleri ve yanlışlıkla çekilmiş kısa videolar listelenir. Her benzer grupta en iyisi (en yüksek çözünürlük,
+en net, favori, konumlu) "En iyisi" olarak işaretlenir; "Önerileri uygula" diğerlerini **Çöp kutusuna** taşır
+(30 gün içinde geri yüklenebilir, hiçbir şey hemen silinmez). "Bunlar farklı" bir grubu bir daha önermez.
+
+Benzer grupları akıllı arama servisi (`ownmemories-ml`, bkz. G) bulur; ek kurulum gerekmez — `update.sh` servisi
+günceller, veritabanı tablosu (migration 008) ilk istekte eklenir. Servis güncellendikten sonra tüm fotoğrafların
+netlik/parlaklık/algısal özet ölçümünü arka planda bir kez çıkarır (saatte ~30.000 fotoğraf; akıllı
+arama dizinlemesi sürüyorsa onunla dönüşümlü). Bu sürede Temizlik sayfası "Fotoğraflar inceleniyor: 1.200 / 30.000"
+gösterir. Durum: `journalctl -u ownmemories-ml | grep kalite`.

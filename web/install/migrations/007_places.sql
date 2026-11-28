@@ -1,4 +1,4 @@
--- 008: Yerler — fotoğraf konumlarından çevrimdışı yer adları (GeoNames, CC BY 4.0).
+-- 007: Yerler — fotoğraf konumlarından çevrimdışı yer adları (GeoNames, CC BY 4.0).
 -- geo_places/geo_countries bin/geo-import.php ile doldurulur (server/install-geo.sh indirir); asset_places işlerle dolar.
 CREATE TABLE IF NOT EXISTS geo_places (
   id INT UNSIGNED NOT NULL PRIMARY KEY,

@@ -127,6 +127,10 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['POST', '#^/v1/admin/backup/run$#', fn() => api_admin_backup_run(api_need_user($user))],
         ['GET', '#^/v1/places$#', fn() => api_places_list(api_need_user($user), $query)],
         ['GET', '#^/v1/places/(\d+)$#', fn($m) => api_place_get(api_need_user($user), $m[1])],
+        ['GET', '#^/v1/cleanup$#', fn() => api_cleanup(api_need_user($user))],
+        ['POST', '#^/v1/cleanup/resolve$#', fn() => api_cleanup_resolve(api_need_user($user), $body)],
+        ['POST', '#^/v1/cleanup/dismiss$#', fn() => api_cleanup_dismiss(api_need_user($user), $body)],
+        ['POST', '#^/v1/cleanup/reset$#', fn() => api_cleanup_reset(api_need_user($user))],
         ['POST', '#^/v1/devices/report$#', fn() => api_ok(device_report((int) api_need_user($user)['id'], $body))],
     ];
     $methodMismatch = false;
