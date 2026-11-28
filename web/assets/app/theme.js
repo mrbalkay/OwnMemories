@@ -7,7 +7,7 @@
  * S = sinema, G = galeri, Y = yerel (beklenen kullanım).
  *
  * Kabuk (web/app/index.php)
- *   #app.app[data-route="photos|favorites|people|person|albums|album|shared|map|places|place|archive|cleanup|trash|search|settings"]  her rotada güncellenir
+ *   #app.app[data-route="photos|favorites|people|person|albums|album|shared|links|map|places|place|archive|cleanup|trash|search|settings"]  her rotada güncellenir
  *   .ambient#ambient          #app'in ilk çocuğu, tam ekran katman (gizli). --ambient / --ambient-rgb ile boya   S
  *   .sidebar .logo .nav .nav-item .nav-settings .me .me-name .me-usage .me-links   (mevcut)
  *   .me-avatar                .me-name içinde baş harf (gizli)   Y
@@ -22,9 +22,9 @@
  *   .upload-btn .btn .btn-primary  Yükle düğmesi (mevcut)
  *   .selbar, .v-bar, .story-top    diğer cam yüzeyler (mevcut)
  *
- * Menü (#nav, main.js renderNav) — düz liste, sırası: nav-h[library], photos, favorites, people, nav-h[albums], albums, shared,
+ * Menü (#nav, main.js renderNav) — düz liste, sırası: nav-h[library], photos, favorites, people, nav-h[albums], albums, shared, links,
  *   map, places, .nav-sep, nav-h[other], archive, cleanup, trash
- *   .nav-item[data-nav="photos|favorites|people|albums|shared|map|places|archive|cleanup|trash"][data-group="library|albums|other"] > .ic + .nav-label
+ *   .nav-item[data-nav="photos|favorites|people|albums|shared|links|map|places|archive|cleanup|trash"][data-group="library|albums|other"] > .ic + .nav-label
  *       (Y `order` kullanıyorsa yeni öğelere de order verin.)
  *   .nav-h[data-group="library|albums|other"]   grup başlığı "Kitaplık/Albümler/Diğer" (gizli)   Y
  *       Y, Harita'yı Kitaplık grubuna almak için #nav{display:flex} içinde CSS `order` kullanır.

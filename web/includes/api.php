@@ -132,6 +132,13 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['POST', '#^/v1/cleanup/dismiss$#', fn() => api_cleanup_dismiss(api_need_user($user), $body)],
         ['POST', '#^/v1/cleanup/reset$#', fn() => api_cleanup_reset(api_need_user($user))],
         ['POST', '#^/v1/devices/report$#', fn() => api_ok(device_report((int) api_need_user($user)['id'], $body))],
+        // Bağlantıyla paylaşım (shares.php)
+        ['GET', '#^/v1/shares$#', fn() => api_shares_list(api_need_user($user), $query)],
+        ['POST', '#^/v1/shares$#', fn() => api_share_create(api_need_user($user), $body)],
+        ['PATCH', '#^/v1/shares/(\d+)$#', fn($m) => api_ok(['link' => share_update((int) api_need_user($user)['id'], (int) $m[1], $body)])],
+        ['DELETE', '#^/v1/shares/(\d+)$#', fn($m) => api_ok(['ok' => share_delete((int) api_need_user($user)['id'], (int) $m[1])])],
+        ['POST', '#^/v1/shares/(\d+)/revoke$#', fn($m) => api_ok(['link' => share_revoke((int) api_need_user($user)['id'], (int) $m[1])])],
+        ['POST', '#^/v1/shares/(\d+)/rotate$#', fn($m) => api_ok(share_rotate((int) api_need_user($user)['id'], (int) $m[1]))],
     ];
     $methodMismatch = false;
     foreach ($routes as [$verb, $re, $fn]) {

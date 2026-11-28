@@ -5,6 +5,10 @@ if (preg_match('#^/(includes|install|config|storage|lang)(/|$)#', $path)) {
     http_response_code(403);
     return true;
 }
+if ($path === '/s' || str_starts_with($path, '/s/')) {
+    require __DIR__ . '/s/index.php'; // herkese açık paylaşım ucu
+    return true;
+}
 if (preg_match('#^/api/(v\d+/.*)$#', $path, $m)) {
     $_GET['r'] = '/' . $m[1];
     require __DIR__ . '/api/index.php';

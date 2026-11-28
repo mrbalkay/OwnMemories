@@ -476,3 +476,58 @@ iskele ×2, masa ×2 — ayrı kaldı; LFW'de aynı kişinin farklı fotoğrafla
 da %7'ye karartılmış kopya — ikisi "karanlık/parlak" listesine düşer). Bulanık kopyalar (σ ≥ 2 Gauss) netliği
 1–25, net fotoğraflar ≥ 80.
 
+
+## 9. Bağlantıyla paylaşım (herkese açık bağlantılar)
+
+Tailnet dışındaki kişilere bir albüm (güncel içeriğiyle) veya bir seçim gösterilir. Kod: `web/includes/shares.php`
+(sahip tarafı, öğe anahtarları, GPS silme, zip akışı), `web/includes/share_public.php` (genel uç, HTML),
+`web/s/index.php` (ön denetleyici), `web/s/assets/share.{css,js}`, web arayüzü `web/assets/app/shares.js` + `qr.js`,
+iOS `ios/OwnMemories/Views/ShareLinkSheet.swift`, sunucu `server/setup-share.sh` + `server/apache-ownmemories-share.conf`.
+
+**Ağ:** Apache'de ayrı site, yalnızca `127.0.0.1:8091`, DocumentRoot `web/s`, her istek `web/s/index.php`'ye.
+`tailscale funnel --bg --https=8443 http://127.0.0.1:8091` yalnızca bu portu açar (ana uygulama `tailscale serve` 443,
+tailnet'e özel). `shares.public_url` (config) bağlantı adreslerinin köküdür; yoksa isteğin adresi kullanılır (tailnet
+içinde ana sitenin `/s/` yolu da çalışır: `web/s/.htaccess`). mod_remoteip yalnızca yerel vekilin X-Forwarded-For'una
+güvenir; uç yalnızca `REMOTE_ADDR` kullanır.
+
+**Veri (migration 010):** `share_links` (token_hash = SHA-256(belirteç), user_id, kind album|selection, album_id,
+title, created_at, expires_at, password_hash, allow_download, show_location, views, last_viewed_at, revoked_at),
+`share_link_assets` (link_id, asset_id, sort_order). Belirteç 32 bayt rastgele, base64url (43 karakter); düz hali
+saklanmaz. Albüm bağlantısı albümün çöpte olmayan güncel öğelerini, seçim bağlantısı sahibin çöpte olmayan
+öğelerini gösterir. Albüm silinirse, sahip devre dışıysa veya iptal edildiyse bağlantı 410 döner.
+
+**Öğe anahtarı:** `AES-256-ECB(anahtar = HMAC-SHA256(site_settings.share_secret, "item|" + belirteç), uuid'nin 16 baytı)`
+→ base64url 22 karakter. Bağlantıya özgüdür, iç kimliği göstermez; her istekte çözülür ve üyelik denetlenir.
+
+**Uçlar (sahip, oturum+CSRF veya Bearer):**
+| Yöntem | Yol | Açıklama |
+|---|---|---|
+| GET | `/v1/shares[?album=<id>]` | `{links: [Link], public_url, funnel}` |
+| POST | `/v1/shares` | `{kind, album_id \| ids[], title?, expires: 1d\|1w\|1m\|never, password?, allow_download, show_location}` → 201 `{link, token, url, funnel}` (albüm yalnız sahibince; seçimde yalnız kendi öğeleri, en çok 2000) |
+| PATCH | `/v1/shares/{id}` | title, expires, password (null = kaldır), allow_download, show_location → `{link}` |
+| POST | `/v1/shares/{id}/revoke` | iptal → `{link}` |
+| POST | `/v1/shares/{id}/rotate` | yeni belirteç → `{link, token, url}` |
+| DELETE | `/v1/shares/{id}` | siler |
+
+Link: `{id, kind, album_id, title, count, cover_asset_id, created_at, expires_at, has_password, allow_download,
+show_location, views, last_viewed_at, revoked_at, status: active|expired|revoked, url: null}`. Başkasının
+bağlantısı 404.
+
+**Genel uç (`/s/...`, oturum yok):** `GET /s/<b>` galeri | 401 parola | 404/410 durum sayfası; `POST /s/<b>` parola
+(IP+bağlantı 8/15 dk, bağlantı 40/saat; `password_verify`) → `om_su` çerezi (yol `/s/<b>`, HttpOnly, SameSite=Lax,
+HMAC(link id, token_hash, password_hash, son kullanma)); `GET /s/<b>/m/<anahtar>/t|p|v|o` küçük resim, önizleme,
+video (Range), orijinal (yalnız allow_download); `GET /s/<b>/zip` (yalnız allow_download; sıkıştırmasız, veri
+tanımlayıcılı, gerekirse ZIP64, geçici dosyasız akış); `GET /s/<b>/og.jpg` (parolasız bağlantılarda 1200 px JPEG).
+Bilinmeyen belirteçler IP başına 10 dakikada 40 ile sınırlı (aşılınca geçerli belirteçler de 429); belirteç biçiminde
+olmayan yollar (favicon, `/wp-login.php` gibi tarayıcı/bot yoklamaları) sayılmaz, `/robots.txt` her şeyi yasaklar.
+Parola sayaçları önce artırılır sonra denetlenir (eşzamanlı istek seli sınırı aşamaz). 240'tan fazla öğede ilk 240 karo
+HTML, kalanı `share.js` tarafından kaydırdıkça eklenir (100k öğeli albüm ~2,5 sn, ~9 MB; 20k üstünde bellek sınırı 512 MB).
+Başlıklar: CSP `default-src 'none'` (yalnız 'self'), `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`,
+`X-Frame-Options: DENY`, `Cache-Control: private, no-store` (HTML/orijinal). Görüntülenme, çerezsiz ilk ziyarette
+sayılır (6 saat; botlar ve HEAD sayılmaz).
+
+**Konum:** show_location=0 iken t/p türevleri metadatasızdır (vips/Imagick strip); `o` fotoğrafları
+`exiftool -gps:all= -xmp:all= -iptc:all= ... -o -` ile akıtılır (ilk parça önceden okunur; exiftool yazamazsa — BMP,
+bozuk dosya — ya da yoksa: gerçek JPEG için APP1/APP13 PHP'de çıkarılır, diğerlerinde metadatasız önizleme verilir;
+boş dosya hiç sunulmaz); videolar `ffmpeg -c copy -map_metadata -1` ile `derived/share-web|share-orig`'e
+önbelleklenir (asset kalıcı silinince silinir).

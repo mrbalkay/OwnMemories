@@ -1,0 +1,9 @@
+# OwnMemories — herkese açık paylaşım ucu (/s/...). Her istek ön denetleyiciye gider (statik dosyalar dahil:
+# hepsi aynı güvenlik başlıklarıyla sunulur). Ayrı paylaşım sitesi bu dosyayı kullanmaz (AllowOverride None).
+Options -Indexes
+DirectoryIndex index.php
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{ENV:REDIRECT_STATUS} ^$
+    RewriteRule ^ index.php [L]
+</IfModule>

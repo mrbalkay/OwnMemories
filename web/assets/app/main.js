@@ -20,6 +20,7 @@ const NAV = [
   ['people', 'person', '#/people'],
   ['albums', 'album', '#/albums'],
   ['shared', 'people', '#/shared'],
+  ['links', 'link', '#/links'],
   ['map', 'map', '#/map'],
   ['places', 'pin', '#/places'],
   ['archive', 'archive', '#/archive'],
@@ -28,7 +29,7 @@ const NAV = [
 ];
 
 // Menü grupları: temalar başlıkları (.nav-h) gösterebilir ve öğeleri CSS `order` ile yeniden dizebilir.
-const NAV_GROUP = { photos: 'library', favorites: 'library', people: 'library', map: 'library', places: 'library', albums: 'albums', shared: 'albums', archive: 'other', trash: 'other', cleanup: 'other' };
+const NAV_GROUP = { photos: 'library', favorites: 'library', people: 'library', map: 'library', places: 'library', albums: 'albums', shared: 'albums', links: 'albums', archive: 'other', trash: 'other', cleanup: 'other' };
 
 function renderNav() {
   document.getElementById('navSettings')?.classList.toggle('active', route.name === 'settings');
@@ -135,6 +136,9 @@ function renderSelbar() {
         } catch (e) { toast(e.message); }
       }));
     }
+    if (route.name !== 'album' || route.album?.role === 'owner') {
+      actions.push(btn('link', t('share_link'), () => import('./shares.js').then((m) => m.linkDialog({ kind: 'selection', ids: ids() }, () => store.clear()))));
+    }
     actions.push(btn('heart', t('favorite'), () => setFav(ids(), true)));
     if (route.name === 'archive') actions.push(btn('archive', t('unarchive'), () => setArchived(ids(), false)));
     else if (route.name !== 'album') actions.push(btn('archive', t('archive_action'), () => setArchived(ids(), true)));
@@ -198,14 +202,14 @@ async function render() {
   store.clear();
   route = parseRoute();
   document.getElementById('app').dataset.route = route.name;
-  const TITLES = { people: 'people', person: 'people', favorites: 'favorites', archive: 'archive', trash: 'trash', search: 'search_results', albums: 'albums', shared: 'shared', settings: 'settings', map: 'map', album: 'albums', places: 'places', place: 'places', cleanup: 'cleanup' };
+  const TITLES = { people: 'people', person: 'people', favorites: 'favorites', archive: 'archive', trash: 'trash', search: 'search_results', albums: 'albums', shared: 'shared', settings: 'settings', map: 'map', album: 'albums', places: 'places', place: 'places', cleanup: 'cleanup', links: 'shared_links' };
   setPageTitle(t(TITLES[route.name] || 'photos'));
   renderNav();
   document.getElementById('app').classList.remove('nav-open');
   view.scrollTop = 0;
   const title = (s) => h('div', { class: 'page-head' }, h('h1', {}, s));
   // Zaman çizelgesi olmayan görünümler: önceki rotadan kalan ortam rengini sıfırla.
-  if (['albums', 'shared', 'settings', 'map', 'people', 'person', 'places', 'cleanup'].includes(route.name)) clearAmbient();
+  if (['albums', 'shared', 'settings', 'map', 'people', 'person', 'places', 'cleanup', 'links'].includes(route.name)) clearAmbient();
   // Kendi içinde eşzamansız yazan görünümler (albüm listesi, harita) ayrı bir kutuya çizilir:
   // daha yeni bir rota #view'i değiştirirse kutu DOM'dan kopar ve geç gelen yazımlar görünmez kalır.
   const box = () => { const b = h('div', { class: 'view-box' }); view.replaceChildren(b); return b; };
@@ -291,6 +295,9 @@ async function render() {
       import('./cleanup.js').then((m) => {
         if (current()) m.renderCleanup(box(), { tab: route.params?.tab, setSub: (s) => { if (current()) document.getElementById('pageSub').textContent = s; } });
       });
+      break;
+    case 'links':
+      import('./shares.js').then((m) => { if (current()) m.renderLinks(box(), { setSub: (s) => { if (current()) document.getElementById('pageSub').textContent = s; } }); });
       break;
     case 'settings':
       import('./settings.js').then((m) => { if (current()) m.renderSettings(view); });

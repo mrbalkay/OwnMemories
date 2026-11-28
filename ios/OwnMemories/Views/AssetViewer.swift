@@ -13,6 +13,8 @@ struct AssetViewer: View {
     @State private var currentId: String
     @State private var current: [String: Asset] = [:]
     @State private var showInfo = false
+    /// Bağlantıyla paylaşım (herkese açık bağlantı + iOS paylaşım sayfası): gösterilen öğe için.
+    @State private var shareLinkIds: [String]?
     @State private var chrome = true
     /// Tek bir sürükleme hem sayfa değiştirir hem kapatır (iOS Fotoğraflar gibi): yön ilk harekette
     /// belirlenir. Yatay: önceki/sonraki öğe; dikey: içerik parmağı izler, arka plan solar, eşikte kapanır.
@@ -85,6 +87,14 @@ struct AssetViewer: View {
             player?.pause()
             player = nil
             playerAssetId = nil
+        }
+        .sheet(isPresented: Binding(get: { shareLinkIds != nil }, set: { if !$0 { shareLinkIds = nil } })) {
+            if let ids = shareLinkIds {
+                ShareLinkSheet(target: .selection(ids: ids))
+                    .environmentObject(session)
+                    .environment(\.theme, theme)
+                    .preferredColorScheme(theme.colorScheme)
+            }
         }
         .sheet(isPresented: $showInfo) {
             if let id = selectedId, let a = asset(id) {
@@ -162,6 +172,10 @@ struct AssetViewer: View {
                     chromeIcon(a.isFavorite ? "heart.fill" : "heart")
                 }
                 .accessibilityLabel(a.isFavorite ? "Favorilerden çıkar" : "Favorilere ekle")
+            }
+            if let id = selectedId, let a = asset(id), a.access != "view" {
+                Button { shareLinkIds = [id] } label: { chromeIcon("link") }
+                    .accessibilityLabel("Bağlantıyla paylaş")
             }
             Button { showInfo = true } label: { chromeIcon(theme.usesGlass ? "info" : "info.circle") }
                 .accessibilityLabel("Ayrıntılar")
