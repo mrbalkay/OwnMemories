@@ -72,6 +72,16 @@ $skin = $boot['user']['theme'];
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 <div class="drop-hint" id="dropHint" hidden><?= e(t('app.drop_here')) ?></div>
 <script nonce="<?= e($nonce) ?>">window.OM = <?= json_encode($boot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
+<?php
+// Modüllerin birbirini içe aktarması (import './map.js') sürüm eki taşımaz; tarayıcı güncellemeden sonra
+// eski dosyayı önbellekten kullanmasın diye her modül, dosya tarihine göre sürümlü adrese eşlenir.
+$importMap = ['imports' => []];
+foreach (glob(OM_WEB . '/assets/app/*.js') ?: [] as $f) {
+    $rel = 'app/' . basename($f);
+    $importMap['imports']['/assets/' . $rel] = asset($rel);
+}
+?>
+<script type="importmap" nonce="<?= e($nonce) ?>"><?= json_encode($importMap, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
 <script type="module" src="<?= e(asset('app/main.js')) ?>"></script>
 </body>
 </html>
