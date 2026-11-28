@@ -150,7 +150,12 @@ private final class PhotoMarkerView: MKAnnotationView {
     private var loadingId: String?
     var client: APIClient?
     var accent: UIColor = .systemBlue { didSet { badge.backgroundColor = accent; badge.textColor = accent.isLight ? .black : .white } }
-    var corner: CGFloat = 12 { didSet { imageView.layer.cornerRadius = corner } }
+    var corner: CGFloat = 12 {
+        didSet {
+            imageView.layer.cornerRadius = corner
+            layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: corner).cgPath
+        }
+    }
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
@@ -168,7 +173,7 @@ private final class PhotoMarkerView: MKAnnotationView {
         layer.shadowOpacity = 0.3
         layer.shadowRadius = 6
         layer.shadowOffset = CGSize(width: 0, height: 3)
-        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: 12).cgPath   // binlerce görünümde ekran dışı gölge hesabı olmasın
+        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: corner).cgPath   // binlerce görünümde ekran dışı gölge hesabı olmasın
         addSubview(imageView)
         badge.font = .systemFont(ofSize: 12, weight: .bold)
         badge.textAlignment = .center
@@ -193,6 +198,12 @@ private final class PhotoMarkerView: MKAnnotationView {
 
     override func prepareForDisplay() {
         super.prepareForDisplay()
+        refresh()
+    }
+
+    /// Güncel `annotation`'a göre sayı ve kapak. Delege de `client` atadıktan sonra çağırır (sıralamaya güvenmeden);
+    /// aynı kimlik için ikinci çağrı yeni istek açmaz.
+    func refresh() {
         if let cluster = annotation as? MKClusterAnnotation {
             let first = cluster.memberAnnotations.lazy.compactMap { $0 as? PhotoAnnotation }.first
             configure(assetId: first?.assetId, count: cluster.memberAnnotations.count)
@@ -354,13 +365,15 @@ private struct PhotoMap: UIViewRepresentable {
                 v.clusteringIdentifier = nil
                 v.displayPriority = .required
                 style(v)
-                return v   // içerik prepareForDisplay()'de kurulur
+                v.refresh()   // üyeler değişirse prepareForDisplay() yeniden kurar
+                return v
             }
             guard annotation is PhotoAnnotation else { return nil }
             let v = mapView.dequeueReusableAnnotationView(withIdentifier: PhotoMarkerView.reuseId, for: annotation) as! PhotoMarkerView
             v.clusteringIdentifier = "photos"   // yeniden kullanımda da her seferinde
             v.displayPriority = .defaultHigh
             style(v)
+            v.refresh()
             return v
         }
 
