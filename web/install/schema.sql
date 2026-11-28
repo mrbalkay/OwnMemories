@@ -439,3 +439,18 @@ CREATE TABLE IF NOT EXISTS share_link_assets (
   PRIMARY KEY (link_id, asset_id),
   KEY ix_sla_asset (asset_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Fotoğraftaki yazı / OCR (011): bkz. install/migrations/011_ocr.sql.
+CREATE TABLE IF NOT EXISTS asset_text (
+  asset_id CHAR(36) NOT NULL PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  text MEDIUMTEXT NOT NULL,
+  folded MEDIUMTEXT CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  lang VARCHAR(8) NULL,
+  words INT UNSIGNED NOT NULL DEFAULT 0,
+  engine VARCHAR(40) NOT NULL,
+  computed_at DATETIME NOT NULL,
+  KEY ix_at_user_words (user_id, words),
+  KEY ix_at_engine (engine),
+  FULLTEXT KEY ft_at_folded (folded)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -566,3 +566,64 @@ sayılır (6 saat; botlar ve HEAD sayılmaz).
 bozuk dosya — ya da yoksa: gerçek JPEG için APP1/APP13 PHP'de çıkarılır, diğerlerinde metadatasız önizleme verilir;
 boş dosya hiç sunulmaz); videolar `ffmpeg -c copy -map_metadata -1` ile `derived/share-web|share-orig`'e
 önbelleklenir (asset kalıcı silinince silinir).
+
+## 9. Fotoğraftaki yazı (OCR)
+
+**Motor:** PaddleOCR PP-OCRv6 çok dilli modelleri (RapidOCR'ın ONNX dışa aktarımı, Apache-2.0): "tiny" algılama
+(1.8 MB) + "small" tanıma (21 MB, 18.7 bin karakter; Türkçe harfler dahil). `ml/ownmemories_ml/ocr.py` yalnız
+onnxruntime + numpy + Pillow kullanır: DB son işlemesi (eşik 0.3 → 2×2 genişletme → 8-komşu bağlı bileşenler (satır
+koşuları + birleşim-bul) → dışbükey zarf + en küçük döndürülmüş dikdörtgen → kutu puanı ≥ 0.5 → genişletme 1.6) ve
+dörtgen kırpma (PIL `QUAD`) numpy ile yazıldı; `rapidocr` paketi (OpenCV 170 MB + shapely + pyclipper + omegaconf)
+gerekmez. Tanıma CTC; kod çözme Türkçe/İngilizce/Batı Avrupa karakter kümesiyle sınırlı, sık karışmalar Türkçeye
+çevrilir (Č/Ć → Ğ, Í → İ, Õ → Ö, Š/Ș → Ş, "$AİR" → "ŞAİR", büyük harfli sözcükte 1/0 → I/O, iSTANBUL → İSTANBUL).
+Gürültü süzgeci: satır güveni < 0.80, harf/rakamsız ya da tek harfli satırlar atılır; toplam < 3 harf/rakam ya da
+harfsiz < 6 rakamlık sonuçlar "yazı yok" sayılır.
+
+**Seçim ölçümü** (`ml/tests/ocr_bench.py`; sentetik küme `ocr_synth.py`: 41 tabela/fiş/belge/menü/ekran görüntüsü,
+döndürme/perspektif/bulanıklık/gürültü; gerçek küme `ocr_commons.py`: Wikimedia Commons'tan 23 Türkçe tabela/eczane/
+dükkân fotoğrafı; sözcük bulma oranı = doğru metindeki sözcüklerin katlanmış OCR çıktısında bulunma oranı):
+
+| Motor | sentetik | gerçek | CPU / yazılı görüntü | yazısız 172 fotoğrafta sanrı |
+|---|---|---|---|---|
+| **PP-OCRv6 tiny det + small rec, 1280 px (seçilen)** | **%99.7** | **%88** | ~0.7–1.0 sn | 1 ("1000"; artık süzülüyor) |
+| PP-OCRv6 small det + small rec, 960 px | %99.7 | %84 | ~1.6 sn | 0 |
+| RapidOCR 3.10 paketi (aynı modeller + açı sınıflandırıcı) | %98.8 | %82 | ~3.6–5.5 sn | – |
+| Tesseract 5.3 tur+eng, psm 3 | %66 | %11 | ~0.5 sn | – |
+| Tesseract 5.3 tur+eng, psm 11 | %69 | %34 | ~0.8–11 sn | – |
+
+Tesseract temiz belgede harf doğruluğunda iyi (İ/ş/ğ tam) ama döndürülmüş/fotoğraf yazısında ve tabelalarda zayıf;
+PP-OCR her türde güçlü. Python 3.13 ve 3.14'te sonuçlar birebir aynı.
+
+**Dizinleyici** (`service.py` `_ocr_step`): CLIP kuyruğu boşken tur başına `OM_OCR_BATCH` (8) fotoğraf
+(`type='photo'`, küçük resmi hazır, çöpte değil; `asset_text` satırı olmayan ya da `engine` farklı olan); kaynak
+türetilmiş önizleme (2048 px; yoksa video kapağı/küçük resim). Algılama uzun kenarı 1280 px'e ölçekli görüntüde,
+tanıma tam çözünürlükten kırpılan satırlarda. Yazı yoksa da satır yazılır (`words=0`: tarandı). Ölçülen hız (4 iş
+parçacığı, 2048 px önizleme): yazısız ~0.1–0.15 sn, yazılı ~0.2–0.5 sn; 227 fotoğraflık geliştirme kütüphanesi 38 sn.
+
+**Tablo** `asset_text` (migration 011): `asset_id` PK, `user_id`, `text` (satırlar `\n` ile), `folded` (ascii_bin;
+`" elektrik faturasi "`), `lang` (tr/en tahmini), `words`, `engine` (`ppocr-v6/1`), `computed_at`; `FULLTEXT(folded)`.
+Katlama: Türkçe küçük harf (İ→i, I→ı) + aksan atma + yalnız `[a-z0-9]` sözcükler; PHP `ocr_fold()` (= `places_fold`)
+ve Python `ocr.fold()` ortak örneklerle sınanır (`tests/fixtures/ocr/fold.json`).
+
+**Arama** (`web/includes/ocr.php`, `GET /v1/search` içinde): sorgu sözcükleri katlanır; tüm sözcükler eşleşmeli.
+Puan: 3 tam sözcük, 2 sözcük başı (Türkçe ekler: "fatura" ⊂ "faturası"), 1 sözcük içi (≥ 4 harf: "köfte" ⊂
+"çiğköfte"); iki harfli sözcükler yalnız tam sözcük. Adaylar önce FULLTEXT'ten (`+fatura*`, boolean), sözcük başı
+eşleşmesi 50'den azsa ve ≥ 4 harfli sözcük varsa ayrıca `LIKE` taramasıyla (durak sözcükleri ve FULLTEXT dizini
+yoksa yalnız LIKE). 100 bin fotoğraf / 30 bin yazılı yapay kütüphanede sorgu 0.1–0.16 sn (eşleşme yoksa FULLTEXT
+~10 ms + LIKE ~0.1 sn). Sıra: adlandırılmış kişi → **yazı (puan ≥ 2)** → akıllı ∩ metin → dosya adı/açıklama →
+yazı (puan 1) → akıllı. Hizmet yoksa: yazı (≥ 2) → dosya adı/açıklama → yazı (1), tarihe göre. Yazıda bulunan
+sonuçlarda `text_match: {term, snippet, parts:[{t, m}]}` (en çok sözcüğün eşleştiği satır, ≤ 90 karakter pencere;
+`m` vurgulanacak özgün sözcük), yanıtta `text_matches` (yazı eşleşmesi sayısı). `GET /v1/search/status` hizmet
+varken `ocr: {scanned, total, with_text}` da döner.
+
+**Uçlar:** `GET /v1/assets/{id}/text` (sahibi ya da paylaşılan albüm üyesi) →
+`{status: "done"|"none"|"pending"|"unavailable", text, lines[], words, lang, engine, computed_at}`.
+Kalıcı silmede satır silinir (`ocr_purge_asset`). ML `/health` → `ocr: bool` (+ `ocr_error`).
+
+**Arayüz:** web `web/assets/app/ocr.js` (karo rozeti `.tile-ocr`, başlıkta `.search-ocr`, bilgi panelinde katlanabilir
+`.i-ocr` + kopyala; kanca sınıfları dosyanın başında, üç temada stil), iOS `AssetInfoView` "Fotoğraftaki yazı"
+bölümü (seçilebilir metin, aramadan gelindiyse vurgu, "Yazıyı kopyala") ve arama hücresinde rozet;
+yönetim paneli "Fotoğraftaki yazı (OCR)" ilerlemesi.
+
+**Testler:** `tests/db/OcrTest.php`, `tests/unit/OcrFoldTest.php`, `ml/tests/test_ocr.py [--model-dir]`,
+`ml/tests/ocr_bench.py` (motor karşılaştırması), `tests/e2e/smoke.mjs` (`OM_E2E_OCR_Q=eczane` ile).

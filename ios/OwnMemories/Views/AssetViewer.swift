@@ -627,6 +627,10 @@ private struct AssetInfoView: View {
     @State private var peopleBusy = false
     /// Sunucu bu öğenin kişilerini vermiyor (başkasının öğesi: 404): bölüm gizlenir.
     @State private var peopleUnavailable = false
+    /// GET /v1/assets/{id}/text: fotoğraftaki yazı (nil: yükleniyor ya da yok).
+    @State private var recognized: AssetText?
+    @State private var textExpanded = false
+    @State private var textCopied = false
 
     /// Kişi seçicinin amacı: fotoğrafa kişi ekle ya da bir yüzü adlandır.
     private enum PeoplePicker: Identifiable {
@@ -649,6 +653,7 @@ private struct AssetInfoView: View {
             List {
                 if let c = asset.caption, !c.isEmpty { Section { Text(c) } }
                 if canEditPeople && !peopleUnavailable { peopleSection }
+                if let recognized, recognized.hasText { textSection(recognized) }
                 Section("Çekim") {
                     Text(dateText)
                     if let src = asset.dateSource { Text(sourceText(src)).font(.footnote).foregroundStyle(.secondary) }
@@ -698,6 +703,9 @@ private struct AssetInfoView: View {
             guard canEditPeople else { return }
             await loadPeople()
         }
+        .task(id: "text-\(asset.id)") {
+            await loadText()
+        }
         .sheet(item: $picker, onDismiss: applyPendingPick) { target in
             PersonPickerSheet(title: pickerTitle(target), excluding: pickerExcluding(target)) { choice in
                 pendingPick = (target, choice)
@@ -707,6 +715,79 @@ private struct AssetInfoView: View {
         }
         .mergeOfferAlert($mergeOffer) { o in Task { await mergeCluster(o) } }
         .peopleErrorAlert($peopleError)
+    }
+
+    // MARK: - Fotoğraftaki yazı (OCR)
+
+    /// Kısa yazı tümüyle, uzun yazı ilk 4 satır (Tümünü göster); aramadan gelindiyse sorgu sözcükleri vurgulu.
+    private func textSection(_ t: AssetText) -> some View {
+        let tokens = OCRText.tokens(asset.textMatch?.term ?? "")
+        let long = t.lines.count > 4
+        let shown = (long && !textExpanded) ? Array(t.lines.prefix(4)) : t.lines
+        return Section {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(shown.enumerated()), id: \.offset) { _, line in
+                    Text(highlighted(line, tokens))
+                        .font(.system(size: 15, design: theme.name == .galeri ? .serif : .default))
+                        .foregroundStyle(theme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .textSelection(.enabled)
+            .padding(.vertical, 4)
+            .accessibilityElement(children: .combine)
+            if long {
+                Button(textExpanded ? "Daha az göster" : "Tümünü göster (\(t.lines.count) satır)") {
+                    withAnimation(.easeInOut(duration: 0.2)) { textExpanded.toggle() }
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(theme.name == .yerel ? theme.accent : theme.ink)
+            }
+            Button {
+                UIPasteboard.general.string = t.lines.joined(separator: "\n")
+                textCopied = true
+                Task { try? await Task.sleep(nanoseconds: 1_600_000_000); textCopied = false }
+            } label: {
+                Label(textCopied ? "Kopyalandı" : "Yazıyı kopyala", systemImage: textCopied ? "checkmark" : "doc.on.doc")
+                    .foregroundStyle(textCopied ? theme.success : (theme.name == .yerel ? theme.accent : theme.ink))
+            }
+            .buttonStyle(.borderless)
+            .sensoryFeedback(.success, trigger: textCopied) { _, new in new }
+        } header: {
+            HStack(spacing: 6) {
+                Image(systemName: "text.viewfinder")
+                Text("Fotoğraftaki yazı")
+                Spacer()
+                Text("\(t.words) sözcük").monospacedDigit().foregroundStyle(theme.muted)
+            }
+        }
+    }
+
+    private func highlighted(_ line: String, _ tokens: [String]) -> AttributedString {
+        let ranges = OCRText.hitRanges(in: line, tokens: tokens)
+        guard !ranges.isEmpty else { return AttributedString(line) }
+        var out = AttributedString()
+        var prev = line.startIndex
+        for r in ranges {
+            out += AttributedString(String(line[prev..<r.lowerBound]))
+            var hit = AttributedString(String(line[r]))
+            hit.backgroundColor = theme.name == .galeri ? theme.accent.opacity(0.16) : Color.yellow.opacity(0.42)
+            hit.inlinePresentationIntent = .stronglyEmphasized
+            out += hit
+            prev = r.upperBound
+        }
+        out += AttributedString(String(line[prev...]))
+        return out
+    }
+
+    private func loadText() async {
+        guard let client = session.client, !asset.isVideo else { return }
+        textExpanded = asset.textMatch != nil
+        do {
+            recognized = try await client.send("GET", "assets/\(asset.id)/text", as: AssetText.self)
+        } catch {
+            recognized = nil  // eski sunucu (404) ya da ağ hatası: bölüm gösterilmez
+        }
     }
 
     // MARK: - Kişiler

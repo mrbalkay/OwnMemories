@@ -188,6 +188,7 @@ function asset_purge(int $userId, array $ids): int
         if (function_exists('trips_purge_asset')) {
             trips_purge_asset($id); // Geziler ve etkinlikler
         }
+        ocr_purge_asset($id);
         db_exec('UPDATE assets SET live_pair_id = NULL WHERE live_pair_id = ?', [$id]);
         db_exec('UPDATE assets SET edited_of_id = NULL WHERE edited_of_id = ?', [$id]);
         db_exec('UPDATE albums SET cover_asset_id = NULL WHERE cover_asset_id = ?', [$id]);

@@ -35,6 +35,40 @@ FACE_NEEDED = ("detection/model.onnx", "recognition/model.onnx")
 OPTIONAL = {"textual/special_tokens_map.json"}
 UA = "ownmemories-ml/1.0"
 
+# Fotoğraftaki yazı (OCR): RapidOCR'ın ONNX'e aktardığı PaddleOCR PP-OCRv6 modelleri (Apache-2.0), ModelScope'tan.
+#   python -m ownmemories_ml download --model ocr --dest /var/lib/ownmemories/models   → <dest>/ppocr-v6/
+# Boyut + SHA-256 sabit (RapidOCR 3.10 default_models.yaml ile aynı). Ayna: OM_OCR_MODEL_BASE.
+OCR_MODEL_DIR = "ppocr-v6"
+OCR_BASE = os.environ.get("OM_OCR_MODEL_BASE",
+                          "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6").rstrip("/")
+OCR_FILES = {
+    "det.onnx": ("det/PP-OCRv6_det_tiny.onnx", 1829618,
+                 "f42c0fbd294d95eac1a550e131b277dac97462c8025fa4b6c3cec1b7894bd3d5"),
+    "rec.onnx": ("rec/PP-OCRv6_rec_small.onnx", 21234383,
+                 "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884"),
+}
+
+
+def is_ocr_model(model: str) -> bool:
+    return model.strip().lower() in ("ocr", OCR_MODEL_DIR, "ppocr")
+
+
+def download_ocr(dest_root: str, log=print) -> str:
+    """OCR modellerini indirir (sürdürmeli, boyut + sha256 doğrulamalı); model dizinini döner."""
+    target = os.path.join(dest_root, OCR_MODEL_DIR)
+    os.makedirs(target, exist_ok=True)
+    for name, (rel, size, sha) in OCR_FILES.items():
+        path = os.path.join(target, name)
+        meta = {"size": size, "sha256": sha}
+        if _verify(path, meta):
+            log(f"    hazır: {OCR_MODEL_DIR}/{name}")
+            continue
+        log(f"    indiriliyor: {OCR_MODEL_DIR}/{name} ({size >> 20} MB)")
+        _fetch(f"{OCR_BASE}/{rel}", path, meta, log)
+    with open(os.path.join(target, ".complete"), "w") as f:
+        json.dump({n: {"size": v[1], "sha256": v[2]} for n, v in OCR_FILES.items()}, f)
+    return target
+
 
 def is_face_model(model: str) -> bool:
     """Immich'in yüz tanıma paketleri (buffalo_l/buffalo_s/antelopev2…): detection/ + recognition/."""
@@ -202,7 +236,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--revision", default="main")
     a = p.parse_args(argv)
     try:
-        path = download(a.model, a.dest, a.revision)
+        path = download_ocr(a.dest) if is_ocr_model(a.model) else download(a.model, a.dest, a.revision)
     except Exception as e:  # noqa: BLE001
         print(f"Model indirilemedi: {e}", file=sys.stderr)
         return 1

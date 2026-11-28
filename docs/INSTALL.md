@@ -532,3 +532,24 @@ uygulama bunu pencerede belirtir.
   (`<depo>/derived/share-*`, orijinaller değişmez). Tarih ve kamera bilgisi korunur.
 - Bağlantıyı alan biri onu başkasına iletebilir; hassas albümlerde parola ve kısa süre kullanın, işiniz bitince
   **Kapat**'a basın. Sayfalar arama motorlarına kapalıdır (noindex) ve dışarıdan hiçbir kaynak yüklemez.
+## I. Fotoğraftaki yazı (tabela, belge, fiş, ekran görüntüsü)
+
+Arama kutusuna **fotoğrafta yazan** bir sözcüğü yazın: "fatura", "pasaport", "eczane", "menü", "Kadıköy",
+bir dükkân adı… Yazısı eşleşen fotoğraflar sonuçların başına gelir ve karonun köşesinde bulunan sözcük vurgulu
+bir rozetle görünür ("“fatura” yazısı 3 fotoğrafta bulundu"). Fotoğrafı açıp **Ayrıntılar** (ⓘ ya da `i` tuşu)
+panelinde **Fotoğraftaki yazı** bölümünde okunan yazının tamamını görebilir, **Kopyala** ile panoya alabilirsiniz.
+iPhone'da: fotoğraf → ⓘ → "Fotoğraftaki yazı" → "Yazıyı kopyala".
+
+- Türkçe (ç ğ ı İ ö ş ü) ve İngilizce okunur. Arama Türkçe harflere duyarsızdır: "istanbul" = "İSTANBUL",
+  "cigkofte" = "çiğköfte"; ekler sorun değil ("fatura" → "FATURASI" da bulunur).
+- Yazıyı sunucudaki akıllı arama servisi okur (PP-OCRv6 modelleri, ~23 MB, ek Python paketi gerekmez);
+  fotoğraflar hiçbir yere gönderilmez. Ek kurulum yok: `update.sh` modeli indirir, tablo (migration 011) ilk
+  istekte eklenir.
+- Okuma, akıllı arama dizini bitince arka planda bir kez yapılır: yazısız fotoğraf ~0.1 sn, yazılı ~0.3–1 sn
+  (4 çekirdek). 30.000 fotoğraf ≈ 1,5–2 saat, 100.000 ≈ 5–6 saat. İlerleme: **Yönetim → Genel bakış →
+  Fotoğraftaki yazı (OCR)** ya da `journalctl -u ownmemories-ml | grep yazı`.
+- Kapatmak: `/etc/ownmemories/ml.env` içine `OM_OCR="0"` yazıp `sudo systemctl restart ownmemories-ml`.
+  Ayarlar: `OM_OCR_BATCH` (tur başına fotoğraf, 8), `OM_OCR_MIN_CONF` (satır güven eşiği, 0.80),
+  `OM_OCR_DET_SIDE` (algılama çözünürlüğü, 1280; küçük yazılar için 1600 daha iyi ama ~%40 daha yavaş).
+- Model indirilemediyse (ModelScope'a erişim yoksa) yalnızca yazıyla arama kapalı kalır; Yönetim sayfası
+  "Kapalı" ve nedenini gösterir. Tekrar denemek: `sudo bash /var/www/ownmemories/server/install-ml.sh`.

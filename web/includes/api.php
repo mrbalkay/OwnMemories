@@ -145,6 +145,8 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['DELETE', '#^/v1/shares/(\d+)$#', fn($m) => api_ok(['ok' => share_delete((int) api_need_user($user)['id'], (int) $m[1])])],
         ['POST', '#^/v1/shares/(\d+)/revoke$#', fn($m) => api_ok(['link' => share_revoke((int) api_need_user($user)['id'], (int) $m[1])])],
         ['POST', '#^/v1/shares/(\d+)/rotate$#', fn($m) => api_ok(share_rotate((int) api_need_user($user)['id'], (int) $m[1]))],
+        // Fotoğraftaki yazı (OCR, ocr.php)
+        ['GET', "#^/v1/assets/$uuid/text$#", fn($m) => api_asset_text(api_need_user($user), $m[1])],
     ];
     $methodMismatch = false;
     foreach ($routes as [$verb, $re, $fn]) {

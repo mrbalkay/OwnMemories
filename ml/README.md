@@ -38,6 +38,13 @@ curl -s 127.0.0.1:8765/faces/recluster -d '{"user_id":1}'
 curl -s 127.0.0.1:8765/cleanup/groups -d '{"user_id":1}'      # Temizlik: benzer/yinelenen gruplar
 ```
 
+Fotoğraftaki yazı (OCR, `ocr.py`; ~23 MB, ek paket yok):
+
+```bash
+/tmp/mlvenv/bin/python -m ownmemories_ml download --model ocr --dest /tmp/models     # ppocr-v6/{det,rec}.onnx
+OM_ML_MODEL_DIR=/tmp/models /tmp/mlvenv/bin/python -m ownmemories_ml ocr fis.jpg tabela.jpg   # tanı: okunan satırlar
+```
+
 ## Testler
 
 ```bash
@@ -53,6 +60,11 @@ python -I ml/tests/test_cutoff.py
 python -I ml/tests/xm3600_bench.py --data <xm3600 klasörü> --model-dir /tmp/models/ViT-B-16-SigLIP2__webli
 # Temizlik: pHash/netlik/renk imzası/ekran görüntüsü kuralı/gruplama (model/DB gerekmez; --images ile gerçek fotoğraflar)
 python -I ml/tests/test_cleanup.py --images <p1..p18.jpg klasörü>
+# OCR: katlama (PHP ile ortak örnekler), bağlı bileşenler, dikdörtgen, Türkçe düzeltmeler; --model-dir ile sentetik küme
+python -I ml/tests/test_ocr.py --model-dir /tmp/models/ppocr-v6
+# OCR motor karşılaştırması (PP-OCR / RapidOCR / Tesseract): sentetik + Wikimedia Commons gerçek fotoğraflar
+python -I ml/tests/ocr_synth.py --out /tmp/ocr/synth --scenes <yazısız fotoğraflar> && python -I ml/tests/ocr_commons.py --out /tmp/ocr/real
+python -I ml/tests/ocr_bench.py --sets /tmp/ocr/synth /tmp/ocr/real --model-dir /tmp/models/ppocr-v6 --engines ppocr tess --negatives <yazısız fotoğraflar>
 # Yüz: birim testleri (NMS, Umeyama, hizalama, kümeleme; model/DB gerekmez)
 python -I ml/tests/test_face_ops.py
 # Yüz: uçtan uca (geçici DB om_facetest_<pid>, LFW görselleri, CLIP modeli olmadan)

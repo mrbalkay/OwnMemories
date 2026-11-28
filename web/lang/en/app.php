@@ -218,4 +218,9 @@ return [
     'sl_delete' => 'Delete',
     'sl_deleted' => 'Link deleted',
     'sl_open_album' => 'Open album',
+    // Text in photos (OCR)
+    'ocr_title' => 'Text in photo', 'ocr_words' => '{n} words', 'ocr_copy' => 'Copy text', 'ocr_copied' => 'Text copied to clipboard',
+    'ocr_copy_failed' => 'Could not copy', 'ocr_found' => 'Text “{q}” found', 'ocr_found_n' => 'Text “{q}” found in {n} photos',
+    'ocr_found_one' => 'Text “{q}” found in 1 photo', 'ocr_show_all' => 'Show all', 'ocr_show_less' => 'Show less',
+    'ocr_badge_label' => 'Found in the text of the photo: {snippet}',
 ];

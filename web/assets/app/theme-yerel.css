@@ -868,3 +868,24 @@
 @media (max-width: 860px) {
   :root[data-skin="yerel"] .cl-tile { border-radius: 2px; }
 }
+
+/* ------------------------------------------------------------ fotoğraftaki yazı (ocr.js) */
+/* iOS "Canlı Metin" havası: buzlu malzeme rozet, sarı vurgu. */
+:root[data-skin="yerel"] .tile-ocr { background: rgba(28, 28, 30, .5); backdrop-filter: blur(20px) saturate(1.8); -webkit-backdrop-filter: blur(20px) saturate(1.8); box-shadow: var(--y-glass-line); font-weight: 590; }
+:root[data-skin="yerel"] .tile-ocr-hit { background: #FFD60A; color: #1C1C1E; border-radius: 4px; }
+:root[data-skin="yerel"] .search-ocr { color: var(--ink); }
+:root[data-skin="yerel"] .search-ocr .ic { background: var(--y-accent-tint); color: var(--y-accent-text); border-radius: 7px; }
+:root[data-skin="yerel"] .i-ocr { border-top-color: var(--y-hair); }
+:root[data-skin="yerel"] .i-ocr-ic { color: var(--gok); }
+:root[data-skin="yerel"] .i-ocr-toggle { border-radius: var(--r-control); }
+:root[data-skin="yerel"] .i-ocr-toggle:hover { background: var(--y-fill-2); }
+:root[data-skin="yerel"] .i-ocr-count { color: var(--y-ink-2); }
+:root[data-skin="yerel"] .i-ocr-copy { color: var(--y-accent-text); }
+:root[data-skin="yerel"] .i-ocr-body { background: var(--y-fill-2); border-radius: var(--r-control); color: var(--ink); }
+:root[data-skin="yerel"] .i-ocr-hit { background: rgba(255, 214, 10, .45); }
+:root[data-skin="yerel"] .i-ocr { margin-top: 18px; padding: 4px 14px 12px; border-top: 0; border-radius: 12px; background: var(--surface); }
+:root[data-skin="yerel"] .i-ocr-toggle { margin-left: -8px; padding: 9px 8px; }
+:root[data-skin="yerel"] .i-ocr-title { font-size: 15px; }
+:root[data-skin="yerel"] .viewer .i-ocr-copy { width: 36px; height: 36px; color: var(--y-accent-text); background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-skin="yerel"] .viewer .i-ocr-copy:hover { background: var(--y-fill-2); }
+:root[data-skin="yerel"] .viewer .i-ocr-copy.done { color: var(--yaprak); }

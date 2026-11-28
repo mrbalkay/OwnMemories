@@ -3,6 +3,7 @@ import { api, previewUrl, videoUrl, originalUrl, thumbUrl } from './api.js';
 import { h, t, icon, toast, formatDateTime, formatBytes } from './util.js';
 import { store } from './store.js';
 import { fetchAssetPeople, peopleSection, faceBoxes } from './people.js';
+import { infoSection as ocrSection } from './ocr.js';
 
 let current = null;
 
@@ -247,6 +248,9 @@ class Viewer {
     if (!(own && !a.trashed_at) && a.people?.length) row(t('people'), a.people.join(', '));
     if (a.albums?.length) row(t('in_albums'), ...a.albums.map((al) => h('a', { class: 'chip', href: `#/album/${al.id}` }, al.title)));
     if (a.owner_name) row(t('owner'), a.owner_name);
+    // Fotoğraftaki yazı (ocr.js): yazı varsa katlanabilir bölüm + kopyala; aramadan gelindiyse sorgu vurgulanır.
+    // Satırların sonunda (temaların .i-row gruplamasını bölmesin); yazı yoksa gizli kalır.
+    if (a.type === 'photo') rows.push(ocrSection(a.id, store.byId(a.id)?.text_match?.term || ''));
     this.info.replaceChildren(h('h2', {}, t('details')), ...rows);
   }
 

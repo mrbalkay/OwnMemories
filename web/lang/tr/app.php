@@ -218,4 +218,9 @@ return [
     'sl_delete' => 'Sil',
     'sl_deleted' => 'Bağlantı silindi',
     'sl_open_album' => 'Albümü aç',
+    // Fotoğraftaki yazı (OCR)
+    'ocr_title' => 'Fotoğraftaki yazı', 'ocr_words' => '{n} sözcük', 'ocr_copy' => 'Yazıyı kopyala', 'ocr_copied' => 'Yazı panoya kopyalandı',
+    'ocr_copy_failed' => 'Kopyalanamadı', 'ocr_found' => '“{q}” yazısı bulundu', 'ocr_found_n' => '“{q}” yazısı {n} fotoğrafta bulundu',
+    'ocr_found_one' => '“{q}” yazısı 1 fotoğrafta bulundu', 'ocr_show_all' => 'Tümünü göster', 'ocr_show_less' => 'Daha az göster',
+    'ocr_badge_label' => 'Fotoğraftaki yazıda bulundu: {snippet}',
 ];
