@@ -13,6 +13,8 @@ struct DiagnosticsView: View {
     @State private var copied = false
     @State private var serverInfo: ServerPing?
     @State private var serverError: String?
+    @State private var backup: ServerBackupStatus?
+    @State private var backupError: String?
     @EnvironmentObject private var session: Session
 
     private struct ServerPing: Decodable {
@@ -55,6 +57,9 @@ struct DiagnosticsView: View {
                     row("Bağlantı", serverError, ok: false)
                 } else {
                     row("Bağlantı", "…")
+                }
+                if session.user?.isAdmin == true {
+                    backupRows
                 }
             }
             .listRowBackground(theme.groupSurface)
@@ -102,11 +107,80 @@ struct DiagnosticsView: View {
             engine.refreshCounts()
             if let client = session.client {
                 do { serverInfo = try await client.send("GET", "ping") } catch { serverError = error.localizedDescription }
+                if session.user?.isAdmin == true { await loadBackup(client) }
             }
         }
         .refreshable {
             snapshot = WidgetStore.load()
             log = DiagLog.load().reversed()
+            if let client = session.client, session.user?.isAdmin == true { await loadBackup(client) }
+        }
+    }
+
+    /// Sunucu yedeği (yalnızca yönetici). 403/404 (yönetici değil ya da eski sunucu) sessizce yok sayılır.
+    private func loadBackup(_ client: APIClient) async {
+        do {
+            let r: ServerBackupEnvelope = try await client.send("GET", "admin/backup")
+            backup = r.backup
+            backupError = nil
+        } catch let APIError.server(status, _, _, _) where status == 403 || status == 404 {
+            backup = nil
+        } catch {
+            backupError = error.localizedDescription
+        }
+    }
+
+    @ViewBuilder private var backupRows: some View {
+        if let b = backup {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Sunucu yedeği")
+                Spacer()
+                Label(b.headline, systemImage: b.level == .ok ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(backupColor(b.level))
+                    .accessibilityLabel("Sunucu yedeği: \(b.headline)")
+            }
+            if !b.configured {
+                Text("Fotoğrafların tek kopyası sunucuda. Sunucuda bir kez çalıştırın: sudo bash ~/OwnMemories/server/setup-backup.sh")
+                    .font(.footnote).foregroundStyle(theme.muted)
+                    .textSelection(.enabled)
+            }
+            ForEach(b.targets) { t in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Image(systemName: "circle.fill").font(.system(size: 8)).foregroundStyle(backupColor(t.health.level)).accessibilityHidden(true)
+                        Text(t.title)
+                        Spacer()
+                        Text(t.lastSuccessDate.map { $0.formatted(.relative(presentation: .named)) } ?? "Hiç")
+                            .foregroundStyle(t.health.level == .error ? Color.red : theme.muted)
+                    }
+                    if let size = t.repoSize {
+                        Text("\(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))\(t.snapshotCount.map { " · \($0) sürüm" } ?? "")")
+                            .font(.caption).foregroundStyle(theme.muted)
+                    }
+                    if t.lastStatus == "failed", let err = t.error {
+                        Text(err).font(.caption).foregroundStyle(.red).lineLimit(3)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
+            if let next = b.nextRunDate, b.configured {
+                row("Sonraki yedek", next.formatted(date: .abbreviated, time: .shortened))
+            }
+            if let rt = b.restoreTest {
+                row("Geri yükleme testi", rt.ok ? "Sorunsuz" : "Başarısız", ok: rt.ok)
+            }
+        } else if let backupError {
+            row("Sunucu yedeği", backupError, ok: false)
+        }
+    }
+
+    private func backupColor(_ level: BackupLevel) -> Color {
+        switch level {
+        case .ok: return .green
+        case .warn, .unconfigured: return .orange
+        case .error: return .red
+        case .unknown: return theme.muted
         }
     }
 

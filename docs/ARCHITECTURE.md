@@ -160,6 +160,20 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | POST | `assets/people` | `{ids:[…≤500], person_id? \| name?}` | `{count, person}` — toplu elle etiket (yalnız kendi asset'leri sayılır; hiçbiri kendisinin değilse 404 ve kişi oluşturulmaz) |
 | PATCH | `faces/{id}` | `{person_id:int}` · `{name:string}` · `{person_id:null}` | asset'in kişi yükü — atama `assigned_by='user'` (o kişiye ret varsa kalkar); `null` ayırır ve `rejected_person_id` yapar |
 | GET | `faces/{id}/thumb` | – | 256×256 JPEG yüz kırpması (kutunun uzun kenarı + her yana %35 dolgu, görüntü içinde kalır), `private, max-age=31536000, immutable`; önizleme yoksa 404 |
+| GET | `admin/backup` | – (yalnızca yönetici; diğerlerine 403) | `{backup:{configured, level:"ok\|warn\|error\|unconfigured", targets:[{id,type,label,location,last_status,last_success_at,last_failure_at,snapshot_id,snapshot_count,repo_size,data_added,error,last_check_at,last_check_ok,health:{level,reason}}], next_run_at, running, requested, can_request, last_run, restore_test, schedule, retention, include_derived, setup_command}}` |
+| POST | `admin/backup/run` | – (yalnızca yönetici; oturumda CSRF) | 202 `{backup}` — "Şimdi yedekle": istek dosyası yazar; zaten sıradaysa/çalışıyorsa yeni istek oluşturmaz. Kurulmamışsa 409 `backup_not_configured` |
+
+
+**Sunucu yedeği:** `server/backup.sh` (root, restic) sonucu `/var/lib/ownmemories/backup-status.json` dosyasına yazar
+(root:www-data 0640, gizli bilgi içermez); PHP (`web/includes/backup.php`) yalnızca okur ve sağlığı hesaplar (yeşil: son başarı
+≤ 30 sa; sarı: 30–48 sa, son deneme hatalı veya denetim sorunlu; kırmızı: 48 sa'ten eski/hiç yok). "Şimdi yedekle"
+`/var/lib/ownmemories/backup-spool/run-request` dosyasını yazar (root:www-data 2770); `ownmemories-backup.path` birimi
+yedeği root olarak başlatır, `backup.sh` dosyayı ilk iş siler. Ayarlar ve anahtarlar yalnızca `/etc/ownmemories/backup.env`
+(root 0600). Yollar `config.php` → `backup.status_file` / `backup.spool_dir` ile değiştirilebilir (geliştirme/test).
+Güvenlik: `config.php` www-data tarafından yazılabildiği için root betikler onu **sahibinin yetkisiyle** (`setpriv`)
+değerlendirir ve değerleri doğrular (satır sonu/denetim karakteri yok; mysql ayar dosyasına seçenek sokulamaz) — web
+uygulamasını ele geçiren biri "Şimdi yedekle" ile root kodu çalıştıramaz. Panelin "çalışıyor" bilgisi PID'in komut satırında
+`backup` geçtiğinde geçerlidir (yeniden başlatma sonrası PID yeniden kullanımı).
 
 **Person nesnesi:** `{"id":12,"name":"Ayşe"|null,"count":42,"cover_face_id":881|null,"cover_asset_id":"uuid"|null,"hidden":false}` —
 `count` çöpte olmayan fotoğraflar; kapak: seçilmiş `cover_face_id` (hâlâ bu kişinin yüzüyse), yoksa en yüksek puanlı yüz, yüz yoksa

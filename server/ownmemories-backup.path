@@ -1,0 +1,12 @@
+# Yönetim panelindeki "Şimdi yedekle" düğmesi: web sunucusu (www-data) istek dosyasını yazar,
+# bu birim dosyayı görünce yedeği root olarak başlatır. backup.sh dosyayı ilk iş siler.
+[Unit]
+Description=OwnMemories "Şimdi yedekle" isteklerini izler
+ConditionPathExists=/etc/ownmemories/backup.env
+
+[Path]
+PathExists=/var/lib/ownmemories/backup-spool/run-request
+Unit=ownmemories-backup.service
+
+[Install]
+WantedBy=multi-user.target

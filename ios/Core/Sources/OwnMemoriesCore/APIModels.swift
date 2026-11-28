@@ -443,3 +443,84 @@ struct PersonNameConflict: Codable {
     /// Çakışan kişinin kimliği (gövdedeki kişi nesnesi ya da person_id).
     var otherId: Int? { error.person?.id ?? error.personId }
 }
+
+// MARK: - Sunucu yedeği (GET /v1/admin/backup; yalnızca yönetici, diğerlerine 403)
+
+enum BackupLevel: String, Codable, Equatable {
+    case ok, warn, error, unconfigured, unknown
+
+    init(from decoder: Decoder) throws {
+        self = BackupLevel(rawValue: (try? decoder.singleValueContainer().decode(String.self)) ?? "") ?? .unknown
+    }
+}
+
+struct ServerBackupEnvelope: Codable {
+    let backup: ServerBackupStatus
+}
+
+struct ServerBackupStatus: Codable, Equatable {
+    struct Health: Codable, Equatable {
+        let level: BackupLevel
+        let reason: String
+    }
+
+    struct Target: Codable, Equatable, Identifiable {
+        let id: String
+        let type: String?
+        let label: String?
+        let lastStatus: String?
+        let lastSuccessAt: String?
+        let repoSize: Int64?
+        let snapshotCount: Int?
+        let error: String?
+        let health: Health
+
+        var title: String { label ?? id }
+        var lastSuccessDate: Date? { lastSuccessAt.flatMap { ISO8601DateFormatter().date(from: $0) } }
+
+        enum CodingKeys: String, CodingKey {
+            case id, type, label, error, health
+            case lastStatus = "last_status"
+            case lastSuccessAt = "last_success_at"
+            case repoSize = "repo_size"
+            case snapshotCount = "snapshot_count"
+        }
+    }
+
+    struct RestoreTest: Codable, Equatable {
+        let at: String?
+        let ok: Bool
+        let filesChecked: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case at, ok
+            case filesChecked = "files_checked"
+        }
+    }
+
+    let configured: Bool
+    let level: BackupLevel
+    let targets: [Target]
+    let nextRunAt: String?
+    let running: Bool?
+    let restoreTest: RestoreTest?
+
+    var nextRunDate: Date? { nextRunAt.flatMap { ISO8601DateFormatter().date(from: $0) } }
+
+    /// Türkçe özet başlık (web paneliyle aynı ifadeler).
+    var headline: String {
+        switch level {
+        case .ok: return "Yedekler güncel"
+        case .warn: return "Dikkat gerekiyor"
+        case .error: return "Yedek alınamıyor"
+        case .unconfigured: return "Yedekleme kurulmadı"
+        case .unknown: return "Bilinmiyor"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case configured, level, targets, running
+        case nextRunAt = "next_run_at"
+        case restoreTest = "restore_test"
+    }
+}

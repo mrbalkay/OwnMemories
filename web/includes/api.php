@@ -123,6 +123,8 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['DELETE', "#^/v1/assets/$uuid/people/(\d+)$#", fn($m) => api_asset_people_remove(api_need_user($user), $m[1], $m[2])],
         ['PATCH', '#^/v1/faces/(\d+)$#', fn($m) => api_face_patch(api_need_user($user), $m[1], $body)],
         ['GET', '#^/v1/faces/(\d+)/thumb$#', fn($m) => api_face_thumb(api_need_user($user), $m[1])],
+        ['GET', '#^/v1/admin/backup$#', fn() => api_admin_backup(api_need_user($user))],
+        ['POST', '#^/v1/admin/backup/run$#', fn() => api_admin_backup_run(api_need_user($user))],
         ['POST', '#^/v1/devices/report$#', fn() => api_ok(device_report((int) api_need_user($user)['id'], $body))],
     ];
     $methodMismatch = false;

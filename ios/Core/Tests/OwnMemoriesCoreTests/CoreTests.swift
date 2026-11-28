@@ -86,6 +86,40 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(SearchStatus(indexed: 1, total: 3, ready: false).percent, 33)
     }
 
+    func testDecodeServerBackupStatus() throws {
+        let json = #"""
+        {"backup":{"configured":true,"level":"warn","next_run_at":"2026-11-29T00:10:00Z","running":false,"requested":false,
+         "last_run":{"started_at":"2026-11-28T00:10:00Z","finished_at":"2026-11-28T00:12:00Z","trigger":"scheduled","ok":false},
+         "restore_test":{"at":"2026-11-27T00:12:00Z","ok":true,"files_checked":20,"db_ok":true,"message":"20/20"},
+         "targets":[
+          {"id":"disk","type":"local","label":"Harici disk","location":"/mnt/usb","last_status":"ok","last_success_at":"2026-11-28T00:11:00Z",
+           "repo_size":123456789,"snapshot_count":12,"health":{"level":"ok","reason":"ok"}},
+          {"id":"offsite","type":"s3","label":"Backblaze B2","last_status":"failed","error":"bağlantı yok",
+           "health":{"level":"error","reason":"never_succeeded_failing"}}]}}
+        """#
+        let r = try JSONDecoder().decode(ServerBackupEnvelope.self, from: Data(json.utf8))
+        let b = r.backup
+        XCTAssertTrue(b.configured)
+        XCTAssertEqual(b.level, .warn)
+        XCTAssertEqual(b.targets.count, 2)
+        XCTAssertEqual(b.targets[0].repoSize, 123456789)
+        XCTAssertEqual(b.targets[0].health.level, .ok)
+        XCTAssertNotNil(b.targets[0].lastSuccessDate)
+        XCTAssertNil(b.targets[1].lastSuccessDate)
+        XCTAssertEqual(b.targets[1].error, "bağlantı yok")
+        XCTAssertEqual(b.restoreTest?.ok, true)
+        XCTAssertEqual(b.nextRunDate, ISO8601DateFormatter().date(from: "2026-11-29T00:10:00Z"))
+        XCTAssertEqual(b.headline, "Dikkat gerekiyor")
+
+        let none = try JSONDecoder().decode(ServerBackupEnvelope.self, from: Data(#"{"backup":{"configured":false,"level":"unconfigured","targets":[]}}"#.utf8))
+        XCTAssertFalse(none.backup.configured)
+        XCTAssertEqual(none.backup.level, .unconfigured)
+        XCTAssertEqual(none.backup.headline, "Yedekleme kurulmadı")
+        // Bilinmeyen seviye çökmesin.
+        let odd = try JSONDecoder().decode(ServerBackupEnvelope.self, from: Data(#"{"backup":{"configured":true,"level":"mor","targets":[]}}"#.utf8))
+        XCTAssertEqual(odd.backup.level, .unknown)
+    }
+
     func testUploadMetaEncodesSnakeCase() throws {
         let m = UploadMeta(takenAt: "2026-01-01T10:00:00Z", tzOffset: 180, latitude: nil, longitude: nil, isFavorite: true,
                            sourceRef: "ABC/L0/001#live", livePairSourceRef: "ABC/L0/001", editedOfSourceRef: nil)

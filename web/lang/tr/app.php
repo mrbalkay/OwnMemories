@@ -81,4 +81,11 @@ return [
     'removed_from_person' => '{n} fotoğraf bu kişiden çıkarıldı', 'open_person' => '{name} kişisinin fotoğrafları',
     'name_face' => 'Adlandır', 'show_faces' => 'Yüzleri göster', 'hide_faces' => 'Yüzleri gizle', 'detected_faces' => 'Tanınmayan yüzler',
     'faces_on_photo' => 'Fotoğraftaki yüzler', 'face_of' => '{name} kişisinin yüzü', 'name_this_face' => 'Bu yüzü adlandır', 'unknown_face' => 'Bu kim?',
+    'backup_open' => 'Yedeklemeyi aç',
+    'backup_section' => 'Sunucu yedeği', 'backup_section_note' => 'Yalnızca yöneticiler görür. Fotoğrafların sunucu dışında, şifreli ve sürümlü kopyası.',
+    'backup_lvl_ok' => 'Yedekler güncel', 'backup_lvl_warn' => 'Dikkat gerekiyor', 'backup_lvl_error' => 'Yedek alınamıyor', 'backup_lvl_unconfigured' => 'Yedekleme kurulmadı',
+    'backup_last' => 'Son yedek: {t}', 'backup_never' => 'Henüz yedek yok', 'backup_next' => 'Sonraki: {t}', 'backup_manage' => 'Yedekleme sayfası',
+    'backup_setup_hint' => 'Sunucuda bir kez çalıştırın:', 'backup_running' => 'Şu an yedek alınıyor…',
+    'backup_load_failed' => 'Yedek durumu okunamadı.',
+    'ago_min' => '{n} dk önce', 'ago_hour' => '{n} sa önce', 'ago_day' => '{n} gün önce', 'ago_now' => 'az önce',
 ];

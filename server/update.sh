@@ -20,4 +20,25 @@ if ! bash "$DEST/server/install-ml.sh"; then
   echo "UYARI: Akıllı arama (ownmemories-ml) kurulamadı veya güncellenemedi; fotoğraflar ve normal arama etkilenmez." >&2
   echo "       Sonra tekrar deneyin: sudo bash $DEST/server/install-ml.sh   (günlük: journalctl -u ownmemories-ml)" >&2
 fi
+# Sunucu yedeği (restic): paket + systemd birimleri. Kurulmamışsa birimler etkin olmaz ve hiçbir şey bozulmaz.
+command -v restic >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq restic >/dev/null 2>&1 \
+  || echo "UYARI: restic kurulamadı (sudo apt-get install -y restic); yedekleme için gerekli." >&2
+for u in ownmemories-backup.service ownmemories-backup.timer ownmemories-backup.path; do
+  install -m 0644 "$DEST/server/$u" "/etc/systemd/system/$u"
+done
+systemctl daemon-reload 2>/dev/null || true
+if [[ -f /etc/ownmemories/backup.env ]]; then
+  systemctl enable --now ownmemories-backup.timer ownmemories-backup.path >/dev/null 2>&1 || true
+else
+  echo
+  if [[ -f /etc/ownmemories-backup.env ]]; then
+    # Eski rsync yedeği geçiş dönemi boyunca her gece çalışmaya devam eder (backup.sh → backup-legacy.sh).
+    systemctl enable --now ownmemories-backup.timer >/dev/null 2>&1 || true
+    echo "!! Eski rsync yedeği çalışmaya devam ediyor, ancak şifreli, sürümlü ve denetlenen yeni yedeğe geçin:"
+  else
+    echo "!! Sunucu yedeği KURULMAMIŞ: fotoğraflarınızın tek kopyası bu sunucuda."
+  fi
+  echo "   Bir kez çalıştırın (5 dk):  sudo bash $SRC/server/setup-backup.sh"
+  echo
+fi
 echo "Güncellendi: $(git -C "$SRC" log -1 --format='%h %s')"

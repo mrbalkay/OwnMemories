@@ -1,6 +1,6 @@
 // OwnMemories — web uygulaması girişi: yönlendirme, menü, seçim çubuğu, arama, sürükle-bırak yükleme.
 import { api, qs } from './api.js';
-import { h, t, icon, toast, confirmDialog, formatBytes, OM } from './util.js';
+import { h, t, icon, icons, toast, confirmDialog, formatBytes, OM } from './util.js';
 import { store } from './store.js';
 import { Timeline, clearAmbient } from './timeline.js';
 import { SearchView } from './search.js';
@@ -58,6 +58,23 @@ function renderUsage() {
   document.getElementById('usage').textContent = u.quota_bytes
     ? t('used_quota', { used: formatBytes(u.used_bytes), quota: formatBytes(u.quota_bytes) })
     : t('used', { used: formatBytes(u.used_bytes) });
+}
+
+/** Yönetici için sunucu yedeği uyarısı (kurulmamış / başarısız): kenar çubuğunda .me'nin üstünde. */
+function renderBackupAlert() {
+  document.querySelector('.backup-alert')?.remove();
+  const a = OM.backup_alert;
+  for (const id of ['navSettings', 'menuBtn']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (a) el.dataset.alert = a.level; else delete el.dataset.alert;
+  }
+  if (!a) return;
+  const el = h('a', { class: 'backup-alert', href: '/admin/backup.php', dataset: { level: a.level } },
+    h('span', { class: 'backup-alert-ic', 'aria-hidden': 'true', html: icons.shield }),
+    h('span', { class: 'backup-alert-text' }, h('strong', {}, a.title), h('span', {}, a.text)),
+    h('span', { class: 'backup-alert-cta' }, t('backup_open')));
+  document.querySelector('.sidebar .me')?.before(el);
 }
 
 function parseRoute() {
@@ -324,4 +341,5 @@ document.addEventListener('keydown', (e) => {
 });
 
 renderUsage();
+renderBackupAlert();
 render();

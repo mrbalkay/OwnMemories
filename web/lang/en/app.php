@@ -81,4 +81,11 @@ return [
     'removed_from_person' => 'Removed {n} photos from this person', 'open_person' => 'Photos of {name}',
     'name_face' => 'Name', 'show_faces' => 'Show faces', 'hide_faces' => 'Hide faces', 'detected_faces' => 'Unrecognised faces',
     'faces_on_photo' => 'Faces in this photo', 'face_of' => 'Face of {name}', 'name_this_face' => 'Name this face', 'unknown_face' => 'Who is this?',
+    'backup_open' => 'Open backup',
+    'backup_section' => 'Server backup', 'backup_section_note' => 'Only admins see this. An encrypted, versioned copy of your photos off this server.',
+    'backup_lvl_ok' => 'Backups are current', 'backup_lvl_warn' => 'Needs attention', 'backup_lvl_error' => 'Backups failing', 'backup_lvl_unconfigured' => 'Backup not set up',
+    'backup_last' => 'Last backup: {t}', 'backup_never' => 'No backup yet', 'backup_next' => 'Next: {t}', 'backup_manage' => 'Backup page',
+    'backup_setup_hint' => 'Run once on the server:', 'backup_running' => 'Backing up right now…',
+    'backup_load_failed' => 'Could not read backup status.',
+    'ago_min' => '{n} min ago', 'ago_hour' => '{n} h ago', 'ago_day' => '{n} days ago', 'ago_now' => 'just now',
 ];

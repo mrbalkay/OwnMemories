@@ -8,10 +8,13 @@ admin_head(t('admin.overview'));
 $lastRun = max($o['cron_last_run'], $o['worker_last_seen']);
 ?>
 <?php if ($lastRun === 0 || time() - $lastRun > 600): ?><div class="alert alert-warn"><?= e(t('admin.no_cron')) ?></div><?php endif; ?>
+<?php $bk = backup_overview(); $bkLabel = ['ok' => t('admin.bk_overall_ok'), 'warn' => t('admin.bk_overall_warn'), 'error' => t('admin.bk_overall_error'), 'unconfigured' => t('admin.bk_alert_unconfigured')]; ?>
+<?php if ($bk['level'] === 'unconfigured' || $bk['level'] === 'error'): ?><div class="alert alert-<?= $bk['level'] === 'error' ? 'error' : 'warn' ?>"><strong><?= e($bkLabel[$bk['level']]) ?>.</strong> <?= e(t($bk['level'] === 'error' ? 'admin.bk_alert_error_text' : 'admin.bk_alert_unconfigured_text')) ?> <a href="/admin/backup.php"><?= e(t('admin.bk_alert_cta')) ?></a></div><?php endif; ?>
 <section class="stats">
   <div class="stat"><div class="k"><?= e(t('admin.originals')) ?></div><div class="v"><?= e(format_bytes($o['storage_bytes'])) ?></div><div class="s"><?= number_format($o['blob_count'], 0, ',', '.') ?> dosya</div></div>
   <div class="stat"><div class="k"><?= e(t('admin.disk_free')) ?></div><div class="v"><?= $o['disk_free'] !== null ? e(format_bytes($o['disk_free'])) : '–' ?></div><div class="s"><?= $o['disk_total'] ? e(format_bytes($o['disk_total'])) . ' toplam' : '' ?></div></div>
   <div class="stat"><div class="k"><?= e(t('admin.queue')) ?></div><div class="v"><?= (int) ($o['jobs']['queued'] ?? 0) ?></div><div class="s"><?= (int) ($o['jobs']['failed'] ?? 0) ?> <?= e(mb_strtolower(t('admin.failed'))) ?></div></div>
+  <a class="stat stat-link bk-stat" data-level="<?= e($bk['level']) ?>" href="/admin/backup.php"><div class="k"><?= e(t('admin.backup')) ?></div><div class="v small"><span class="bk-dot" aria-hidden="true"></span> <?= e($bkLabel[$bk['level']]) ?></div><div class="s"><?php $last = null; foreach ($bk['targets'] as $tg) { $ts = backup_ts($tg['last_success_at'] ?? null); if ($ts !== null && ($last === null || $ts < $last)) { $last = $ts; } } ?><?= $last !== null ? e(t('admin.bk_last_success')) . ': ' . admin_ago($last) : e(t('admin.bk_next_run')) . ': ' . ($bk['next_run_at'] ? admin_time(gmdate('Y-m-d H:i:s', (int) strtotime($bk['next_run_at']))) : '–') ?></div></a>
   <div class="stat"><div class="k"><?= e(t('admin.cron_last')) ?></div><div class="v small"><?= admin_ago($o['cron_last_run']) ?></div><div class="s"><?= e(t('admin.worker_last')) ?>: <?= admin_ago($o['worker_last_seen']) ?></div></div>
 </section>
 
