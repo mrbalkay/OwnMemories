@@ -62,6 +62,9 @@ function user_verify_password(string $email, string $password): ?array
 }
 
 /** Kullanıcının dışarıya gösterilen hali. */
+/** Seçilebilir görünüm temaları; ilki varsayılandır. */
+const UI_THEMES = ['sinema', 'galeri', 'yerel'];
+
 function user_public(array $u): array
 {
     return [
@@ -73,6 +76,7 @@ function user_public(array $u): array
         'timezone' => $u['timezone'],
         'quota_bytes' => $u['quota_bytes'] !== null ? (int) $u['quota_bytes'] : null,
         'used_bytes' => (int) $u['used_bytes'],
+        'theme' => in_array($u['ui_theme'] ?? '', UI_THEMES, true) ? $u['ui_theme'] : 'sinema',
     ];
 }
 

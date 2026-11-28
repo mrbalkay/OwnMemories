@@ -82,6 +82,7 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['POST', '#^/v1/auth/login$#', fn() => api_login($body)],
         ['POST', '#^/v1/auth/logout$#', fn() => api_logout(api_need_user($user))],
         ['GET', '#^/v1/me$#', fn() => api_ok(['user' => user_public(api_need_user($user))])],
+        ['PATCH', '#^/v1/me$#', fn() => api_me_update(api_need_user($user), $body)],
         ['GET', '#^/v1/assets$#', fn() => api_assets_list(api_need_user($user), $query)],
         ['GET', '#^/v1/assets/summary$#', fn() => api_assets_summary(api_need_user($user), $query)],
         ['GET', '#^/v1/assets/random$#', fn() => api_assets_random(api_need_user($user), $query)],
@@ -494,6 +495,33 @@ function api_album_create(array $user, array $b): array
         album_add_assets($id, (int) $user['id'], (array) $b['ids']);
     }
     return api_ok(['album' => album_detail($id, (int) $user['id'])], 201);
+}
+
+/** Kullanıcının kendi profilini günceller: görünüm teması ve ad. */
+function api_me_update(array $user, array $b): array
+{
+    $sets = [];
+    $args = [];
+    if (array_key_exists('theme', $b)) {
+        if (!in_array($b['theme'], UI_THEMES, true)) {
+            throw new ValidationError('Geçersiz tema.', 'theme');
+        }
+        $sets[] = 'ui_theme = ?';
+        $args[] = $b['theme'];
+    }
+    if (array_key_exists('name', $b)) {
+        $name = trim((string) $b['name']);
+        if (mb_strlen($name) > 120) {
+            throw new ValidationError('Ad en fazla 120 karakter olabilir.', 'name');
+        }
+        $sets[] = 'name = ?';
+        $args[] = $name;
+    }
+    if ($sets) {
+        $args[] = (int) $user['id'];
+        db_exec('UPDATE users SET ' . implode(', ', $sets) . ' WHERE id = ?', $args);
+    }
+    return api_ok(['user' => user_public(user_find((int) $user['id']))]);
 }
 
 function api_album_update(array $user, string $id, array $b): array
