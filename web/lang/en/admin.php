@@ -73,4 +73,7 @@ return [
     'bk_spool_missing' => 'The request folder for "Back up now" is not writable. Re-run the setup wizard.',
     'bk_ago' => '{t} ago',
     'bk_files_delta' => '{new} new · {changed} changed files',
+    'geo' => 'Place names (GeoNames)', 'geo_state' => 'Status', 'geo_ready' => 'Installed', 'geo_missing' => 'Not installed', 'geo_places' => '{n} places',
+    'geo_imported' => 'Last import', 'geo_located' => 'Items with location', 'geo_pending' => '{n} items waiting for a place', 'geo_run' => 'Find missing places now',
+    'geo_queued' => 'Place lookup job queued.', 'geo_note' => 'Place names come from offline GeoNames data on this server (CC BY 4.0); locations are never sent to an outside service. The data is refreshed on every update (update.sh).',
 ];

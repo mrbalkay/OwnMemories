@@ -77,6 +77,9 @@ systemctl enable --now ownmemories-cron.timer
 systemctl enable ownmemories-worker.service
 # Yedek birimleri kurulur ama setup-backup.sh çalışana kadar etkin değildir (ConditionPathExists=/etc/ownmemories/backup.env).
 
+echo "==> Yerler (GeoNames yer adları, ~30 MB)"
+bash "$DEST/server/install-geo.sh" || echo "UYARI: Yer adı verisi indirilemedi; sonra: sudo bash $DEST/server/install-geo.sh" >&2
+
 echo "==> Akıllı arama (ownmemories-ml, ~1.5 GB model indirilir)"
 ML_OK=1
 bash "$DEST/server/install-ml.sh" || ML_OK=0
@@ -87,7 +90,8 @@ Kurulum hazır. Sıradaki adımlar:
   1) Tarayıcıda http://<sunucu-ip>/setup.php adresini açın ve şunları girin:
        Veritabanı: $DB_NAME   Kullanıcı: $DB_USER   Parola: $DB_PASS
        Depolama klasörü: $STORAGE
-  2) Kurulumdan sonra işçiyi başlatın:  sudo systemctl start ownmemories-worker
+  2) Kurulumdan sonra işçiyi başlatın ve yer adlarını yükleyin:
+       sudo systemctl start ownmemories-worker && sudo bash $DEST/server/install-geo.sh
   3) Cloudflare Tunnel: docs/INSTALL.md → "Cloudflare Tunnel"
   4) Sunucu yedeği (ÖNEMLİ — kurulmadan fotoğrafların tek kopyası bu diskte olur):
        sudo bash $SRC/server/setup-backup.sh

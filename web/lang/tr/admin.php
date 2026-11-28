@@ -75,4 +75,7 @@ return [
     'bk_spool_missing' => '"Şimdi yedekle" için istek klasörü yazılamıyor. Kurulum sihirbazını yeniden çalıştırın.',
     'bk_ago' => '{t} önce',
     'bk_files_delta' => '{new} yeni · {changed} değişen dosya',
+    'geo' => 'Yer adları (GeoNames)', 'geo_state' => 'Durum', 'geo_ready' => 'Kurulu', 'geo_missing' => 'Kurulu değil', 'geo_places' => '{n} yer',
+    'geo_imported' => 'Son içe aktarma', 'geo_located' => 'Konumlu öğe', 'geo_pending' => '{n} öğenin yeri bekliyor', 'geo_run' => 'Eksik yerleri şimdi bul',
+    'geo_queued' => 'Yer bulma işi kuyruğa alındı.', 'geo_note' => 'Yer adları sunucudaki çevrimdışı GeoNames verisinden bulunur (CC BY 4.0); konumlar hiçbir dış servise gönderilmez. Veri her güncellemede (update.sh) yenilenir.',
 ];

@@ -6,6 +6,7 @@
 import { api, thumbUrl } from './api.js';
 import { h, t } from './util.js';
 import { currentTheme } from './theme.js';
+import { viewSwitch } from './places.js';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.6.0';
 const STYLES = 'https://tiles.openfreemap.org/styles';
@@ -58,7 +59,7 @@ function countLabel(n) {
 
 export async function renderMap(root, onOpen) {
   const box = h('div', { class: 'map' });
-  root.replaceChildren(h('div', { class: 'page-head' }, h('h1', {}, t('map'))), box);
+  root.replaceChildren(h('div', { class: 'page-head map-head' }, h('h1', {}, t('map')), viewSwitch('map')), box);
   let points;
   try {
     [points] = await Promise.all([api('GET', 'assets/map').then((r) => r.points), maplibre()]);
@@ -94,7 +95,7 @@ export async function renderMap(root, onOpen) {
 
   const data = {
     type: 'FeatureCollection',
-    features: points.map((p) => ({ type: 'Feature', properties: { id: p.id }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
+    features: points.map((p) => ({ type: 'Feature', properties: { id: p.id, city: p.city || '' }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
   };
 
   // clusterMaxZoom haritanın en yakın düzeyine eşit: aynı noktadaki fotoğraflar her düzeyde kümede kalır,
@@ -135,19 +136,36 @@ export async function renderMap(root, onOpen) {
     const props = feature.properties;
     const isCluster = !!props.cluster;
     const img = h('img', { alt: '', loading: 'lazy', decoding: 'async' });
+    const tip = h('span', { class: 'map-tip', 'aria-hidden': 'true' });
     const el = h('button', {
       type: 'button',
       class: 'map-thumb' + (isCluster ? ' is-cluster' : ''),
       'aria-label': isCluster ? t('map_cluster', { n: props.point_count }) : t('open_photo'),
-    }, img, isCluster ? h('span', { class: 'map-count' }, countLabel(props.point_count)) : null);
+    }, img, isCluster ? h('span', { class: 'map-count' }, countLabel(props.point_count)) : null, tip);
+    // İpucu: yer adı (sunucuda çevrimdışı bulunur). Kümede en çok fotoğrafı olan şehir(ler).
+    const setTip = (cities, n) => {
+      const names = [...cities.entries()].filter(([c]) => c).sort((a, b) => b[1] - a[1]).map(([c]) => c);
+      if (!names.length) return;
+      const place = names.length > 2 ? `${names[0]}, ${names[1]} +${names.length - 2}` : names.join(', ');
+      const label = n > 1 ? t('map_place', { place, n }) : place;
+      tip.textContent = label;
+      el.classList.add('has-tip');
+      el.setAttribute('aria-label', n > 1 ? `${t('map_cluster', { n })}: ${place}` : `${t('open_photo')}: ${place}`);
+    };
     if (isCluster) {
-      // Küme kapağı: kümedeki ilk fotoğraf.
-      map.getSource('photos').getClusterLeaves(props.cluster_id, 1, 0)
-        .then((leaves) => { if (leaves[0]) img.src = thumbUrl(leaves[0].properties.id); })
+      // Küme kapağı: kümedeki ilk fotoğraf; ipucu için en çok 300 yaprağın şehirleri sayılır.
+      map.getSource('photos').getClusterLeaves(props.cluster_id, Math.min(300, props.point_count), 0)
+        .then((leaves) => {
+          if (leaves[0]) img.src = thumbUrl(leaves[0].properties.id);
+          const cities = new Map();
+          for (const l of leaves) cities.set(l.properties.city, (cities.get(l.properties.city) || 0) + 1);
+          setTip(cities, props.point_count);
+        })
         .catch(() => {});
       el.addEventListener('click', (e) => { e.stopPropagation(); openCluster(props.cluster_id, props.point_count); });
     } else {
       img.src = thumbUrl(props.id);
+      setTip(new Map([[props.city, 1]]), 1);
       el.addEventListener('click', (e) => { e.stopPropagation(); onOpen(props.id, points); });
     }
     const marker = new gl.Marker({ element: el, anchor: 'center' }).setLngLat(feature.geometry.coordinates);

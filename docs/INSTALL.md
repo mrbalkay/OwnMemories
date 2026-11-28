@@ -342,8 +342,8 @@ cd ~/OwnMemories && git pull
 sudo bash server/update.sh
 ```
 
-Betik kodu `/var/www/ownmemories` klasörüne kopyalar, işçiyi yeniden başlatır ve akıllı arama servisini
-(`server/install-ml.sh`, bkz. G) kurar/günceller. Yapılandırma ve fotoğraflar korunur; veritabanı değişiklikleri
+Betik kodu `/var/www/ownmemories` klasörüne kopyalar, işçiyi yeniden başlatır, yer adı verisini
+(`server/install-geo.sh`, bkz. H) indirip yükler ve akıllı arama servisini (`server/install-ml.sh`, bkz. G) kurar/günceller. Yapılandırma ve fotoğraflar korunur; veritabanı değişiklikleri
 ilk istekte kendiliğinden uygulanır. Akıllı arama kurulamazsa (ör. model indirilemedi) betik bir **UYARI**
 yazar ama güncelleme tamamlanır; arama dosya adı/açıklama ile çalışmaya devam eder. Yönlendirmeleri kontrol etmek için:
 
@@ -424,3 +424,24 @@ Elle eklediğiniz `OM_ML_*` / `OM_FACE_*` ayarları güncellemelerde korunur (ve
 
 **Kapatmak:** `sudo touch /etc/ownmemories/ml.disabled && sudo bash /var/www/ownmemories/server/install-ml.sh`
 (geri açmak için dosyayı silip betiği yeniden çalıştırın). Kapalıyken arama dosya adı/açıklama ile çalışır.
+
+## H. Yerler (fotoğraf konumlarından yer adları)
+
+Fotoğraflarınızın GPS konumları sunucuda, **internete hiçbir konum gönderilmeden** yer adlarına çevrilir:
+görüntüleyicide "Konum: Moda, Kadıköy, İstanbul, Türkiye", zaman çizelgesinde "Cumartesi · Moda, Kadıköy",
+web'de **Yerler** sayfası (#/places), iOS'ta Harita sekmesinde **Harita | Yerler**, "Kadıköy" gibi yer adlarıyla arama
+ve "Bozcaada'da bir hafta" gibi anı başlıkları.
+
+`update.sh` her çalıştığında GeoNames verisini (~30 MB) `/var/lib/ownmemories/geo` klasörüne indirir (30 günde bir yeniler)
+ve veritabanına yükler; mevcut fotoğrafların yerleri işçi tarafından arka planda bulunur (birkaç bin fotoğraf birkaç
+dakika sürer). Elle çalıştırmak ya da yenilemeyi zorlamak için:
+
+```bash
+sudo bash /var/www/ownmemories/server/install-geo.sh          # indir + yükle
+sudo bash /var/www/ownmemories/server/install-geo.sh --force  # her durumda yeniden indir ve yükle
+```
+
+Durum: **Yönetim → Sistem → Yer adları** (kaç yer yüklü, kaç fotoğrafın yeri bekliyor; "Eksik yerleri şimdi bul" düğmesi).
+Kapatmak için `OM_GEO=0 sudo bash server/update.sh` (veri indirilmez; Yerler sayfası boş kalır).
+
+Yer verisi: [GeoNames](https://www.geonames.org), Creative Commons Attribution 4.0 (CC BY 4.0).

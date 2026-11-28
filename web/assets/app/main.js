@@ -21,12 +21,13 @@ const NAV = [
   ['albums', 'album', '#/albums'],
   ['shared', 'people', '#/shared'],
   ['map', 'map', '#/map'],
+  ['places', 'pin', '#/places'],
   ['archive', 'archive', '#/archive'],
   ['trash', 'trash', '#/trash'],
 ];
 
 // Menü grupları: temalar başlıkları (.nav-h) gösterebilir ve öğeleri CSS `order` ile yeniden dizebilir.
-const NAV_GROUP = { photos: 'library', favorites: 'library', people: 'library', map: 'library', albums: 'albums', shared: 'albums', archive: 'other', trash: 'other' };
+const NAV_GROUP = { photos: 'library', favorites: 'library', people: 'library', map: 'library', places: 'library', albums: 'albums', shared: 'albums', archive: 'other', trash: 'other' };
 
 function renderNav() {
   document.getElementById('navSettings')?.classList.toggle('active', route.name === 'settings');
@@ -37,7 +38,7 @@ function renderNav() {
     if (key === 'albums') items.push(heading('albums'));
     if (key === 'archive') items.push(h('div', { class: 'nav-sep', role: 'presentation' }), heading('other'));
     items.push(h('a', {
-      href, class: 'nav-item' + (route.name === key || (key === 'albums' && route.name === 'album' && !route.shared) || (key === 'people' && route.name === 'person') ? ' active' : ''),
+      href, class: 'nav-item' + (route.name === key || (key === 'albums' && route.name === 'album' && !route.shared) || (key === 'people' && route.name === 'person') || (key === 'places' && route.name === 'place') ? ' active' : ''),
       'aria-current': route.name === key ? 'page' : null, dataset: { nav: key, group: NAV_GROUP[key] },
     }, icon(ic), h('span', { class: 'nav-label' }, t(key))));
   }
@@ -84,6 +85,7 @@ function parseRoute() {
   const params = Object.fromEntries(new URLSearchParams(query));
   if (parts[0] === 'album' && parts[1]) return { name: 'album', id: parts[1] };
   if (parts[0] === 'person' && /^\d+$/.test(parts[1] || '')) return { name: 'person', id: Number(parts[1]) };
+  if (parts[0] === 'place' && /^\d+$/.test(parts[1] || '')) return { name: 'place', id: Number(parts[1]) };
   return { name: parts[0] || 'photos', params };
 }
 
@@ -195,14 +197,14 @@ async function render() {
   store.clear();
   route = parseRoute();
   document.getElementById('app').dataset.route = route.name;
-  const TITLES = { people: 'people', person: 'people', favorites: 'favorites', archive: 'archive', trash: 'trash', search: 'search_results', albums: 'albums', shared: 'shared', settings: 'settings', map: 'map', album: 'albums' };
+  const TITLES = { people: 'people', person: 'people', favorites: 'favorites', archive: 'archive', trash: 'trash', search: 'search_results', albums: 'albums', shared: 'shared', settings: 'settings', map: 'map', album: 'albums', places: 'places', place: 'places' };
   setPageTitle(t(TITLES[route.name] || 'photos'));
   renderNav();
   document.getElementById('app').classList.remove('nav-open');
   view.scrollTop = 0;
   const title = (s) => h('div', { class: 'page-head' }, h('h1', {}, s));
   // Zaman çizelgesi olmayan görünümler: önceki rotadan kalan ortam rengini sıfırla.
-  if (['albums', 'shared', 'settings', 'map', 'people', 'person'].includes(route.name)) clearAmbient();
+  if (['albums', 'shared', 'settings', 'map', 'people', 'person', 'places'].includes(route.name)) clearAmbient();
   // Kendi içinde eşzamansız yazan görünümler (albüm listesi, harita) ayrı bir kutuya çizilir:
   // daha yeni bir rota #view'i değiştirirse kutu DOM'dan kopar ve geç gelen yazımlar görünmez kalır.
   const box = () => { const b = h('div', { class: 'view-box' }); view.replaceChildren(b); return b; };
@@ -263,6 +265,24 @@ async function render() {
       } catch {
         if (!current()) return;
         view.replaceChildren(h('div', { class: 'empty' }, h('p', {}, t('person_not_found')), h('a', { class: 'btn', href: '#/people' }, t('people'))));
+      }
+      break;
+    }
+    case 'places':
+      import('./places.js').then((m) => { if (current()) m.renderPlaces(box(), { setSub: (s) => { if (current()) document.getElementById('pageSub').textContent = s; } }); });
+      break;
+    case 'place': {
+      const m = await import('./places.js');
+      try {
+        const place = (await api('GET', `places/${route.id}`)).place;
+        if (!current()) return;
+        route.place = place;
+        setPageTitle(place.name, t('place_photos', { n: place.count.toLocaleString(OM.locale === 'en' ? 'en-GB' : 'tr-TR') }));
+        showTimeline({ place: place.id }, t('empty_photos'), m.placeHeader(place));
+      } catch {
+        if (!current()) return;
+        clearAmbient();
+        view.replaceChildren(h('div', { class: 'empty' }, h('p', {}, t('place_not_found')), h('a', { class: 'btn', href: '#/places' }, t('places'))));
       }
       break;
     }

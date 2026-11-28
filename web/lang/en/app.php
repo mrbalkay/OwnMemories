@@ -88,4 +88,13 @@ return [
     'backup_setup_hint' => 'Run once on the server:', 'backup_running' => 'Backing up right now…',
     'backup_load_failed' => 'Could not read backup status.',
     'ago_min' => '{n} min ago', 'ago_hour' => '{n} h ago', 'ago_day' => '{n} days ago', 'ago_now' => 'just now',
+    // Places
+    'places' => 'Places', 'places_sub' => '{n} places · {c} countries', 'place_photos' => '{n} items', 'places_empty_title' => 'No places yet',
+    'places_empty' => 'Photos with a location are gathered here city by city. Place names come from offline GeoNames data on your server; your location is never sent to any outside service.',
+    'places_no_data' => 'Place name data is not installed yet. On the server run: sudo bash server/install-geo.sh',
+    'places_pending' => 'Finding places for {n} photos…', 'places_all' => 'All places', 'place_not_found' => 'Place not found.',
+    'place_range' => '{from} – {to}', 'map_view' => 'Map', 'places_view' => 'Places', 'map_place' => '{place} · {n} items',
+    'places_attribution' => 'Place names: GeoNames (CC BY 4.0)', 'coords' => 'Coordinates', 'trip_years_ago' => '{n} years ago',
+    'place_country_count' => '{n} places', 'view_switch' => 'View',
+    'open_place' => 'Photos in {name}',
 ];

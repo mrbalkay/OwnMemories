@@ -426,7 +426,7 @@ pp_test('test_people_migrates_asset_people', function () {
         site_setting_cache_clear();
         assert_eq(SCHEMA_VERSION, migrations_run());
     }
-    assert_eq(6, SCHEMA_VERSION);
+    assert_true(SCHEMA_VERSION >= 6);
     assert_eq(['Ayşe', 'Mehmet'], array_column(db_all('SELECT name FROM people WHERE user_id = ? ORDER BY name', [(int) $u['id']]), 'name'));
     assert_eq(1, (int) db_val('SELECT COUNT(*) FROM people WHERE user_id = ?', [(int) $v['id']]));
     assert_eq(4, (int) db_val("SELECT COUNT(*) FROM asset_person WHERE source = 'takeout'"));

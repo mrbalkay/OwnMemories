@@ -9,7 +9,7 @@ OwnCalendar'ın kardeş uygulamasıdır.
 | Klasör | İçerik |
 |---|---|
 | `web/` | Document root: kurulum (`setup.php`), web uygulaması (`/app/`), yönetim (`/admin/`), REST API (`/api/v1/`) |
-| `bin/` | `worker.php` (iş kuyruğu işçisi), `cron.php`, `import-takeout.php` |
+| `bin/` | `worker.php` (iş kuyruğu işçisi), `cron.php`, `import-takeout.php`, `geo-import.php` (yer adı verisi) |
 | `server/` | Ubuntu kurulum betiği, systemd birimleri, Cloudflare Tunnel örneği |
 | `docs/` | `ARCHITECTURE.md` (sözleşme), `INSTALL.md` (kurulum), tasarım ve planlar |
 | `tests/` | `php tests/run.php` |
@@ -20,3 +20,6 @@ Yerel geliştirme: `php -S 127.0.0.1:8080 -t web web/router-dev.php`
 
 Testler: `php tests/run.php` — veritabanı testleri için `OM_TEST_DB_HOST`, `OM_TEST_DB_USER`,
 `OM_TEST_DB_PASS` ortam değişkenleri verilir.
+
+Yer adları (Yerler sayfası, fotoğraf konumları, anı başlıkları) sunucuda çevrimdışı bulunur; veri:
+[GeoNames](https://www.geonames.org), Creative Commons Attribution 4.0 (CC BY 4.0).

@@ -53,6 +53,8 @@ struct Asset: Codable, Identifiable, Hashable {
     let editedOfId: String?
     let thumbState: String?
     let access: String?
+    /// Yer (sunucu GPS'ten çevrimdışı bulur); konum yoksa ya da yer verisi kurulu değilse nil. Eski sunucularda alan yok.
+    let place: AssetPlace?
 
     var isVideo: Bool { type == "video" }
 
@@ -60,7 +62,7 @@ struct Asset: Codable, Identifiable, Hashable {
     var dayKey: String { String((takenLocal ?? takenAt).prefix(10)) }
 
     enum CodingKeys: String, CodingKey {
-        case id, type, filename, mime, size, width, height, latitude, longitude, access
+        case id, type, filename, mime, size, width, height, latitude, longitude, access, place
         case durationMs = "duration_ms"
         case takenAt = "taken_at"
         case takenLocal = "taken_local"
@@ -75,6 +77,118 @@ struct Asset: Codable, Identifiable, Hashable {
         case editedOfId = "edited_of_id"
         case thumbState = "thumb_state"
     }
+}
+
+/// Asset JSON'undaki "place": "Moda, Kadıköy, İstanbul, Türkiye" gibi yer bilgisi (GeoNames, çevrimdışı).
+struct AssetPlace: Codable, Hashable {
+    /// Şehir düzeyindeki yerin kimliği: GET /v1/assets?place=<id>, GET /v1/places/<id>.
+    let id: Int
+    /// En yakın yer (mahalle/kasaba): "Moda"
+    let name: String
+    /// Şehir: "İstanbul"
+    let city: String
+    /// İlçe (yalnız Türkiye): "Kadıköy"
+    let district: String?
+    /// İl / eyalet: "İstanbul", "Île-de-France"
+    let admin1: String?
+    /// Türkçe ülke adı: "Türkiye", "Fransa"
+    let country: String?
+    let countryCode: String?
+    /// Bilinen bölge: "Kapadokya"
+    let region: String?
+    /// Tam ad: "Moda, Kadıköy, İstanbul, Türkiye"
+    let label: String
+    /// Kısa ad (gün başlığı): "Moda, Kadıköy"
+    let short: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, city, district, admin1, country, region, label, short
+        case countryCode = "country_code"
+    }
+}
+
+/// GET /v1/places öğesi: şehir düzeyinde bir yer, fotoğraf sayısı ve kapak.
+struct PlaceSummary: Codable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let admin1: String?
+    let country: String?
+    let countryCode: String?
+    let region: String?
+    let count: Int
+    let coverAssetId: String?
+    let lat: Double?
+    let lng: Double?
+    /// Yer sayfası (GET /v1/places/{id}) ek alanları
+    var firstAt: String? = nil
+    var lastAt: String? = nil
+
+    /// Kartın ikinci satırı: il (şehir adından farklıysa), ör. "Çanakkale".
+    var subtitle: String? {
+        guard let a = admin1, !a.isEmpty, PlaceText.fold(a) != PlaceText.fold(name) else { return nil }
+        return a
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, admin1, country, region, count, lat, lng
+        case countryCode = "country_code"
+        case coverAssetId = "cover_asset_id"
+        case firstAt = "first_at"
+        case lastAt = "last_at"
+    }
+}
+
+struct PlacesResponse: Codable {
+    let places: [PlaceSummary]
+    /// Yer verisi sunucuda kurulu mu (server/install-geo.sh)
+    let ready: Bool?
+    /// Yeri henüz bulunmamış konumlu öğe sayısı
+    let pending: Int?
+}
+
+struct PlaceEnvelope: Codable {
+    let place: PlaceSummary
+}
+
+/// Yerler ekranı: ülkelere göre gruplama (en çok fotoğraflı ülke önce; ülke içinde sunucu sırası = sayıya göre).
+struct PlaceCountryGroup: Identifiable, Hashable {
+    let code: String
+    let name: String
+    let places: [PlaceSummary]
+    var id: String { code }
+    var count: Int { places.reduce(0) { $0 + $1.count } }
+}
+
+enum PlaceText {
+    private static let tr = Locale(identifier: "tr_TR")
+
+    /// Türkçe duyarlı katlama: "İZMİR" = "izmir", "Kadıköy" = "kadikoy".
+    static func fold(_ s: String) -> String {
+        s.replacingOccurrences(of: "İ", with: "i").replacingOccurrences(of: "I", with: "ı")
+            .lowercased(with: tr)
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)  // aksan atma dilden bağımsız (ö → o)
+            .replacingOccurrences(of: "ı", with: "i")
+    }
+
+    static func group(_ places: [PlaceSummary]) -> [PlaceCountryGroup] {
+        var order: [String] = []
+        var byCode: [String: (name: String, items: [PlaceSummary])] = [:]
+        for p in places {
+            let code = p.countryCode ?? "??"
+            if byCode[code] == nil {
+                order.append(code)
+                byCode[code] = (p.country ?? code, [])
+            }
+            byCode[code]?.items.append(p)
+        }
+        return order.compactMap { code in byCode[code].map { PlaceCountryGroup(code: code, name: $0.name, places: $0.items) } }
+            .enumerated()
+            .sorted { a, b in a.element.count != b.element.count ? a.element.count > b.element.count : a.offset < b.offset }
+            .map(\.element)
+    }
+
+    /// "{n} öğe" (Türkçe binlik ayırıcı).
+    static func items(_ n: Int) -> String { "\(n.formatted(.number.locale(tr))) öğe" }
 }
 
 struct AssetCursor: Codable, Equatable {
@@ -184,8 +298,12 @@ struct DeviceReport: Codable, Equatable {
 
 struct Memory: Codable, Identifiable, Hashable {
     let id: String
+    /// "on_this_day" | "this_week" | "trip" (gezi: "Bozcaada'da bir hafta") | "favorites"
     let kind: String
+    /// Sunucuda hazırlanır; yer adı varsa Türkçe ekle: "2 yıl önce bugün Roma'da", "Kapadokya, Kasım 2021"
     let title: String
+    /// Baskın yer adı (varsa): "Bozcaada", "Kapadokya"
+    let place: String?
     let yearsAgo: Int?
     let date: String
     let count: Int
@@ -194,7 +312,7 @@ struct Memory: Codable, Identifiable, Hashable {
     let assets: [Asset]
 
     enum CodingKeys: String, CodingKey {
-        case id, kind, title, date, count, assets
+        case id, kind, title, date, count, assets, place
         case yearsAgo = "years_ago"
         case coverAssetId = "cover_asset_id"
         case assetIds = "asset_ids"

@@ -164,6 +164,32 @@ try {
   } else {
     step(`kişiler atlandı (API ${peopleApi})`);
   }
+  // Yerler: şehir kartları (yer verisi kuruluysa) → yer sayfası → Harita | Yerler geçişi; veri yoksa boş durum
+  const placesApi = await page.evaluate(async () => { const r = await fetch('/api/v1/places'); return r.ok ? r.json() : { places: null }; });
+  if (Array.isArray(placesApi.places)) {
+    await page.goto(base + '/app/#/places');
+    await page.waitForSelector('.place-card:not(.is-ghost), .places-empty');
+    if (placesApi.places.length) {
+      const pl = placesApi.places[0];
+      await page.screenshot({ path: `${out}desktop-places.png` });
+      await page.click(`.place-card[data-id="${pl.id}"]`);
+      await page.waitForSelector('.place-head .place-title');
+      await page.waitForSelector('.timeline .tile');
+      const title = await page.textContent('.place-title');
+      if (title.trim() !== pl.name) throw new Error(`yer başlığı beklenmedik: ${title}`);
+      const a = await page.evaluate(async (id) => (await (await fetch(`/api/v1/assets?place=${id}&limit=1`)).json()).assets[0], pl.id);
+      if (!a?.place || a.place.id !== pl.id) throw new Error('yer süzgeci/yer nesnesi hatalı');
+      await page.click('.place-back');
+      await page.waitForURL('**/#/places');
+      await page.click('.view-seg a[href="#/map"]');
+      await page.waitForURL('**/#/map');
+      step(`yerler: ${placesApi.places.length} yer, "${pl.name}" sayfası, harita geçişi`);
+    } else {
+      step('yerler: boş durum');
+    }
+  } else {
+    step('yerler atlandı (API yok)');
+  }
   // Arama: öneri yongaları, sonuç ızgarası (akıllı ya da metin modu) ve sonuç listesinde görüntüleyici gezinmesi
   await page.goto(base + '/app/#/search');
   await page.waitForSelector('.search-start .search-chip');

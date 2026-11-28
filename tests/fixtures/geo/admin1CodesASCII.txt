@@ -1,0 +1,8 @@
+FR.11	Île-de-France	Ile-de-France	3012874
+IT.07	Lazio	Lazio	3174976
+TH.40	Bangkok	Bangkok	1609348
+TR.50	Nevşehir Province	Nevsehir Province	303830
+TR.35	İzmir Province	Izmir Province	311044
+TR.68	Ankara	Ankara	323784
+TR.34	Istanbul	Istanbul	745042
+TR.17	Canakkale	Canakkale	749778

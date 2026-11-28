@@ -88,6 +88,11 @@ function memories_for(int $userId, string $date): array
             }
         }
     }
+    // 2b) Geziler (Yerler): yıldönümü bu haftaya düşen, evden uzakta geçen günler. Aynı yılın günlük anısı
+    // gezinin içindeyse gezi anısı onun yerini alır ("Bozcaada'da bir hafta").
+    if (function_exists('places_trips')) {
+        $out = memories_with_trips($userId, $y, $mo, $d, $out);
+    }
     usort($out, fn($a, $b) => $a['years_ago'] <=> $b['years_ago']);
 
     // 3) Favorilerinizden (en az 1 yıl önceki favoriler; gün başına sabit rastgele seçim)
@@ -112,10 +117,19 @@ function memories_group_by_year(array $rows): array
     return $by;
 }
 
-function memories_make(string $kind, ?int $yearsAgo, array $rows, string $date): array
+function memories_make(string $kind, ?int $yearsAgo, array $rows, string $date, ?string $title = null, ?string $place = null): array
 {
     $rows = array_slice($rows, 0, MEMORY_MAX_ASSETS);
-    $title = match ($kind) {
+    if ($title === null && $kind !== 'favorites' && function_exists('places_dominant')) {
+        // Evden uzakta çekilmişse yer adı başlığa eklenir: "2 yıl önce bugün Roma'da".
+        $dom = places_dominant(array_column($rows, 'id'));
+        if ($dom !== null && places_is_away(places_home((int) $rows[0]['user_id']), $dom['city_id'])) {
+            $place = $dom['name'];
+            $at = locale() === 'tr' ? tr_locative($place) : $place;
+            $title = t($kind === 'on_this_day' ? 'memories.years_ago_today_at' : 'memories.years_ago_week_at', ['n' => $yearsAgo, 'at' => $at, 'place' => $place]);
+        }
+    }
+    $title ??= match ($kind) {
         'on_this_day' => t('memories.years_ago_today', ['n' => $yearsAgo]),
         'this_week' => t('memories.years_ago_week', ['n' => $yearsAgo]),
         default => t('memories.favorites'),
@@ -135,14 +149,63 @@ function memories_make(string $kind, ?int $yearsAgo, array $rows, string $date):
         'id' => $kind . ':' . $date,
         'kind' => $kind,
         'title' => $title,
+        'place' => $place,
         'years_ago' => $yearsAgo,
         'date' => $date,
         'count' => count($rows),
         'cover_asset_id' => $cover,
         'asset_ids' => array_column($rows, 'id'),
-        'assets' => array_map(function ($r) {
-            unset($r['ly']);
-            return asset_to_json($r);
-        }, $rows),
+        'assets' => assets_json(array_map(function ($r) {
+            unset($r['ly'], $r['loc']);
+            return $r;
+        }, $rows)),
     ];
+}
+
+/**
+ * Yıldönümü bugünün ±3 gününe düşen gezileri anılara ekler; aynı yılın günlük anısı gezinin içindeyse onun yerine geçer.
+ */
+function memories_with_trips(int $userId, int $y, int $mo, int $d, array $out): array
+{
+    $local = memories_local_expr();
+    foreach (places_trips($userId, $local, memories_base_where()) as $trip) {
+        $ty = (int) substr($trip['start'], 0, 4);
+        if ($ty >= $y) {
+            continue;
+        }
+        $dim = (int) gmdate('t', gmmktime(0, 0, 0, $mo, 1, $ty));
+        $center = gmmktime(0, 0, 0, $mo, min($d, $dim), $ty);
+        $from = gmdate('Y-m-d', $center - 3 * 86400);
+        $to = gmdate('Y-m-d', $center + 3 * 86400);
+        if ($trip['end'] < $from || $trip['start'] > $to) {
+            continue;
+        }
+        $yearsAgo = $y - $ty;
+        $ids = $trip['ids'];
+        if (count($ids) > MEMORY_MAX_ASSETS) {
+            // Gezinin tamamından eşit aralıklı seçim (yalnız ilk günler değil)
+            $step = count($ids) / MEMORY_MAX_ASSETS;
+            $ids = array_map(fn($i) => $ids[(int) floor($i * $step)], range(0, MEMORY_MAX_ASSETS - 1));
+        }
+        $rows = db_all('SELECT a.* FROM assets a WHERE a.id IN (' . db_in($ids) . ') ORDER BY a.taken_at, a.id', $ids);
+        if (!$rows) {
+            continue;
+        }
+        $mem = memories_make('trip', $yearsAgo, $rows, $trip['start'], places_trip_title($trip), (string) $trip['place']['name']);
+        $mem['id'] = 'trip:' . $trip['start'];
+        $mem['end_date'] = $trip['end'];
+        $mem['days'] = $trip['days'];
+        $replaced = false;
+        foreach ($out as $i => $m) {
+            if ($m['years_ago'] === $yearsAgo && in_array($m['kind'], ['on_this_day', 'this_week'], true) && $m['date'] >= $trip['start'] && $m['date'] <= $trip['end']) {
+                $out[$i] = $mem;
+                $replaced = true;
+                break;
+            }
+        }
+        if (!$replaced && !in_array($mem['id'], array_column($out, 'id'), true)) {
+            $out[] = $mem;
+        }
+    }
+    return $out;
 }

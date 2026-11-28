@@ -1,0 +1,6 @@
+#ISO	ISO3	ISO-Numeric	fips	Country	Capital	Area(in sq km)	Population	Continent	tld	CurrencyCode	CurrencyName	Phone	Postal Code Format	Postal Code Regex	Languages	geonameid	neighbours	EquivalentFipsCode
+FR	FRA	250	FR	France	Paris	547030	68720337	EU	.fr	EUR	Euro	33	#####	^(\d{5})$	fr-FR,frp,br,co,ca,eu,oc	3017382	CH,DE,BE,LU,IT,AD,MC,ES	
+IT	ITA	380	IT	Italy	Rome	301230	58915656	EU	.it	EUR	Euro	39	#####	^(\d{5})$	it-IT,de-IT,fr-IT,sc,ca,co,sl	3175395	CH,VA,SI,SM,FR,AT	
+TH	THA	764	TH	Thailand	Bangkok	514000	71619863	AS	.th	THB	Baht	66	#####	^(\d{5})$	th,en	1605651	LA,MM,KH,MY	
+TR	TUR	792	TU	Turkey	Ankara	780580	85878556	AS	.tr	TRY	Lira	90	#####	^(\d{5})$	tr-TR,ku,diq,az,av	298795	SY,GE,IQ,IR,GR,AM,AZ,BG	
+VA	VAT	336	VT	Vatican	Vatican City	0.44	921	EU	.va	EUR	Euro	379	#####	^(\d{5})$	la,it,fr	3164670	IT	

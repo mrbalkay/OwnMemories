@@ -88,4 +88,13 @@ return [
     'backup_setup_hint' => 'Sunucuda bir kez çalıştırın:', 'backup_running' => 'Şu an yedek alınıyor…',
     'backup_load_failed' => 'Yedek durumu okunamadı.',
     'ago_min' => '{n} dk önce', 'ago_hour' => '{n} sa önce', 'ago_day' => '{n} gün önce', 'ago_now' => 'az önce',
+    // Yerler
+    'places' => 'Yerler', 'places_sub' => '{n} yer · {c} ülke', 'place_photos' => '{n} öğe', 'places_empty_title' => 'Henüz yer yok',
+    'places_empty' => 'Konum bilgisi olan fotoğraflar burada şehir şehir toplanır. Yer adları sunucudaki çevrimdışı GeoNames verisiyle bulunur; konumunuz hiçbir dış servise gönderilmez.',
+    'places_no_data' => 'Yer adı verisi henüz kurulmamış. Sunucuda şunu çalıştırın: sudo bash server/install-geo.sh',
+    'places_pending' => '{n} fotoğrafın yeri bulunuyor…', 'places_all' => 'Tüm yerler', 'place_not_found' => 'Bu yer bulunamadı.',
+    'place_range' => '{from} – {to}', 'map_view' => 'Harita', 'places_view' => 'Yerler', 'map_place' => '{place} · {n} öğe',
+    'places_attribution' => 'Yer adları: GeoNames (CC BY 4.0)', 'coords' => 'Koordinatlar', 'trip_years_ago' => '{n} yıl önce',
+    'place_country_count' => '{n} yer', 'view_switch' => 'Görünüm',
+    'open_place' => '{name} fotoğrafları',
 ];

@@ -198,10 +198,11 @@ export class Timeline {
           class: 'day-sel', type: 'button', 'aria-label': `${t('select')}: ${dp.label}`,
           onclick: () => { const ids = g2.assets.map((x) => x.id); store.setMany(ids, !ids.every((id) => store.selection.has(id))); },
         }, h('span', { class: 'day-sel-check' }, icon('check')), h('span', { class: 'day-sel-text' }, t('select_day')));
+        const placeEl = h('span', { class: 'day-place' });
         const head = h('h3', { class: 'day' },
-          h('span', { class: 'day-label' }, dp.label), ' ', h('span', { class: 'day-sub' }, dp.weekday), selBtn);
+          h('span', { class: 'day-label' }, dp.label), ' ', h('span', { class: 'day-sub' }, dp.weekday), placeEl, selBtn);
         const section = h('section', { class: 'day-group', dataset: { day: key } }, head, grid);
-        g = Object.assign(g2, { section, grid });
+        g = Object.assign(g2, { section, grid, placeEl });
         this.groups.set(key, g);
         this.monthEl.append(section);
       }
@@ -209,7 +210,14 @@ export class Timeline {
       g.grid.append(this.tile(a));
       touched.add(g);
     }
-    for (const g of touched) this.layout(g);
+    for (const g of touched) {
+      this.layout(g);
+      const place = dayPlace(g.assets);
+      if (g.placeEl.textContent !== place) {
+        g.placeEl.textContent = place;
+        g.placeEl.title = place;
+      }
+    }
     // Seçim sürerken yeni sayfa bir günün devamını getirdiyse o günün .all-selected durumu değişir.
     if (store.selection.size) this.syncSelection();
   }
@@ -480,3 +488,18 @@ export class Timeline {
 }
 
 const CAL_ICON = '<svg viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>';
+
+/** Bir günün baskın yeri ("Moda, Kadıköy"); günde birden çok şehir varsa en çok iki şehir ("İzmir, Çeşme"). */
+export function dayPlace(assets) {
+  const cities = new Map();
+  const shorts = new Map();
+  for (const a of assets) {
+    const p = a.place;
+    if (!p) continue;
+    cities.set(p.city, (cities.get(p.city) || 0) + 1);
+    shorts.set(p.short, (shorts.get(p.short) || 0) + 1);
+  }
+  if (!cities.size) return '';
+  const top = (m) => [...m.entries()].sort((x, y) => y[1] - x[1]).map(([k]) => k);
+  return cities.size === 1 ? top(shorts)[0] : top(cities).slice(0, 2).join(', ');
+}
