@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         if let id = info["memoryId"] as? String {
             let date = (info["requestDate"] as? String) ?? (info["memoryDate"] as? String) ?? ""
             Task { @MainActor in AppRouter.shared.openMemory(requestDate: date, id: id) }
+        } else if let id = info["assetId"] as? String, let url = URL(string: "ownmemories://asset?id=\(id)") {
+            Task { @MainActor in AppRouter.shared.handle(url) }
         }
         completionHandler()
     }

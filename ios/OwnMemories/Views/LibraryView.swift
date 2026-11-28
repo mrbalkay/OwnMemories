@@ -95,6 +95,7 @@ struct LibraryView: View {
     @State private var refreshDirty = false
     @State private var viewing: Asset?
     @State private var story: Memory?
+    @State private var featuredStart: Asset?
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: theme.gridSpacing), count: theme.gridColumns)
@@ -107,6 +108,8 @@ struct LibraryView: View {
                     LibraryHeader(title: "Fotoğraflar", initial: session.user?.name)
                     if !memories.memories.isEmpty {
                         MemoriesStrip(memories: memories.memories) { story = $0 }
+                    } else if theme.memoryLayout == .hero, let f = memories.featured.first {
+                        FeaturedHero(asset: f) { featuredStart = f }
                     }
                     ForEach(Array(model.sections.enumerated()), id: \.element.id) { i, section in
                         if i == 0 || model.sections[i - 1].id.prefix(7) != section.id.prefix(7) {
@@ -177,6 +180,11 @@ struct LibraryView: View {
             .fullScreenCover(item: $story) { m in
                 MemoryStoryView(memory: m).environmentObject(session).environment(\.theme, theme)
             }
+            .fullScreenCover(item: $featuredStart) { asset in
+                AssetViewer(assets: memories.featured, startId: asset.id, onChange: { model.update($0) })
+                    .environmentObject(session)
+                    .environment(\.theme, theme)
+            }
             .fullScreenCover(item: $viewing) { asset in
                 AssetViewer(assets: model.assets, startId: asset.id, onChange: { model.update($0) })
                     .environmentObject(session)
@@ -194,7 +202,7 @@ struct LibraryView: View {
     /// Sinema: ekranın üstünde, günün anısının (yoksa en yeni fotoğrafın) bulanık rengi.
     private var ambientAssetId: String? {
         guard theme.ambientGlow else { return nil }
-        return memories.memories.first?.coverAssetId ?? model.assets.first?.id
+        return memories.memories.first?.coverAssetId ?? memories.featured.first?.id ?? model.assets.first?.id
     }
 
     @ViewBuilder

@@ -1,7 +1,7 @@
 // OwnMemories — anılar şeridi ve hikâye tarzı anı görüntüleyicisi.
 import { api, thumbUrl, previewUrl, videoUrl } from './api.js';
 import { h, t, icon, formatDateTime, formatDate, localDate } from './util.js';
-import { setAmbientFrom } from './theme.js';
+import { setAmbientFrom, currentTheme } from './theme.js';
 import { openViewer } from './viewer.js';
 import { store } from './store.js';
 
@@ -66,7 +66,7 @@ export async function memoriesStrip(viewerCtx = () => ({})) {
   } catch {
     return null;
   }
-  if (!data.memories.length) return null;
+  if (!data.memories.length) return featuredBlock(viewerCtx);
   const row = h('div', { class: 'mem-row' }, ...data.memories.map((m, idx) => h('button', {
     class: 'mem-card' + (idx === 0 ? ' is-first' : ''), dataset: { ...kindAttr(m), index: idx },
     onclick: () => openStory(m, viewerCtx),
@@ -92,6 +92,44 @@ export async function memoriesStrip(viewerCtx = () => ({})) {
         h('button', { class: 'icon-btn mem-next', type: 'button', 'aria-label': t('memories_next'), onclick: () => scrollBy(1) }, icon('right')))),
     h('div', { class: 'mem-row-wrap' }, row, h('div', { class: 'mem-fade', 'aria-hidden': 'true' })));
   return h('div', { class: 'mem-block has-hero' }, memoryHero(data.memories[0], viewerCtx), strip);
+}
+
+/**
+ * Henüz anı yokken (ör. geçmiş yılların fotoğrafları daha yüklenmemişken) Sinema'nın üst afişi boş kalmasın:
+ * kitaplıktan rastgele bir fotoğraf "Kitaplığınızdan" afişi olarak gösterilir; dokununca görüntüleyicide açılır.
+ * Diğer temalarda afiş kullanılmadığı için bu durumda bölüm gösterilmez.
+ */
+async function featuredBlock(viewerCtx) {
+  if (currentTheme() !== 'sinema') return null;
+  let assets;
+  try {
+    assets = (await api('GET', 'assets/random?count=12')).assets;
+  } catch {
+    return null;
+  }
+  if (!assets?.length) return null;
+  const a = assets[0];
+  const img = h('img', { src: previewUrl(a.id), alt: '', decoding: 'async' });
+  img.addEventListener('load', () => img.classList.add('in'), { once: true });
+  setAmbientFrom(img);
+  const open = () => {
+    const savedList = store.list;
+    const savedMore = store.loadMore;
+    store.list = assets.slice();
+    store.loadMore = null;
+    openViewer(a.id, { ...viewerCtx(), onClose: () => { store.list = savedList; store.loadMore = savedMore; } });
+  };
+  const day = (a.taken_local || a.taken_at).slice(0, 10);
+  const hero = h('section', { class: 'mem-hero is-featured', dataset: { kind: 'featured' }, 'aria-label': t('from_library') },
+    h('div', { class: 'mem-hero-media', onclick: open }, img),
+    h('div', { class: 'mem-hero-shade', 'aria-hidden': 'true' }),
+    h('div', { class: 'mem-hero-text' },
+      h('div', { class: 'mem-hero-eyebrow' }, h('i', { class: 'mem-hero-dot', 'aria-hidden': 'true' }), t('from_library')),
+      h('h2', { class: 'mem-hero-title' }, monthOf(a)),
+      h('p', { class: 'mem-hero-meta' }, h('span', { class: 'mem-hero-date' }, formatDate(day))),
+      h('div', { class: 'mem-hero-actions' },
+        h('button', { class: 'btn mem-hero-play', type: 'button', onclick: open }, icon('photos'), h('span', {}, t('open_photo'))))));
+  return h('div', { class: 'mem-block has-hero is-featured' }, hero);
 }
 
 /** Favori anı kartı için üç küçük görsel (kapak + iki tane daha). */

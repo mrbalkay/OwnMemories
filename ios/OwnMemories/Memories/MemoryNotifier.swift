@@ -3,6 +3,7 @@ import UIKit
 import UserNotifications
 
 /// Anı bildirimleri: önümüzdeki günlerin anılarını sunucudan sorar ve seçilen saatte yerel bildirim planlar.
+/// O gün anı yoksa kitaplıktan rastgele bir fotoğrafla "Geçmişten bir an" bildirimi kurulur.
 @MainActor
 final class MemoryNotifier: ObservableObject {
     static let shared = MemoryNotifier()
@@ -72,6 +73,9 @@ final class MemoryNotifier: ObservableObject {
         dayFmt.calendar = Calendar(identifier: .gregorian)
         dayFmt.locale = Locale(identifier: "en_US_POSIX")
         dayFmt.dateFormat = "yyyy-MM-dd"
+        // Anı olmayan günler için yedek: kitaplıktan rastgele fotoğraflar ("Geçmişten bir an").
+        var pool: [Asset] = []
+        if let r: AssetList = try? await client.send("GET", "assets/random", query: ["count": "8"]) { pool = r.assets }
         for offset in 0..<8 {
             guard let day = cal.date(byAdding: .day, value: offset, to: today),
                   let fire = cal.date(bySettingHour: hour, minute: 0, second: 0, of: day), fire > Date() else { continue }
@@ -80,14 +84,24 @@ final class MemoryNotifier: ObservableObject {
             let date = dayFmt.string(from: day)
             guard let r: MemoriesResponse = try? await client.send("GET", "memories", query: ["date": date]) else { continue }
             anyFetched = true
-            guard let m = r.memories.first(where: { $0.kind != "favorites" }) ?? r.memories.first else { continue }
             let content = UNMutableNotificationContent()
-            content.title = m.title
-            content.body = m.count == 1 ? "Bir anınız var, bakmak ister misiniz?" : "\(m.count) fotoğraf ve video sizi bekliyor."
             content.sound = .default
             content.threadIdentifier = "memories"
-            content.userInfo = ["memoryDate": m.date, "memoryId": m.id, "requestDate": date]
-            if let att = await attachment(for: m.coverAssetId, client: client) { content.attachments = [att] }
+            if let m = r.memories.first(where: { $0.kind != "favorites" }) ?? r.memories.first {
+                content.title = m.title
+                content.body = m.count == 1 ? "Bir anınız var, bakmak ister misiniz?" : "\(m.count) fotoğraf ve video sizi bekliyor."
+                content.userInfo = ["memoryDate": m.date, "memoryId": m.id, "requestDate": date]
+                if let att = await attachment(for: m.coverAssetId, client: client) { content.attachments = [att] }
+            } else if !pool.isEmpty {
+                let a = pool.removeFirst()
+                let when = StoryText.date(a)
+                content.title = "Geçmişten bir an"
+                content.body = when.isEmpty ? "Kitaplığınızdan bir fotoğraf sizi bekliyor." : "\(when) tarihinden bir fotoğraf sizi bekliyor."
+                content.userInfo = ["assetId": a.id]
+                if let att = await attachment(for: a.id, client: client) { content.attachments = [att] }
+            } else {
+                continue
+            }
             let comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
             fresh.append(UNNotificationRequest(identifier: prefix + date, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)))
         }
