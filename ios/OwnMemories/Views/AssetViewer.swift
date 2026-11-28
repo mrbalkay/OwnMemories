@@ -8,62 +8,148 @@ struct AssetViewer: View {
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
     @Environment(\.theme) private var theme
-    @State private var selection: String = ""
+    @State private var index: Int = 0
     @State private var current: [String: Asset] = [:]
     @State private var showInfo = false
     @State private var chrome = true
-    /// Aşağı/yukarı çekerek kapatma (iOS Fotoğraflar gibi): içerik parmağı izler, arka plan solar.
+    /// Tek bir sürükleme hem sayfa değiştirir hem kapatır (iOS Fotoğraflar gibi): yön ilk harekette
+    /// belirlenir. Yatay: önceki/sonraki öğe; dikey: içerik parmağı izler, arka plan solar, eşikte kapanır.
+    /// (Sayfa görünümü + içerideki ayrı bir sürükleme hareketi iOS 18'de yatay kaydırmayı engelliyordu.)
+    @State private var dragX: CGFloat = 0
     @State private var dragY: CGFloat = 0
+    @State private var dragAxis: Axis?
+    /// İki parmakla yakınlaştırma sürerken sürükleme sayfayı oynatmaz.
+    @State private var zooming = false
+
+    init(assets: [Asset], startId: String, onChange: @escaping (Asset) -> Void) {
+        self.assets = assets
+        self.startId = startId
+        self.onChange = onChange
+        _index = State(initialValue: assets.firstIndex { $0.id == startId } ?? 0)
+    }
 
     private var dragProgress: CGFloat { min(abs(dragY) / 320, 1) }
-
+    private var selectedId: String? { assets.indices.contains(index) ? assets[index].id : nil }
     private func asset(_ id: String) -> Asset? { current[id] ?? assets.first { $0.id == id } }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            Color.black.opacity(Double(1 - dragProgress * 0.85)).ignoresSafeArea()
-            TabView(selection: $selection) {
-                ForEach(assets) { a in
-                    AssetPageView(asset: a, dragY: $dragY, onDismiss: dismissBySwipe)
-                        .tag(a.id)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
-            .offset(y: dragY)
-            .scaleEffect(1 - dragProgress * 0.25)
-            .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() } }
-
-            HStack(spacing: theme.usesGlass ? 8 : 0) {
-                Button { dismiss() } label: { chromeIcon("xmark") }
-                    .accessibilityLabel("Kapat")
-                Spacer()
-                if let a = asset(selection), a.access != "view" {
-                    Button { Task { await toggleFavorite(a) } } label: {
-                        chromeIcon(a.isFavorite ? "heart.fill" : "heart")
+        GeometryReader { geo in
+            let width = max(geo.size.width, 1)
+            ZStack(alignment: .top) {
+                Color.black.opacity(Double(1 - dragProgress * 0.85)).ignoresSafeArea()
+                ZStack {
+                    // Yalnızca görünen sayfa ve iki komşusu çizilir (bellek); kaydırırken komşu kenardan girer.
+                    ForEach(visibleRange, id: \.self) { i in
+                        AssetPageView(asset: assets[i], isCurrent: i == index, zooming: $zooming)
+                            .frame(width: width, height: geo.size.height)
+                            .offset(x: CGFloat(i - index) * (width + 12) + dragX)
                     }
-                    .accessibilityLabel(a.isFavorite ? "Favorilerden çıkar" : "Favorilere ekle")
                 }
-                Button { showInfo = true } label: { chromeIcon(theme.usesGlass ? "info" : "info.circle") }
-                    .accessibilityLabel("Ayrıntılar")
+                .frame(width: width, height: geo.size.height)
+                .clipped()
+                .offset(y: dragY)
+                .scaleEffect(1 - dragProgress * 0.25)
+                .contentShape(Rectangle())
+                .simultaneousGesture(pagerGesture(width: width))
+                .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() } }
+                .ignoresSafeArea()
+
+                topBar
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, theme.usesGlass ? 14 : 8)
-            .padding(.vertical, theme.usesGlass ? 4 : 0)
-            .background(LinearGradient(colors: [.black.opacity(theme.name == .galeri ? 0.45 : 0.6), .clear], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
-            .opacity(chrome && dragY == 0 ? 1 : 0)
         }
+        .ignoresSafeArea(edges: .bottom)
         .presentationBackground(.clear)
         .statusBarHidden(!chrome)
-        .onAppear { selection = startId }
         .sheet(isPresented: $showInfo) {
-            if let a = asset(selection) {
+            if let id = selectedId, let a = asset(id) {
                 AssetInfoView(asset: a)
                     .environment(\.theme, theme)
                     .preferredColorScheme(theme.colorScheme)
                     .presentationDetents([.medium, .large])
             }
         }
+    }
+
+    private var visibleRange: [Int] {
+        guard !assets.isEmpty else { return [] }
+        let i = min(max(index, 0), assets.count - 1)
+        return Array(max(0, i - 1)...min(assets.count - 1, i + 1))
+    }
+
+    private var topBar: some View {
+        HStack(spacing: theme.usesGlass ? 8 : 0) {
+            Button { dismiss() } label: { chromeIcon("xmark") }
+                .accessibilityLabel("Kapat")
+            Spacer()
+            if let id = selectedId, let a = asset(id), a.access != "view" {
+                Button { Task { await toggleFavorite(a) } } label: {
+                    chromeIcon(a.isFavorite ? "heart.fill" : "heart")
+                }
+                .accessibilityLabel(a.isFavorite ? "Favorilerden çıkar" : "Favorilere ekle")
+            }
+            Button { showInfo = true } label: { chromeIcon(theme.usesGlass ? "info" : "info.circle") }
+                .accessibilityLabel("Ayrıntılar")
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, theme.usesGlass ? 14 : 8)
+        .padding(.vertical, theme.usesGlass ? 4 : 0)
+        .background(LinearGradient(colors: [.black.opacity(theme.name == .galeri ? 0.45 : 0.6), .clear], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+        .opacity(chrome && dragY == 0 ? 1 : 0)
+        .accessibilityElement(children: .contain)
+        .accessibilityAction(named: "Sonraki") { go(1) }
+        .accessibilityAction(named: "Önceki") { go(-1) }
+    }
+
+    private func pagerGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged { v in
+                guard !zooming else { return }
+                if dragAxis == nil {
+                    dragAxis = abs(v.translation.width) > abs(v.translation.height) ? .horizontal : .vertical
+                }
+                switch dragAxis {
+                case .horizontal:
+                    let atStart = index == 0 && v.translation.width > 0
+                    let atEnd = index == assets.count - 1 && v.translation.width < 0
+                    // Uçlarda lastik etkisi.
+                    dragX = (atStart || atEnd) ? v.translation.width / 3 : v.translation.width
+                case .vertical:
+                    dragY = v.translation.height
+                case .none:
+                    break
+                }
+            }
+            .onEnded { v in
+                let axis = dragAxis
+                dragAxis = nil
+                guard !zooming else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { dragX = 0; dragY = 0 }
+                    return
+                }
+                if axis == .horizontal {
+                    let dx = v.translation.width
+                    let predicted = v.predictedEndTranslation.width
+                    var step = 0
+                    if (dx < -width * 0.22 || predicted < -width * 0.5), index < assets.count - 1 { step = 1 }
+                    if (dx > width * 0.22 || predicted > width * 0.5), index > 0 { step = -1 }
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) {
+                        index += step
+                        dragX = 0
+                    }
+                } else if axis == .vertical {
+                    if abs(v.translation.height) > 110 || abs(v.predictedEndTranslation.height) > 320 {
+                        dismissBySwipe()
+                    } else {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { dragY = 0 }
+                    }
+                }
+            }
+    }
+
+    private func go(_ step: Int) {
+        let target = index + step
+        guard assets.indices.contains(target) else { return }
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) { index = target }
     }
 
     /// Üst çubuk düğmesi: Sinema/Yerel'de koyu cam daire, Galeri'de çerçevesiz ince simge.
@@ -106,33 +192,11 @@ struct AssetViewer: View {
 
 private struct AssetPageView: View {
     let asset: Asset
-    @Binding var dragY: CGFloat
-    var onDismiss: () -> Void
+    let isCurrent: Bool
+    @Binding var zooming: Bool
     @EnvironmentObject private var session: Session
     @State private var player: AVPlayer?
     @State private var scale: CGFloat = 1
-    /// Bir sürüklemenin yönü ilk harekette belirlenir: yatay olanlar sayfa değiştirir, dikey olanlar kapatır.
-    @State private var dragAxis: Axis?
-
-    private var dismissGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { v in
-                guard scale <= 1.01 else { return }
-                if dragAxis == nil {
-                    dragAxis = abs(v.translation.height) > abs(v.translation.width) ? .vertical : .horizontal
-                }
-                if dragAxis == .vertical { dragY = v.translation.height }
-            }
-            .onEnded { v in
-                defer { dragAxis = nil }
-                guard dragAxis == .vertical, scale <= 1.01 else { return }
-                if abs(v.translation.height) > 110 || abs(v.predictedEndTranslation.height) > 320 {
-                    onDismiss()
-                } else {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { dragY = 0 }
-                }
-            }
-    }
 
     var body: some View {
         Group {
@@ -148,24 +212,39 @@ private struct AssetPageView: View {
                     RemoteImage(assetId: asset.id, variant: "preview", contentMode: .fit, showsPlaceholder: false)
                 }
                 .scaleEffect(scale)
-                .gesture(MagnificationGesture().onChanged { scale = max(1, $0) }.onEnded { _ in withAnimation { scale = 1 } })
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { scale = max(1, $0); zooming = true }
+                        .onEnded { _ in
+                            withAnimation { scale = 1 }
+                            zooming = false
+                        }
+                )
             }
         }
-        .contentShape(Rectangle())
-        .simultaneousGesture(dismissGesture)
-        .onAppear {
-            guard asset.isVideo, player == nil, let client = session.client else { return }
-            let url = client.url("assets/\(asset.id)/video")
-            var headers: [String: String] = [:]
-            if let token = client.token { headers["Authorization"] = "Bearer " + token }
-            let item = AVPlayerItem(asset: AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers]))
-            player = AVPlayer(playerItem: item)
+        .onAppear { if isCurrent { preparePlayer() } }
+        .onChange(of: isCurrent) { _, now in
+            if now {
+                preparePlayer()
+            } else {
+                // Görünmeyen sayfanın videosu durur.
+                player?.pause()
+            }
         }
         .onDisappear {
-            // Görünmeyen sayfanın oynatıcısı bırakılır (bellek); sayfaya dönülünce yeniden oluşturulur.
+            // Çizimden çıkan sayfanın oynatıcısı bırakılır (bellek); sayfaya dönülünce yeniden oluşturulur.
             player?.pause()
             player = nil
         }
+    }
+
+    private func preparePlayer() {
+        guard asset.isVideo, player == nil, let client = session.client else { return }
+        let url = client.url("assets/\(asset.id)/video")
+        var headers: [String: String] = [:]
+        if let token = client.token { headers["Authorization"] = "Bearer " + token }
+        let item = AVPlayerItem(asset: AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers]))
+        player = AVPlayer(playerItem: item)
     }
 }
 
