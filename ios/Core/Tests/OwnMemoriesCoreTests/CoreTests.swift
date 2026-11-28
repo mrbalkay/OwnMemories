@@ -21,6 +21,13 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(a.tzOffset, 180)
     }
 
+    func testDecodeUserTheme() throws {
+        let with = #"{"id":1,"email":"a@b.c","name":"A","is_admin":false,"used_bytes":5,"quota_bytes":null,"theme":"galeri"}"#
+        XCTAssertEqual(try JSONDecoder().decode(ServerUser.self, from: Data(with.utf8)).theme, "galeri")
+        let without = #"{"id":1,"email":"a@b.c","name":"A","is_admin":false,"used_bytes":5,"quota_bytes":null}"#
+        XCTAssertNil(try JSONDecoder().decode(ServerUser.self, from: Data(without.utf8)).theme)
+    }
+
     func testDecodePageAndErrors() throws {
         let page = try JSONDecoder().decode(AssetPage.self, from: Data("{\"assets\":[\(assetJSON)],\"next\":{\"before\":\"2019-07-01T12:04:05Z\",\"before_id\":\"x\"}}".utf8))
         XCTAssertEqual(page.assets.count, 1)

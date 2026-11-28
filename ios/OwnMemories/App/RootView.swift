@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var router: AppRouter
+    @StateObject private var themes = ThemeStore.shared
 
     var body: some View {
         Group {
@@ -18,7 +19,11 @@ struct RootView: View {
                 LoginView()
             }
         }
-        .tint(Color.accentColor)
+        .environmentObject(themes)
+        .environment(\.theme, themes.theme)
+        .tint(themes.theme.accent)
+        .preferredColorScheme(themes.theme.colorScheme)
+        .task { if session.isLoggedIn { await session.refreshUser() } }
     }
 }
 
