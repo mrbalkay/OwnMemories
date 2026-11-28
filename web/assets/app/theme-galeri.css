@@ -85,7 +85,7 @@
 /* ------------------------------------------------------------ kenar çubuğu */
 :root[data-skin="galeri"] .sidebar { padding: 30px 0 24px; background: var(--g-duvar); border-right: 1px solid var(--g-cizgi); }
 :root[data-skin="galeri"] .logo { padding: 0 28px 34px; gap: 0; font-family: var(--serif); font-weight: 400; font-size: 22px; letter-spacing: -.01em; color: var(--g-murekkep); }
-:root[data-skin="galeri"] .logo img { display: none; }
+:root[data-skin="galeri"] .logo img { width: 26px; height: 26px; margin-right: 12px; border-radius: 6px; box-shadow: none; }
 :root[data-skin="galeri"] .nav { gap: 0; }
 :root[data-skin="galeri"] .nav-item { position: relative; gap: 14px; padding: 9px 28px; border-radius: 0; color: var(--g-grafit); font-weight: 400; font-size: 14px; transition: color .3s var(--g-ease); }
 :root[data-skin="galeri"] .nav-item svg { color: currentColor; }
