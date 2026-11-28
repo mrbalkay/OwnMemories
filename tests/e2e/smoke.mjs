@@ -133,6 +133,30 @@ try {
   await page.waitForSelector('.album-card, .empty');
   await page.screenshot({ path: `${out}desktop-albums.png` });
   step('albümler');
+  // Arama: öneri yongaları, sonuç ızgarası (akıllı ya da metin modu) ve sonuç listesinde görüntüleyici gezinmesi
+  await page.goto(base + '/app/#/search');
+  await page.waitForSelector('.search-start .search-chip');
+  const fname = await page.evaluate(async (id) => (await (await fetch(`/api/v1/assets/${id}`)).json()).asset.filename, firstId);
+  const term = fname.replace(/\.[^.]+$/, '').slice(0, 12);
+  await page.fill('#searchInput', term);
+  await page.press('#searchInput', 'Enter');
+  await page.waitForSelector('.search-view .tile');
+  const head = await page.textContent('.search-title');
+  if (!/sonuç/.test(head)) throw new Error(`arama başlığı beklenmedik: ${head}`);
+  const mode = await page.getAttribute('.search-mode', 'data-mode');
+  await page.screenshot({ path: `${out}desktop-search.png` });
+  const nTiles = await page.locator('.search-view .tile').count();
+  await page.click('.search-view .tile');
+  await page.waitForSelector('.viewer .v-img, .viewer video');
+  if (nTiles > 1) {
+    const cur = () => document.querySelector('.viewer .v-img')?.getAttribute('src') || document.querySelector('.viewer video')?.getAttribute('src') || '';
+    const before = await page.evaluate(cur);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForFunction(([b, f]) => (new Function('return ' + f))()() !== b, [before, cur.toString()], { timeout: 5000 });
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.viewer', { state: 'detached' });
+  step(`arama (${mode}): "${term}" → ${nTiles} sonuç, görüntüleyicide gezinme`);
   // API hatasında sonsuz "Yükleniyor" yerine "Tekrar dene" görünmeli
   const errPage = await browser.newPage();
   await errPage.context().addCookies(await page.context().cookies());

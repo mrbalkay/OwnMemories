@@ -175,6 +175,7 @@ function asset_purge(int $userId, array $ids): int
         db_exec('DELETE FROM assets WHERE id = ?', [$id]);
         db_exec('DELETE FROM album_assets WHERE asset_id = ?', [$id]);
         db_exec('DELETE FROM asset_people WHERE asset_id = ?', [$id]);
+        asset_embedding_delete($id);
         db_exec('UPDATE assets SET live_pair_id = NULL WHERE live_pair_id = ?', [$id]);
         db_exec('UPDATE assets SET edited_of_id = NULL WHERE edited_of_id = ?', [$id]);
         db_exec('UPDATE albums SET cover_asset_id = NULL WHERE cover_asset_id = ?', [$id]);
@@ -189,6 +190,18 @@ function asset_purge(int $userId, array $ids): int
         asset_bump_version($userId);
     }
     return $n;
+}
+
+/** Akıllı arama vektörünü siler (asset_embeddings henüz kurulmadıysa sessizce geçer). */
+function asset_embedding_delete(string $id): void
+{
+    try {
+        db_exec('DELETE FROM asset_embeddings WHERE asset_id = ?', [$id]);
+    } catch (PDOException $e) {
+        if (($e->errorInfo[1] ?? 0) !== 1146) { // ER_NO_SUCH_TABLE
+            throw $e;
+        }
+    }
 }
 
 /** Çöpte $days günden uzun duranları kalıcı siler. */

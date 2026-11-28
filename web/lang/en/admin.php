@@ -29,4 +29,7 @@ return [
     'device' => 'Device',
     'pending' => 'Pending',
     'last_backup' => 'Last backup',
+    'smart_search' => 'Smart search', 'ml_down' => 'Cannot reach the smart search service ({url}). Search currently only matches file names, captions and cameras. On the server: sudo systemctl status ownmemories-ml',
+    'ml_ready' => 'Running', 'ml_starting' => 'Starting', 'ml_model' => 'Model', 'ml_pending' => 'Index queue',
+    'ml_indexed' => 'Indexed', 'ml_total' => 'Total items', 'ml_progress' => 'Progress', 'ml_dim' => 'dims',
 ];

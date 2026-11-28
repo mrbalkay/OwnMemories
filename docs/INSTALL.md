@@ -7,7 +7,8 @@ Bu belgede iki kurulum yolu anlatılıyor:
 - **A. Test hostingi** — herhangi bir PHP/MySQL hostingde deneme
 - **B. Evdeki Ubuntu sunucusu** — asıl kurulum, Cloudflare Tunnel ile `https://ownmemories.balkay.net`
 
-Bunlara ek olarak **C** Google Takeout aktarımını, **D** yedeklemeyi, **E** test hostingden Ubuntu'ya taşımayı anlatıyor.
+Bunlara ek olarak **C** Google Takeout aktarımını, **D** yedeklemeyi, **E** test hostingden Ubuntu'ya taşımayı,
+**F** güncellemeyi, **G** akıllı aramayı (doğal dil ile fotoğraf arama) anlatıyor.
 
 ## Gereksinimler
 
@@ -249,9 +250,67 @@ cd ~/OwnMemories && git pull
 sudo bash server/update.sh
 ```
 
-Betik kodu `/var/www/ownmemories` klasörüne kopyalar ve işçiyi yeniden başlatır. Yapılandırma ve fotoğraflar
-korunur; veritabanı değişiklikleri ilk istekte kendiliğinden uygulanır. Yönlendirmeleri kontrol etmek için:
+Betik kodu `/var/www/ownmemories` klasörüne kopyalar, işçiyi yeniden başlatır ve akıllı arama servisini
+(`server/install-ml.sh`, bkz. G) kurar/günceller. Yapılandırma ve fotoğraflar korunur; veritabanı değişiklikleri
+ilk istekte kendiliğinden uygulanır. Akıllı arama kurulamazsa (ör. model indirilemedi) betik bir **UYARI**
+yazar ama güncelleme tamamlanır; arama dosya adı/açıklama ile çalışmaya devam eder. Yönlendirmeleri kontrol etmek için:
 
 ```bash
 bash tests/http/routes.sh http://127.0.0.1
 ```
+
+## G. Akıllı arama (Ubuntu)
+
+Üst çubuktaki arama, "kumsalda köpek", "doğum günü pastası", "karlı dağ" gibi Türkçe (veya İngilizce)
+cümlelerle fotoğrafların **içeriğine** göre arar. Bunu ayrı bir servis yapar: `ownmemories-ml`
+(Python + ONNX, yalnızca sunucunun içinden `127.0.0.1:8765` adresinden erişilir, dışarıya açılmaz).
+Fotoğraflar sunucudan hiçbir yere gönderilmez; model bir kez Hugging Face'ten indirilir.
+
+**Kurulum:** `install-ubuntu.sh` ve `update.sh` kendiliğinden kurar. Elle kurmak / onarmak için:
+
+```bash
+sudo bash /var/www/ownmemories/server/install-ml.sh
+```
+
+Betik şunları yapar (tekrar çalıştırmak güvenlidir):
+
+1. `python3-venv` kurar, `/opt/ownmemories-ml` sanal ortamına sabit sürümlü paketleri yükler
+   (onnxruntime, numpy, tokenizers, pillow, pymysql).
+2. Modeli (`immich-app/ViT-B-16-SigLIP2__webli`, ~1.5 GB) `/var/lib/ownmemories/models/` altına indirir.
+   Yarım kalan indirme kaldığı yerden sürer; dosyalar boyut ve SHA-256 ile doğrulanır.
+3. Metin modelinin int8 kopyasını üretir (~600 MB daha az RAM; bunun için bir kerelik ~3.5 GB boş bellek
+   gerekir, yoksa tam model kullanılır).
+4. `/etc/ownmemories/ml.env` dosyasını `web/config/config.php`'deki veritabanı ve depolama ayarlarından yazar.
+5. `ownmemories-ml` systemd servisini kurar, başlatır ve hazır olduğunu denetler.
+
+**Gereksinimler:** en az 2 GB RAM (servis ~1.3 GB kullanır), ~3 GB disk, ilk kurulumda internet.
+
+**İlk dizinleme:** servis arka planda tüm fotoğrafların (ve videoların karesinin) vektörünü çıkarır.
+4 çekirdekte saatte ~30.000 fotoğraf; düşük öncelikle çalışır, sunucuyu yormaz. Bu sürede arama sayfası
+"Akıllı arama hazırlanıyor: 12.400 / 30.000" gibi bir not gösterir; dizinlenmiş fotoğraflar hemen aranabilir.
+Yeni yüklenen fotoğraflar küçük resimleri oluştuktan sonra kendiliğinden eklenir.
+
+**Durum ve günlük:**
+
+```bash
+systemctl status ownmemories-ml
+journalctl -u ownmemories-ml -n 50
+curl -s http://127.0.0.1:8765/health
+```
+
+**Ayarlar** (`/etc/ownmemories/ml.env`, değiştirdikten sonra `sudo systemctl restart ownmemories-ml`):
+
+- `OM_ML_THREADS` — kullanılacak çekirdek sayısı (varsayılan en fazla 4). Az çekirdekli sunucuda 2 yapın.
+- `OM_ML_MODEL` — başka bir Immich modeli. Varsayılan `immich-app/ViT-B-16-SigLIP2__webli` kısa sorgularda
+  ("kumsal", "karlı dağ") en iyi hız/kalite dengesidir. Aramayı çoğunlukla uzun Türkçe cümlelerle yapıyorsanız
+  ve sunucuda en az 6 GB RAM varsa `immich-app/nllb-clip-base-siglip__v1` cümlelerde belirgin daha isabetlidir
+  (ama dizinlemesi 3 kat yavaş, ~0.6 GB daha fazla RAM ister; karşılaştırma: docs/ARCHITECTURE.md §7).
+  Değiştirdikten sonra `sudo bash server/install-ml.sh` çalıştırın; tüm fotoğraflar yeniden dizinlenir.
+- `OM_ML_MIN_Z` / `OM_ML_MIN_SCORE` — sonuç eşiği. Varsayılan olarak yalnızca sorguyla belirgin şekilde
+  eşleşen fotoğraflar listelenir; daha çok (ama daha az isabetli) sonuç için `OM_ML_MIN_Z="1.5"`, eşiği
+  tamamen kapatmak için `OM_ML_MIN_Z="0"`.
+
+Elle eklediğiniz `OM_ML_*` ayarları güncellemelerde korunur (veritabanı ayarları config.php'den yeniden yazılır).
+
+**Kapatmak:** `sudo touch /etc/ownmemories/ml.disabled && sudo bash /var/www/ownmemories/server/install-ml.sh`
+(geri açmak için dosyayı silip betiği yeniden çalıştırın). Kapalıyken arama dosya adı/açıklama ile çalışır.

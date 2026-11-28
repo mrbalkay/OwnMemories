@@ -15,6 +15,26 @@ $lastRun = max($o['cron_last_run'], $o['worker_last_seen']);
   <div class="stat"><div class="k"><?= e(t('admin.cron_last')) ?></div><div class="v small"><?= admin_ago($o['cron_last_run']) ?></div><div class="s"><?= e(t('admin.worker_last')) ?>: <?= admin_ago($o['worker_last_seen']) ?></div></div>
 </section>
 
+<?php $ss = admin_smart_search(); $h = $ss['health']; ?>
+<h2><?= e(t('admin.smart_search')) ?></h2>
+<?php if ($h === null): ?>
+<div class="alert alert-warn"><?= e(t('admin.ml_down', ['url' => ml_url()])) ?></div>
+<?php else: ?>
+<p class="smart-health"><span class="pill <?= !empty($h['ready']) ? 'pill-done' : 'pill-paused' ?>"><?= e(t(!empty($h['ready']) ? 'admin.ml_ready' : 'admin.ml_starting')) ?></span>
+  <span class="muted small"><?= e(t('admin.ml_model')) ?>: <code><?= e((string) ($h['model'] ?? '?')) ?></code> · <?= (int) ($h['dim'] ?? 0) ?> <?= e(t('admin.ml_dim')) ?> · <?= e(t('admin.ml_pending')) ?>: <?= number_format((int) ($h['pending'] ?? 0), 0, ',', '.') ?></span></p>
+<?php endif; ?>
+<table class="tbl">
+  <thead><tr><th><?= e(t('admin.name')) ?></th><th class="num"><?= e(t('admin.ml_indexed')) ?></th><th class="num"><?= e(t('admin.ml_total')) ?></th><th><?= e(t('admin.ml_progress')) ?></th></tr></thead>
+  <tbody>
+  <?php foreach ($ss['users'] as $u): $pct = $u['total'] ? (int) floor($u['indexed'] * 100 / $u['total']) : 100; ?>
+    <tr><td><?= e($u['name']) ?> <span class="muted"><?= e($u['email']) ?></span></td>
+      <td class="num"><?= number_format($u['indexed'], 0, ',', '.') ?></td>
+      <td class="num"><?= number_format($u['total'], 0, ',', '.') ?></td>
+      <td><progress max="100" value="<?= $pct ?>" style="width:140px;vertical-align:middle"></progress> <span class="small muted">%<?= $pct ?></span></td></tr>
+  <?php endforeach; ?>
+  </tbody>
+</table>
+
 <h2><?= e(t('admin.users')) ?></h2>
 <table class="tbl">
   <thead><tr><th><?= e(t('admin.name')) ?></th><th class="num"><?= e(t('admin.photos')) ?></th><th class="num"><?= e(t('admin.videos')) ?></th><th class="num"><?= e(t('admin.used')) ?></th><th><?= e(t('admin.quota')) ?></th><th><?= e(t('admin.last_seen')) ?></th></tr></thead>

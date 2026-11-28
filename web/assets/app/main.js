@@ -3,6 +3,7 @@ import { api, qs } from './api.js';
 import { h, t, icon, toast, confirmDialog, formatBytes, OM } from './util.js';
 import { store } from './store.js';
 import { Timeline, clearAmbient } from './timeline.js';
+import { SearchView } from './search.js';
 import { openViewer, closeViewer } from './viewer.js';
 import { enqueue, setUploadHandler } from './upload.js';
 
@@ -177,12 +178,8 @@ async function render() {
     case 'search': {
       const p = route.params || {};
       document.getElementById('searchInput').value = p.q || '';
-      const from = h('input', { type: 'date', value: p.from || '', 'aria-label': t('from') });
-      const to = h('input', { type: 'date', value: p.to || '', 'aria-label': t('to') });
-      const go = () => { location.hash = '#/search' + qs({ q: p.q, from: from.value, to: to.value }); };
-      const head = h('div', { class: 'page-head' }, h('h1', {}, t('search_results')),
-        h('div', { class: 'filters' }, h('label', {}, t('from'), from), h('label', {}, t('to'), to), h('button', { class: 'btn btn-soft', onclick: go }, t('filter'))));
-      showTimeline({ q: p.q, from: p.from ? p.from + 'T00:00:00Z' : '', to: p.to ? p.to + 'T23:59:59Z' : '' }, t('empty_search'), head);
+      setPageTitle(p.q ? `“${p.q}”` : t('search_title'));
+      timeline = new SearchView(view, { params: p, onOpen: (id) => openViewer(id, viewerCtx()) });
       break;
     }
     case 'albums':
@@ -241,7 +238,7 @@ document.getElementById('menuBtn').addEventListener('click', () => document.getE
 document.getElementById('searchForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const q = document.getElementById('searchInput').value.trim();
-  location.hash = q ? '#/search' + qs({ q }) : '#/photos';
+  location.hash = '#/search' + qs({ q });
 });
 document.getElementById('fileInput').addEventListener('change', (e) => { enqueue([...e.target.files]); e.target.value = ''; });
 setUploadHandler(() => {
@@ -263,6 +260,15 @@ window.addEventListener('drop', (e) => {
   hint.hidden = true;
   if (e.dataTransfer?.files?.length) enqueue([...e.dataTransfer.files]);
 });
+// Dar ekranda uzun yer tutucu kesiliyor; kısa olanı kullan.
+{
+  const input = document.getElementById('searchInput');
+  const mq = matchMedia('(max-width: 600px)');
+  const full = input.placeholder;
+  const sync = () => { input.placeholder = mq.matches ? t('search_placeholder_short') : full; };
+  mq.addEventListener('change', sync);
+  sync();
+}
 document.addEventListener('keydown', (e) => {
   // "/" arama kutusuna odaklanır (.search-kbd ipucu)
   if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.closest?.('input, textarea, select, [contenteditable]') && !document.querySelector('.viewer, .story, dialog[open]')) {

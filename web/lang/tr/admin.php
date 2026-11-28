@@ -29,4 +29,7 @@ return [
     'device' => 'Cihaz',
     'pending' => 'Bekleyen',
     'last_backup' => 'Son yedekleme',
+    'smart_search' => 'Akıllı arama', 'ml_down' => 'Akıllı arama hizmetine ({url}) ulaşılamıyor. Arama şimdilik yalnızca dosya adı, açıklama ve kamera bilgisinde çalışır. Sunucuda: sudo systemctl status ownmemories-ml',
+    'ml_ready' => 'Çalışıyor', 'ml_starting' => 'Hazırlanıyor', 'ml_model' => 'Model', 'ml_pending' => 'Dizin kuyruğu',
+    'ml_indexed' => 'Dizinlenen', 'ml_total' => 'Toplam öğe', 'ml_progress' => 'İlerleme', 'ml_dim' => 'boyut',
 ];

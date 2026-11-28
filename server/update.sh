@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# OwnMemories güncelleme: depodaki son kodu çalışan kuruluma kopyalar ve işçiyi yeniden başlatır.
+# OwnMemories güncelleme: depodaki son kodu çalışan kuruluma kopyalar, işçiyi yeniden başlatır ve
+# akıllı arama servisini (server/install-ml.sh) kurar/günceller.
 #   cd ~/OwnMemories && git pull && sudo bash server/update.sh
 # Yapılandırma (web/config) ve depolama klasörü korunur; veritabanı migrasyonları ilk istekte kendiliğinden uygulanır.
 set -euo pipefail
@@ -14,4 +15,9 @@ rsync -a --delete \
 chown -R www-data:www-data "$DEST/web/config"
 systemctl restart ownmemories-worker 2>/dev/null || true
 systemctl reload apache2 2>/dev/null || true
+# Akıllı arama servisi (ownmemories-ml): kurulum/güncelleme. Başarısız olursa güncelleme yine tamamlanır.
+if ! bash "$DEST/server/install-ml.sh"; then
+  echo "UYARI: Akıllı arama (ownmemories-ml) kurulamadı veya güncellenemedi; fotoğraflar ve normal arama etkilenmez." >&2
+  echo "       Sonra tekrar deneyin: sudo bash $DEST/server/install-ml.sh   (günlük: journalctl -u ownmemories-ml)" >&2
+fi
 echo "Güncellendi: $(git -C "$SRC" log -1 --format='%h %s')"
