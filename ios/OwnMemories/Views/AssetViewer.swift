@@ -9,6 +9,8 @@ struct AssetViewer: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.theme) private var theme
     @State private var index: Int = 0
+    /// Gösterilen öğenin kimliği: liste arkada yenilenip sıra kayarsa (yeni yüklemeler başa eklenir) aynı öğede kalınır.
+    @State private var currentId: String
     @State private var current: [String: Asset] = [:]
     @State private var showInfo = false
     @State private var chrome = true
@@ -20,12 +22,16 @@ struct AssetViewer: View {
     @State private var dragAxis: Axis?
     /// İki parmakla yakınlaştırma sürerken sürükleme sayfayı oynatmaz.
     @State private var zooming = false
+    /// Sürükleme sırasında yakınlaştırma başladıysa bu sürükleme parmak kalkana dek yok sayılır.
+    @State private var dragCancelled = false
 
     init(assets: [Asset], startId: String, onChange: @escaping (Asset) -> Void) {
         self.assets = assets
         self.startId = startId
         self.onChange = onChange
-        _index = State(initialValue: assets.firstIndex { $0.id == startId } ?? 0)
+        let start = assets.firstIndex { $0.id == startId } ?? 0
+        _index = State(initialValue: start)
+        _currentId = State(initialValue: assets.indices.contains(start) ? assets[start].id : startId)
     }
 
     private var dragProgress: CGFloat { min(abs(dragY) / 320, 1) }
@@ -33,33 +39,29 @@ struct AssetViewer: View {
     private func asset(_ id: String) -> Asset? { current[id] ?? assets.first { $0.id == id } }
 
     var body: some View {
-        GeometryReader { geo in
-            let width = max(geo.size.width, 1)
-            ZStack(alignment: .top) {
-                Color.black.opacity(Double(1 - dragProgress * 0.85)).ignoresSafeArea()
-                ZStack {
-                    // Yalnızca görünen sayfa ve iki komşusu çizilir (bellek); kaydırırken komşu kenardan girer.
-                    ForEach(visibleRange, id: \.self) { i in
-                        AssetPageView(asset: assets[i], isCurrent: i == index, zooming: $zooming)
-                            .frame(width: width, height: geo.size.height)
-                            .offset(x: CGFloat(i - index) * (width + 12) + dragX)
-                    }
-                }
-                .frame(width: width, height: geo.size.height)
-                .clipped()
-                .offset(y: dragY)
-                .scaleEffect(1 - dragProgress * 0.25)
-                .contentShape(Rectangle())
-                .simultaneousGesture(pagerGesture(width: width))
-                .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() } }
-                .ignoresSafeArea()
-
-                topBar
+        ZStack(alignment: .top) {
+            Color.black.opacity(Double(1 - dragProgress * 0.85)).ignoresSafeArea()
+            // Sayfalar tüm ekranı kaplar (kenardan kenara); üst çubuk güvenli alanın içinde kalır.
+            GeometryReader { geo in
+                pager(size: geo.size)
             }
+            .ignoresSafeArea()
+            topBar
         }
-        .ignoresSafeArea(edges: .bottom)
         .presentationBackground(.clear)
         .statusBarHidden(!chrome)
+        .onChange(of: assets.map(\.id)) { _, ids in
+            // Liste değişti: aynı öğeyi bul; yoksa en yakın geçerli konuma sabitle.
+            if let i = ids.firstIndex(of: currentId) {
+                index = i
+            } else if !ids.isEmpty {
+                index = min(max(index, 0), ids.count - 1)
+                currentId = ids[index]
+            }
+        }
+        .onChange(of: index) { _, i in
+            if assets.indices.contains(i) { currentId = assets[i].id }
+        }
         .sheet(isPresented: $showInfo) {
             if let id = selectedId, let a = asset(id) {
                 AssetInfoView(asset: a)
@@ -68,6 +70,33 @@ struct AssetViewer: View {
                     .presentationDetents([.medium, .large])
             }
         }
+    }
+
+    private struct Slot: Identifiable {
+        let index: Int
+        let asset: Asset
+        var id: String { asset.id }
+    }
+
+    private func pager(size: CGSize) -> some View {
+        let width = max(size.width, 1)
+        // Yalnızca görünen sayfa ve iki komşusu çizilir (bellek); kaydırırken komşu kenardan girer.
+        // Kimlik öğe kimliğidir (konum değil): liste kayarsa bir sayfanın durumu (oynatıcı) başka öğeye geçmez.
+        let slots = visibleRange.map { Slot(index: $0, asset: assets[$0]) }
+        return ZStack {
+            ForEach(slots) { slot in
+                AssetPageView(asset: slot.asset, isCurrent: slot.index == index, zooming: $zooming)
+                    .frame(width: width, height: size.height)
+                    .offset(x: CGFloat(slot.index - index) * (width + 12) + dragX)
+            }
+        }
+        .frame(width: width, height: size.height)
+        .clipped()
+        .offset(y: dragY)
+        .scaleEffect(1 - dragProgress * 0.25)
+        .contentShape(Rectangle())
+        .simultaneousGesture(pagerGesture(width: width))
+        .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() } }
     }
 
     private var visibleRange: [Int] {
@@ -93,8 +122,14 @@ struct AssetViewer: View {
         .foregroundStyle(.white)
         .padding(.horizontal, theme.usesGlass ? 14 : 8)
         .padding(.vertical, theme.usesGlass ? 4 : 0)
-        .background(LinearGradient(colors: [.black.opacity(theme.name == .galeri ? 0.45 : 0.6), .clear], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+        .background(
+            // Geçiş gölgesi dokunuşu yutmaz: düğmeler arasındaki boşlukta da kaydırma/dokunma sayfaya gider.
+            LinearGradient(colors: [.black.opacity(theme.name == .galeri ? 0.45 : 0.6), .clear], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+        )
         .opacity(chrome && dragY == 0 ? 1 : 0)
+        .allowsHitTesting(chrome && dragY == 0)
         .accessibilityElement(children: .contain)
         .accessibilityAction(named: "Sonraki") { go(1) }
         .accessibilityAction(named: "Önceki") { go(-1) }
@@ -103,7 +138,14 @@ struct AssetViewer: View {
     private func pagerGesture(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 10)
             .onChanged { v in
-                guard !zooming else { return }
+                if zooming || dragCancelled {
+                    // Yakınlaştırma araya girdi: sayfa yerine döner, bu sürükleme bitene dek etkisiz.
+                    dragCancelled = true
+                    if dragX != 0 || dragY != 0 {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { dragX = 0; dragY = 0 }
+                    }
+                    return
+                }
                 if dragAxis == nil {
                     dragAxis = abs(v.translation.width) > abs(v.translation.height) ? .horizontal : .vertical
                 }
@@ -122,7 +164,9 @@ struct AssetViewer: View {
             .onEnded { v in
                 let axis = dragAxis
                 dragAxis = nil
-                guard !zooming else {
+                let cancelled = dragCancelled
+                dragCancelled = false
+                guard !zooming, !cancelled else {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { dragX = 0; dragY = 0 }
                     return
                 }
@@ -130,8 +174,9 @@ struct AssetViewer: View {
                     let dx = v.translation.width
                     let predicted = v.predictedEndTranslation.width
                     var step = 0
-                    if (dx < -width * 0.22 || predicted < -width * 0.5), index < assets.count - 1 { step = 1 }
-                    if (dx > width * 0.22 || predicted > width * 0.5), index > 0 { step = -1 }
+                    // Yeterince çekildi ve geri savrulmadı, ya da hızlı savruldu. (İkisi birbirini dışlar.)
+                    if (dx < -width * 0.22 && predicted < 0) || predicted < -width * 0.5, index < assets.count - 1 { step = 1 }
+                    if (dx > width * 0.22 && predicted > 0) || predicted > width * 0.5, index > 0 { step = -1 }
                     withAnimation(.spring(response: 0.34, dampingFraction: 0.9)) {
                         index += step
                         dragX = 0
@@ -196,13 +241,30 @@ private struct AssetPageView: View {
     @Binding var zooming: Bool
     @EnvironmentObject private var session: Session
     @State private var player: AVPlayer?
-    @State private var scale: CGFloat = 1
+    /// Sıkıştırma değeri; hareket bitince ya da iptal edilince (onEnded gelmese de) kendiliğinden 1'e döner.
+    @GestureState(resetTransaction: Transaction(animation: .spring(response: 0.3, dampingFraction: 0.85)))
+    private var pinch: CGFloat = 1
+    @State private var reportedZoom = false
 
     var body: some View {
         Group {
             if asset.isVideo {
                 if let player {
                     VideoPlayer(player: player)
+                        .overlay {
+                            // Oynatıcı (UIKit) dokunuşları kendine alır, üstteki sayfa sürüklemesi ona ulaşmaz.
+                            // Üst kısım saydam bir yakalama alanıyla örtülür: sürükleme sayfayı değiştirir/kapatır,
+                            // dokunma oynat/duraklat yapar. Alttaki denetim şeridi (ilerleme çubuğu) dokunulabilir kalır.
+                            VStack(spacing: 0) {
+                                Color.clear
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { togglePlayback(player) }
+                                    .accessibilityHidden(true)
+                                Color.clear
+                                    .frame(height: 150)
+                                    .allowsHitTesting(false)
+                            }
+                        }
                 } else {
                     ProgressView().tint(.white)
                 }
@@ -211,15 +273,15 @@ private struct AssetPageView: View {
                     RemoteImage(assetId: asset.id, variant: "thumb", contentMode: .fit)
                     RemoteImage(assetId: asset.id, variant: "preview", contentMode: .fit, showsPlaceholder: false)
                 }
-                .scaleEffect(scale)
+                .scaleEffect(max(1, pinch))
                 .gesture(
                     MagnificationGesture()
-                        .onChanged { scale = max(1, $0); zooming = true }
-                        .onEnded { _ in
-                            withAnimation { scale = 1 }
-                            zooming = false
-                        }
+                        .updating($pinch) { value, state, _ in state = value }
                 )
+                .onChange(of: pinch != 1) { _, now in
+                    reportedZoom = now
+                    zooming = now
+                }
             }
         }
         .onAppear { if isCurrent { preparePlayer() } }
@@ -235,6 +297,21 @@ private struct AssetPageView: View {
             // Çizimden çıkan sayfanın oynatıcısı bırakılır (bellek); sayfaya dönülünce yeniden oluşturulur.
             player?.pause()
             player = nil
+            if reportedZoom {
+                reportedZoom = false
+                zooming = false
+            }
+        }
+    }
+
+    private func togglePlayback(_ player: AVPlayer) {
+        if player.timeControlStatus == .paused {
+            if let item = player.currentItem, item.duration.isNumeric, CMTimeCompare(player.currentTime(), item.duration) >= 0 {
+                player.seek(to: .zero)
+            }
+            player.play()
+        } else {
+            player.pause()
         }
     }
 
