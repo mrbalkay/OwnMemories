@@ -93,8 +93,8 @@ svg.fill { fill: currentColor; stroke: none; }
 .upload-btn { cursor: pointer; }
 
 /* ------------------------------------------------------------ sayfa başlıkları */
-.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px 0 8px; }
-.page-head h1 { font-family: var(--serif); font-weight: 500; font-size: 34px; line-height: 1.1; margin: 0; letter-spacing: -.015em; color: var(--ink); }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px 0 8px; min-width: 0; }
+.page-head h1 { font-family: var(--serif); font-weight: 500; font-size: 34px; line-height: 1.1; margin: 0; letter-spacing: -.015em; color: var(--ink); overflow-wrap: anywhere; }
 .page-head p { margin: 6px 0 0; }
 .page-tools { display: flex; gap: 6px; flex-wrap: wrap; }
 .members { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; margin-top: 8px; }

@@ -6,6 +6,13 @@ import { store } from './store.js';
 
 const PAGE = 240;
 
+/** Ortam rengini temanın varsayılanına döndürür (zaman çizelgesi olmayan ya da boş görünümler için). */
+export function clearAmbient() {
+  const s = document.documentElement.style;
+  s.removeProperty('--ambient');
+  s.removeProperty('--ambient-rgb');
+}
+
 export class Timeline {
   /**
    * @param {HTMLElement} root
@@ -90,6 +97,7 @@ export class Timeline {
   }
 
   destroy() {
+    this.destroyed = true;
     document.removeEventListener('om:theme', this.onTheme);
     window.removeEventListener('resize', this.onResize);
     this.ro?.disconnect();
@@ -114,6 +122,8 @@ export class Timeline {
     this.jumpBack.hidden = !extra.before;
     this.root.scrollTop = 0;
     document.getElementById('view').scrollTop = 0;
+    // Tam yenileme (ör. yükleme sonrası): ay sayılarını, toplamı ve yıl rayını da tazele.
+    if (!extra.before) this.buildScrubber();
     this.load();
   }
 
@@ -136,6 +146,7 @@ export class Timeline {
         if (img) { setAmbientFrom(img); this.ambientSet = true; }
       }
       if (this.done && store.list.length === 0) {
+        if (!document.querySelector('.mem-hero img')) clearAmbient();
         this.status.append(h('div', { class: 'empty' }, h('p', {}, this.opts.empty || t('empty_photos'))));
       }
     } catch (e) {
@@ -182,6 +193,8 @@ export class Timeline {
       touched.add(g);
     }
     for (const g of touched) this.layout(g);
+    // Seçim sürerken yeni sayfa bir günün devamını getirdiyse o günün .all-selected durumu değişir.
+    if (store.selection.size) this.syncSelection();
   }
 
   /** Ay başlığı: h2.month > .month-name + .month-year + .month-count (sayı özet gelince dolar). */
@@ -270,6 +283,7 @@ export class Timeline {
       const g = sec ? this.groups.get(sec.dataset.day) : null;
       if (g) {
         g.assets = g.assets.filter((x) => x.id !== id);
+        this.countRemoved(sec.dataset.day.slice(0, 7));
         if (!grid.children.length) {
           this.groups.delete(sec.dataset.day);
           const monthSec = sec.parentElement;
@@ -283,7 +297,26 @@ export class Timeline {
         }
       }
     }
-    if (store.list.length === 0 && this.done) this.status.replaceChildren(h('div', { class: 'empty' }, h('p', {}, this.opts.empty || t('empty_photos'))));
+    if (store.list.length === 0 && this.done) {
+      if (!document.querySelector('.mem-hero img')) clearAmbient();
+      this.status.replaceChildren(h('div', { class: 'empty' }, h('p', {}, this.opts.empty || t('empty_photos'))));
+    }
+  }
+
+  /** Kaldırılan bir öğeyi ay sayısından ve toplamdan düşer (.month-count, #pageSub). */
+  countRemoved(month) {
+    const n = this.monthCounts.get(month);
+    if (!n) return;
+    this.monthCounts.set(month, n - 1);
+    this.total = Math.max(0, (this.total || 0) - 1);
+    const el = this.wrap.querySelector(`.month-group[data-month="${month}"] .month-count`);
+    if (el) el.textContent = n - 1 ? t('items', { n: n - 1 }) : '';
+    this.renderTotal();
+  }
+
+  renderTotal() {
+    const sub = document.getElementById('pageSub');
+    if (sub) sub.textContent = this.total ? t('items', { n: this.total }) : '';
   }
 
   refreshTile(a) {
@@ -300,17 +333,21 @@ export class Timeline {
   /** assets/summary: ay sayıları (.month-count), toplam (#pageSub) ve yıl rayı (.scrubber). */
   async buildScrubber() {
     try {
-      const r = await api('GET', 'assets/summary' + qs(this.query));
-      if (!this.wrap.isConnected) return;
+      const r = await api('GET', 'assets/summary' + qs(this.opts.query || {}));
+      if (this.destroyed || !this.wrap.isConnected) return;
       let total = 0;
+      this.monthCounts.clear();
       for (const m of r.months) { this.monthCounts.set(m.month, m.count); total += m.count; }
       for (const sec of this.wrap.querySelectorAll('.month-group')) {
         const n = this.monthCounts.get(sec.dataset.month);
         const el = sec.querySelector('.month-count');
-        if (el && n) el.textContent = t('items', { n });
+        if (el) el.textContent = n ? t('items', { n }) : '';
       }
-      const sub = document.getElementById('pageSub');
-      if (sub) sub.textContent = total ? t('items', { n: total }) : '';
+      this.total = total;
+      this.renderTotal();
+      // Yeniden çağrılabilir (reset sonrası): eski rayı kaldır.
+      this.scrub?.remove();
+      this.scrub = null;
       if (this.opts.scrubber === false || r.months.length < 3) return;
       const years = new Map();
       for (const m of r.months) {

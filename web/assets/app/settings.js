@@ -37,7 +37,13 @@ export function renderSettings(view) {
   const saveName = h('button', { class: 'btn btn-soft', onclick: async () => {
     try {
       OM.user = (await api('PATCH', 'me', { name: nameInput.value })).user;
-      document.querySelector('.me-name').textContent = OM.user.name;
+      // Yalnızca ad metnini ve baş harf avatarlarını güncelle (.me-name içindeki .me-avatar korunur).
+      const name = OM.user.name || '';
+      const initial = (Array.from(name)[0] || '').toUpperCase(); // index.php'deki mb_strtoupper ile aynı
+      const nameEl = document.querySelector('.me-name-text');
+      if (nameEl) nameEl.textContent = name;
+      for (const el of document.querySelectorAll('.me-avatar, .top-avatar')) el.textContent = initial;
+      document.querySelector('.top-avatar')?.setAttribute('title', name);
       toast(t('saved'));
     } catch (e) { toast(e.message); }
   } }, t('save'));

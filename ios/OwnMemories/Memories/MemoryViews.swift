@@ -257,7 +257,9 @@ struct MemoryStoryView: View {
             }
         }
         .statusBarHidden()
-        .preferredColorScheme(.dark)
+        // Yalnız bu ağaç koyu: preferredColorScheme sunum üstünden pencereye sızıp kapanınca
+        // Yerel'in sistem görünümüne dönmesini engelleyebiliyor.
+        .environment(\.colorScheme, .dark)
         .animation(.easeInOut(duration: theme.name == .galeri ? 1.2 : 0.6), value: index)
         .task(id: index) {
             progress = 0
@@ -326,6 +328,7 @@ struct MemoryStoryView: View {
                 .frame(height: theme.name == .galeri ? 2 : 2.5)
             }
         }
+        .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -337,17 +340,19 @@ struct MemoryStoryView: View {
                     .overlay(Image(systemName: "sparkles").font(.system(size: 13, weight: .medium)))
                     .overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 1.5))
                     .frame(width: 32, height: 32)
+                    .allowsHitTesting(false)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(memory.title).font(.system(size: 14, weight: .semibold))
                     Text(memory.dateLine).font(.system(size: 12)).foregroundStyle(Color(hex: 0xE2E4E8))
                 }
+                .allowsHitTesting(false)
                 Spacer()
                 plainButton("xmark", label: "Kapat") { dismiss() }
             }
             .foregroundStyle(.white)
         case .galeri:
             HStack {
-                Text("Anılar").font(.system(size: 13))
+                Text("Anılar").font(.system(size: 13)).allowsHitTesting(false)
                 Spacer()
                 plainButton("xmark", label: "Kapat") { dismiss() }
             }
@@ -364,6 +369,7 @@ struct MemoryStoryView: View {
                         .font(.system(size: 14, weight: .medium))
                         .opacity(0.9)
                 }
+                .allowsHitTesting(false)
                 Spacer(minLength: 8)
                 glassButton("xmark", label: "Kapat") { dismiss() }
             }
@@ -378,12 +384,15 @@ struct MemoryStoryView: View {
         case .sinema:
             VStack(alignment: .leading, spacing: 0) {
                 Text(StoryText.date(asset)).font(.system(size: 14)).foregroundStyle(Color(hex: 0xDADCE1))
+                    .allowsHitTesting(false)
                 Text(memory.title)
                     .font(.system(size: 38, weight: .regular, design: .serif))
                     .tracking(-0.7)
                     .lineLimit(3)
                     .padding(.top, 8).padding(.bottom, 10)
+                    .allowsHitTesting(false)
                 Text(memory.countLine).font(.system(size: 14)).foregroundStyle(Color(hex: 0xC9CCD3))
+                    .allowsHitTesting(false)
                 HStack(spacing: 10) {
                     Spacer()
                     glassButton("photo", label: "Fotoğrafı aç") { openViewer() }
@@ -397,12 +406,15 @@ struct MemoryStoryView: View {
                 Text(StoryText.date(asset))
                     .font(.system(size: 17, design: .serif).italic())
                     .opacity(0.85)
+                    .allowsHitTesting(false)
                 Text(memory.title)
                     .font(.system(size: 40, weight: .regular, design: .serif))
                     .tracking(-0.6)
                     .lineLimit(3)
                     .padding(.top, 6)
+                    .allowsHitTesting(false)
                 Text(memory.countLine).font(.system(size: 14)).opacity(0.85).padding(.top, 10)
+                    .allowsHitTesting(false)
                 HStack {
                     Button { openViewer() } label: {
                         Label("Fotoğrafı aç", systemImage: "photo").font(.system(size: 13))
@@ -411,6 +423,7 @@ struct MemoryStoryView: View {
                     Text(verbatim: "\(index + 1) / \(memory.assets.count)")
                         .font(.system(size: 13, design: .serif))
                         .opacity(0.85)
+                        .allowsHitTesting(false)
                 }
                 .padding(.top, 40)
             }
@@ -422,6 +435,7 @@ struct MemoryStoryView: View {
                     Text(StoryText.date(asset)).font(.system(size: 15, weight: .semibold))
                     Text(memory.countLine).font(.system(size: 13)).opacity(0.85)
                 }
+                .allowsHitTesting(false)
                 Spacer(minLength: 8)
                 glassButton("photo", label: "Fotoğrafı aç") { openViewer() }
             }

@@ -58,6 +58,7 @@ struct SettingsView: View {
                 .listRowBackground(theme.groupSurface)
                 Section {
                     Toggle("Anı bildirimleri", isOn: $notifier.enabled)
+                        .tint(theme.toggleTint)   // Sinema'nın Gümüş vurgusu beyaz düğmeyle ayırt edilmez
                     if notifier.enabled {
                         Picker("Sıklık", selection: $notifier.frequency) {
                             ForEach(MemoryNotifier.Frequency.allCases) { Text($0.title).tag($0) }

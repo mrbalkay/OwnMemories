@@ -2,7 +2,7 @@
 import { api, qs } from './api.js';
 import { h, t, icon, toast, confirmDialog, formatBytes, OM } from './util.js';
 import { store } from './store.js';
-import { Timeline } from './timeline.js';
+import { Timeline, clearAmbient } from './timeline.js';
 import { openViewer, closeViewer } from './viewer.js';
 import { enqueue, setUploadHandler } from './upload.js';
 
@@ -11,6 +11,7 @@ const nav = document.getElementById('nav');
 const selbar = document.getElementById('selbar');
 let timeline = null;
 let route = { name: 'photos' };
+let renderSeq = 0; // her render() için artar; geç biten eşzamansız işler eski rotaya yazmasın
 
 const NAV = [
   ['photos', 'photos', '#/photos'],
@@ -144,6 +145,8 @@ function showTimeline(query, empty, header) {
 }
 
 async function render() {
+  const seq = ++renderSeq;
+  const current = () => seq === renderSeq;
   closeViewer();
   timeline?.destroy();
   timeline = null;
@@ -156,6 +159,11 @@ async function render() {
   document.getElementById('app').classList.remove('nav-open');
   view.scrollTop = 0;
   const title = (s) => h('div', { class: 'page-head' }, h('h1', {}, s));
+  // Zaman çizelgesi olmayan görünümler: önceki rotadan kalan ortam rengini sıfırla.
+  if (['albums', 'shared', 'settings', 'map'].includes(route.name)) clearAmbient();
+  // Kendi içinde eşzamansız yazan görünümler (albüm listesi, harita) ayrı bir kutuya çizilir:
+  // daha yeni bir rota #view'i değiştirirse kutu DOM'dan kopar ve geç gelen yazımlar görünmez kalır.
+  const box = () => { const b = h('div', { class: 'view-box' }); view.replaceChildren(b); return b; };
   switch (route.name) {
     case 'favorites':
       showTimeline({ favorite: 1 }, t('empty_favorites'), title(t('favorites')));
@@ -178,30 +186,33 @@ async function render() {
       break;
     }
     case 'albums':
-      import('./albums.js').then((m) => m.renderAlbums(view));
+      import('./albums.js').then((m) => { if (current()) m.renderAlbums(box()); });
       break;
     case 'shared':
-      import('./albums.js').then((m) => m.renderAlbums(view, { sharedOnly: true }));
+      import('./albums.js').then((m) => { if (current()) m.renderAlbums(box(), { sharedOnly: true }); });
       break;
     case 'album': {
       const m = await import('./albums.js');
       try {
         const album = (await api('GET', `albums/${route.id}`)).album;
+        if (!current()) return; // bu arada başka bir rotaya geçildi
         route.album = album;
         setPageTitle(album.title || t('albums'));
         route.shared = album.role !== 'owner';
         renderNav();
         showTimeline({ album: album.id }, t('empty_album'), m.albumHeader(album, { onChanged: render }));
       } catch {
+        if (!current()) return;
+        clearAmbient();
         view.replaceChildren(h('div', { class: 'empty' }, h('p', {}, t('load_failed'))));
       }
       break;
     }
     case 'settings':
-      import('./settings.js').then((m) => m.renderSettings(view));
+      import('./settings.js').then((m) => { if (current()) m.renderSettings(view); });
       break;
     case 'map':
-      import('./map.js').then((m) => m.renderMap(view, (id, points) => {
+      import('./map.js').then((m) => current() && m.renderMap(box(), (id, points) => {
         store.list = points.map((p) => ({ id: p.id, type: 'photo' }));
         store.loadMore = null;
         openViewer(id, {});
@@ -259,7 +270,7 @@ document.addEventListener('keydown', (e) => {
     document.getElementById('searchInput').focus();
     return;
   }
-  if (e.key === 'Escape' && store.selection.size && !document.querySelector('.viewer, dialog[open]')) store.clear();
+  if (e.key === 'Escape' && store.selection.size && !document.querySelector('.viewer, .story, dialog[open]')) store.clear();
 });
 
 renderUsage();

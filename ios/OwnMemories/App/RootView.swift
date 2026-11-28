@@ -96,8 +96,18 @@ enum BarStyler {
         UINavigationBar.appearance().compactAppearance = nav
         for scene in UIApplication.shared.connectedScenes {
             guard let ws = scene as? UIWindowScene else { continue }
-            for window in ws.windows { update(window.rootViewController, tab: tab, nav: nav) }
+            for window in ws.windows {
+                // preferredColorScheme(nil) koyu temadan sonra her zaman sisteme dönmüyor (Sinema → Yerel);
+                // pencere düzeyinde açıkça ayarlamak sunulan tüm sayfalara da yayılır.
+                window.overrideUserInterfaceStyle = style(theme.colorScheme)
+                update(window.rootViewController, tab: tab, nav: nav)
+            }
         }
+    }
+
+    private static func style(_ scheme: ColorScheme?) -> UIUserInterfaceStyle {
+        guard let scheme else { return .unspecified }
+        return scheme == .dark ? .dark : .light
     }
 
     private static func update(_ vc: UIViewController?, tab: UITabBarAppearance, nav: UINavigationBarAppearance) {

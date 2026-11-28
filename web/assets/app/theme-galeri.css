@@ -72,6 +72,9 @@
 :root[data-skin="galeri"] .btn-ghost { border-color: transparent; }
 :root[data-skin="galeri"] .btn-ghost:hover { background: transparent; color: var(--g-muze); }
 :root[data-skin="galeri"] .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+/* app.css .danger (ör. "Albümü sil" btn-ghost danger) .btn rengine yenilmesin */
+:root[data-skin="galeri"] .btn.danger:not(.btn-danger) { color: var(--danger); }
+:root[data-skin="galeri"] .btn.danger:not(.btn-danger):hover { color: #7f2a2a; }
 :root[data-skin="galeri"] .icon-btn { transition: background .3s var(--g-ease), color .3s var(--g-ease); }
 :root[data-skin="galeri"] .icon-btn:hover { background: var(--g-tas); }
 :root[data-skin="galeri"] .linklike { color: var(--g-grafit); font-weight: 400; border-bottom: 1px solid var(--g-cizgi); }
@@ -120,7 +123,11 @@
 :root[data-skin="galeri"] .page-head h1 { font-family: var(--serif); font-weight: 400; font-size: 44px; line-height: 1.05; letter-spacing: -.015em; color: var(--g-murekkep); }
 :root[data-skin="galeri"] .page-head p { color: var(--g-grafit); font-size: 13px; margin-top: 8px; }
 :root[data-skin="galeri"] .page-tools { gap: 20px; align-items: center; }
+/* sayfa araçları metin bağlantısı gibi: yatay dolgu yok, sağ kenar çizgiyle hizalı */
+:root[data-skin="galeri"] .page-tools .btn-soft, :root[data-skin="galeri"] .page-tools .btn-ghost,
+:root[data-skin="galeri"] .page-head > .btn-soft, :root[data-skin="galeri"] .page-head > .btn-ghost { padding: 0; }
 :root[data-skin="galeri"] .members { color: var(--g-grafit); font-size: 13px; }
+:root[data-skin="galeri"] .album-head .muted { display: block; margin-top: 8px; font-size: 13px; color: var(--g-grafit); }
 :root[data-skin="galeri"] .filters label { color: var(--g-grafit); font-size: 12px; }
 :root[data-skin="galeri"] .filters input { border: 0; border-bottom: 1px solid var(--g-cizgi); border-radius: 0; padding: 6px 0; background: transparent; }
 :root[data-skin="galeri"] .filters input:focus { outline: none; border-bottom-color: var(--g-murekkep); }
@@ -156,7 +163,12 @@
 :root[data-skin="galeri"] .mem-text .mem-count { order: 3; margin-top: 3px; font-size: 13px; opacity: 1; color: var(--g-grafit); }
 
 /* ------------------------------------------------------------ zaman çizelgesi */
-:root[data-skin="galeri"] .timeline { padding-right: 40px; }
+:root[data-skin="galeri"] .timeline { padding-right: 0; }
+/* yıl rayı varsa (≥3 ay) anılar ve ızgara aynı sağ kenarda durur, raya değmez; yoksa sayfa çizgisine kadar uzanır */
+@media (min-width: 861px) {
+  :root[data-skin="galeri"] .view:has(> .scrubber) .timeline,
+  :root[data-skin="galeri"] .view:has(> .scrubber) .mem-strip { padding-right: 40px; }
+}
 :root[data-skin="galeri"] .month { display: flex; align-items: baseline; flex-wrap: wrap; font-family: var(--serif); font-weight: 400; font-size: 44px; line-height: 1; letter-spacing: -.015em; color: var(--g-murekkep); margin: 40px 0 6px; padding-top: 6px; }
 :root[data-skin="galeri"] .month-group:first-child .month { margin-top: 0; }
 :root[data-skin="galeri"] .month-year { margin-left: .26em; }
@@ -201,7 +213,7 @@
 /* ------------------------------------------------------------ seçim çubuğu (yüzen nesne) */
 :root[data-skin="galeri"] .selbar { top: 0; left: 0; right: 0; min-height: 76px; padding: 0 44px 0 48px; border-radius: 0; border: 0; border-bottom: 1px solid var(--g-cizgi); background: var(--g-duvar); box-shadow: 0 20px 40px -32px rgba(20, 24, 28, .35); animation: g-in .5s var(--g-ease); }
 @keyframes g-in { from { opacity: 0; } }
-:root[data-skin="galeri"] .sel-count { font-family: var(--serif); font-size: 19px; color: var(--g-murekkep); }
+:root[data-skin="galeri"] .sel-count { font-family: var(--serif); font-size: 19px; font-weight: 400; color: var(--g-murekkep); }
 :root[data-skin="galeri"] .sel-actions { gap: 4px; }
 :root[data-skin="galeri"] .sel-actions .btn { border-color: transparent; background: transparent; }
 :root[data-skin="galeri"] .sel-actions .btn:hover { color: var(--g-muze); border-color: transparent; }
@@ -222,6 +234,14 @@
 
 /* ------------------------------------------------------------ harita */
 :root[data-skin="galeri"] .map { border-radius: 0; box-shadow: none; border: 1px solid var(--g-cizgi); margin-top: 24px; height: calc(100dvh - 240px); filter: saturate(.75); }
+/* Leaflet varsayılanları (yuvarlak gölgeli düğmeler, renkli küme daireleri) yerine kılcal çizgi */
+:root[data-skin="galeri"] .map .leaflet-bar { border: 1px solid var(--g-cizgi); border-radius: 0; box-shadow: none; }
+:root[data-skin="galeri"] .map .leaflet-bar a { width: 32px; height: 32px; line-height: 31px; border-radius: 0 !important; border-bottom-color: var(--g-cizgi); color: var(--g-murekkep); font-family: var(--sans); font-weight: 300; }
+:root[data-skin="galeri"] .map .leaflet-bar a:hover { background: var(--g-tas); }
+:root[data-skin="galeri"] .map .leaflet-control-attribution { background: rgba(255, 255, 255, .86); color: var(--g-grafit); font-size: 11px; }
+:root[data-skin="galeri"] .map .leaflet-control-attribution a { color: var(--g-grafit); }
+:root[data-skin="galeri"] .map .marker-cluster { background: rgba(27, 28, 30, .18); }
+:root[data-skin="galeri"] .map .marker-cluster div { background: var(--g-murekkep); color: #fff; font-family: var(--serif); font-size: 13px; }
 :root[data-skin="galeri"] .map-thumb img { border-radius: var(--g-r1); border: 2px solid #fff; box-shadow: 0 6px 18px rgba(20, 24, 28, .28); }
 
 /* ------------------------------------------------------------ görüntüleyici */
@@ -230,6 +250,7 @@
 /* .v-bar is grid-column 1 already; app.css right:380px shortens it twice */
 :root[data-skin="galeri"] .viewer.with-info .v-bar { right: 0; }
 :root[data-skin="galeri"] .v-title { font-size: 13px; color: var(--g-salon-murekkep); opacity: .85; }
+:root[data-skin="galeri"] .viewer a.icon-btn { color: var(--g-salon-murekkep); } /* İndir bağlantısı müze mavisi olmasın */
 :root[data-skin="galeri"] .viewer .icon-btn.on { color: var(--g-salon-murekkep); background: rgba(255, 255, 255, .1); }
 :root[data-skin="galeri"] .viewer .icon-btn.on[aria-label*="avori"] { color: #e7a9b6; background: transparent; }
 :root[data-skin="galeri"] .v-nav { width: 40px; height: 40px; background: transparent; border: 1px solid rgba(236, 235, 231, .28); backdrop-filter: none; }
@@ -244,6 +265,7 @@
 :root[data-skin="galeri"] .i-val { color: var(--g-murekkep); }
 :root[data-skin="galeri"] .i-val .muted { color: var(--g-grafit); }
 :root[data-skin="galeri"] .i-desc { border: 0; border-bottom: 1px solid var(--g-cizgi); border-radius: 0; background: transparent; padding: 8px 0 10px; margin-bottom: 16px; font-family: var(--serif); font-size: 17px; }
+:root[data-skin="galeri"] .i-desc + .i-row { border-top: 0; } /* açıklama çizgisi + satır çizgisi çift görünmesin */
 :root[data-skin="galeri"] .i-desc::placeholder { color: var(--g-grafit); font-style: italic; }
 :root[data-skin="galeri"] .i-desc:focus { background: transparent; border-bottom-color: var(--g-murekkep); }
 
@@ -292,6 +314,15 @@
 :root[data-skin="galeri"] .story-pause svg { width: 18px; height: 18px; }
 :root[data-skin="galeri"] .story-actions { grid-column: 2; grid-row: 3; justify-self: end; align-self: center; gap: 8px; margin-right: 48px; position: relative; z-index: 4; }
 :root[data-skin="galeri"] .story-actions .icon-btn { color: var(--g-salon-murekkep); }
+/* masaüstü: "Fotoğrafı aç" / "Kapat" yazılı (mockup'taki Paylaş / Kapat gibi) */
+@media (min-width: 861px) {
+  :root[data-skin="galeri"] .story-actions { gap: 24px; margin-right: 56px; }
+  :root[data-skin="galeri"] .story-ctl { padding-right: 290px; } /* yazılı eylemlere yer */
+  :root[data-skin="galeri"] .story-actions .icon-btn { width: auto; height: 36px; padding: 0 2px; gap: 8px; border-radius: 0; display: inline-flex; align-items: center; font-size: 13px; transition: color .3s var(--g-ease); }
+  :root[data-skin="galeri"] .story-actions .icon-btn::after { content: attr(title); white-space: nowrap; }
+  :root[data-skin="galeri"] .story-actions .icon-btn svg { width: 18px; height: 18px; }
+  :root[data-skin="galeri"] .story .story-actions .icon-btn:hover { background: none; color: #b9cfda; } /* .story .icon-btn:hover zeminini yensin */
+}
 :root[data-skin="galeri"] .story .icon-btn:hover { background: rgba(255, 255, 255, .06); }
 :root[data-skin="galeri"] .story :focus-visible { outline-color: #9db8c6; }
 :root[data-skin="galeri"] .story.is-video .story-media { background: #000; }
@@ -353,6 +384,7 @@
 @media (max-width: 860px) {
   :root[data-skin="galeri"] .sidebar { width: 280px; padding-top: calc(28px + env(safe-area-inset-top)); background: var(--g-duvar); border-right: 1px solid var(--g-cizgi); }
   :root[data-skin="galeri"] .app.nav-open .sidebar { box-shadow: 0 0 80px rgba(20, 24, 28, .22); }
+  :root[data-skin="galeri"] .app.nav-open::after { content: ""; position: fixed; inset: 0; z-index: 29; pointer-events: none; background: rgba(243, 243, 240, .7); animation: g-in .4s var(--g-ease); }
 
   /* üst bölüm: büyük serif başlık + alt satırda arama çizgisi */
   :root[data-skin="galeri"] .topbar { height: auto; flex-wrap: wrap; row-gap: 4px; column-gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; }
@@ -371,6 +403,14 @@
   :root[data-skin="galeri"] .page-head:has(.page-tools), :root[data-skin="galeri"] .page-head:has(> .btn), :root[data-skin="galeri"] .page-head:has(p) { display: flex; border-bottom: 0; padding-bottom: 4px; }
   :root[data-skin="galeri"] .page-head:has(.page-tools) h1, :root[data-skin="galeri"] .page-head:has(> .btn) h1, :root[data-skin="galeri"] .page-head:has(p) h1 { display: none; }
   :root[data-skin="galeri"] .settings .page-head { display: none; }
+  /* albüm başlığı: sayı satırı + araçlar tek sırada, sarmadan */
+  :root[data-skin="galeri"] .album-head { flex-direction: column; align-items: flex-start; gap: 10px; padding-bottom: 14px; margin-bottom: 8px; }
+  :root[data-skin="galeri"] .album-head .muted { font-size: 12px; color: var(--g-grafit); }
+  /* sahip: "N öğe" zaten üst çubuktaki #pageSub'da; tekrarlamasın (Paylaş yalnızca sahipte var). Paylaşılan albümde "X tarafından paylaşıldı" kalır */
+  :root[data-skin="galeri"] .album-head:has(.page-tools .btn-soft) > div > .muted { display: none; }
+  :root[data-skin="galeri"] .album-head:has(.page-tools .btn-soft) > div:first-child:not(:has(.members)) { display: none; }
+  :root[data-skin="galeri"] .album-head .page-tools { flex-wrap: nowrap; gap: 18px; max-width: 100%; }
+  :root[data-skin="galeri"] .album-head .page-tools .btn { height: 32px; font-size: 13px; white-space: nowrap; }
 
   /* anılar: dar karusel */
   :root[data-skin="galeri"] .mem-strip { padding-bottom: 22px; }
