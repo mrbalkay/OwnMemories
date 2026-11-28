@@ -8,6 +8,8 @@ final class MemoryService: ObservableObject {
     static let shared = MemoryService()
 
     @Published private(set) var memories: [Memory] = []
+    @Published private(set) var lastError: String?
+    @Published private(set) var lastRefreshAt: Date?
     private var lastRefresh: Date?
     private var inFlight: Task<Void, Never>?
 
@@ -22,11 +24,23 @@ final class MemoryService: ObservableObject {
     }
 
     private func performRefresh() async {
-        guard let client = Session.storedClient() else { return }
-        guard let r: MemoriesResponse = try? await client.send("GET", "memories") else { return }
+        guard let client = Session.storedClient() else { lastError = "Giriş yapılmadı"; return }
+        let r: MemoriesResponse
+        do {
+            r = try await client.send("GET", "memories")
+        } catch {
+            lastError = "Anılar alınamadı: \(error.localizedDescription)"
+            DiagLog.add(lastError ?? "")
+            return
+        }
         memories = r.memories
         lastRefresh = Date()
-        let randoms: AssetList? = try? await client.send("GET", "assets/random", query: ["count": "12"])
+        var randoms: AssetList?
+        do {
+            randoms = try await client.send("GET", "assets/random", query: ["count": "12"])
+        } catch {
+            DiagLog.add("Rastgele fotoğraflar alınamadı: \(error.localizedDescription)")
+        }
         await updateWidgets(memories: r.memories, requestDate: r.date, randoms: randoms?.assets ?? [], client: client)
     }
 
@@ -41,7 +55,11 @@ final class MemoryService: ObservableObject {
     }
 
     private func updateWidgets(memories: [Memory], requestDate: String, randoms: [Asset], client: APIClient) async {
-        guard WidgetStore.directory != nil else { return }
+        guard WidgetStore.directory != nil else {
+            lastError = "Widget klasörüne (App Group) erişilemiyor"
+            DiagLog.add(lastError ?? "")
+            return
+        }
         let previous = WidgetStore.load()
         var snapshot = WidgetSnapshot(updatedAt: Date(), memories: [], randoms: [])
         for m in memories.prefix(3) {
@@ -60,6 +78,9 @@ final class MemoryService: ObservableObject {
         if Task.isCancelled { return }
         if snapshot.randoms.isEmpty { snapshot.randoms = previous.randoms }
         WidgetStore.save(snapshot)
+        lastRefreshAt = Date()
+        lastError = nil
+        DiagLog.add("Anılar yenilendi: \(memories.count) anı, widget'ta \(snapshot.memories.count) anı ve \(snapshot.randoms.count) rastgele fotoğraf")
         WidgetCenter.shared.reloadAllTimelines()
     }
 

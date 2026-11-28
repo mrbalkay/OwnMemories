@@ -8,6 +8,10 @@ final class BackgroundUploader: NSObject, URLSessionDataDelegate {
     static let identifier = "net.balkay.ownmemories.upload"
 
     var backgroundCompletion: (() -> Void)?
+    /// Uygulama beklemeden teslim edilen (taskDescription = sourceRef) görevler bitince çağrılır.
+    var onDetachedComplete: ((_ sourceRef: String, _ data: Data, _ response: URLResponse?, _ error: Error?) -> Void)?
+    /// Arka plan olayları bitince (uygulama uyandırıldığında) çağrılır; işi bitince verilen kapanışı çağırmalı.
+    var onEventsFinished: ((_ done: @escaping () -> Void) -> Void)?
     private var continuations: [Int: CheckedContinuation<(Data, URLResponse), Error>] = [:]
     private var buffers: [Int: Data] = [:]
     private let lock = NSLock()
@@ -33,6 +37,19 @@ final class BackgroundUploader: NSObject, URLSessionDataDelegate {
         }
     }
 
+    /// Görevi teslim eder ve beklemez; sonuç `onDetachedComplete` ile gelir (uygulama kapalıyken bile, sonraki uyanışta).
+    func enqueue(_ request: URLRequest, fromFile file: URL, sourceRef: String) {
+        let task = session.uploadTask(with: request, fromFile: file)
+        task.taskDescription = sourceRef
+        task.resume()
+    }
+
+    /// Hâlâ sürmekte olan teslim edilmiş görevlerin sourceRef'leri.
+    func inFlightRefs() async -> Set<String> {
+        let tasks = await session.allTasks
+        return Set(tasks.filter { $0.state == .running || $0.state == .suspended }.compactMap(\.taskDescription))
+    }
+
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         lock.lock()
         buffers[dataTask.taskIdentifier, default: Data()].append(data)
@@ -44,7 +61,10 @@ final class BackgroundUploader: NSObject, URLSessionDataDelegate {
         let cont = continuations.removeValue(forKey: task.taskIdentifier)
         let data = buffers.removeValue(forKey: task.taskIdentifier) ?? Data()
         lock.unlock()
-        guard let cont else { return }
+        guard let cont else {
+            if let ref = task.taskDescription { onDetachedComplete?(ref, data, task.response, error) }
+            return
+        }
         if let error {
             cont.resume(throwing: error)
         } else if let resp = task.response {
@@ -56,8 +76,11 @@ final class BackgroundUploader: NSObject, URLSessionDataDelegate {
 
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
         DispatchQueue.main.async {
-            self.backgroundCompletion?()
-            self.backgroundCompletion = nil
+            let finish = {
+                self.backgroundCompletion?()
+                self.backgroundCompletion = nil
+            }
+            if let hook = self.onEventsFinished { hook(finish) } else { finish() }
         }
     }
 }

@@ -454,7 +454,14 @@ function api_upload_chunk(array $user, string $id, array $q, $stream): array
     if (!is_resource($stream)) {
         throw new ValidationError('Gövde yok.', 'body');
     }
-    return api_ok(['received' => upload_chunk($id, (int) $user['id'], $offset, $stream)]);
+    $uid = (int) $user['id'];
+    $received = upload_chunk($id, $uid, $offset, $stream);
+    $out = ['received' => $received];
+    // complete=1: son parça geldiyse yüklemeyi hemen tamamla (iOS arka plan yüklemesinde uygulama uyanmadan biter).
+    if (api_bool($q['complete'] ?? null) && $received === (int) db_val('SELECT size FROM uploads WHERE id = ?', [$id])) {
+        $out['complete'] = upload_complete($id, $uid);
+    }
+    return api_ok($out);
 }
 
 /* -------------------------------------------------------------- memories */

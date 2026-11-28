@@ -44,6 +44,7 @@ struct SettingsView: View {
                     Text("Çıkış yapınca bu cihazdaki yedekleme durumu sıfırlanır; tekrar giriş yapınca sunucuda olanlar yeniden yüklenmez.")
                 }
                 Section {
+                    NavigationLink("Tanılama") { DiagnosticsView() }
                     LabeledContent("Sürüm", value: DeviceInfo.appVersion)
                 }
             }

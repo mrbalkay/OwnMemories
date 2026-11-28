@@ -124,7 +124,7 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | GET | `assets/{id}/original` | – | orijinal (indirme), Range |
 | GET | `assets/{id}/video` | – | orijinal (satır içi), Range |
 | POST | `uploads` | `{filename,size,sha1?,meta?:{taken_at,tz_offset,latitude,longitude,is_favorite,description,source_ref,live_pair_source_ref,edited_of_source_ref}}` | 201 `{id,chunk_size:52428800,received:0}` |
-| PUT | `uploads/{id}?offset=N` | ham bayt (≤ 50 MB) veya `Content-Range: bytes a-b/total` | `{received}`; konum farklıysa 409 `offset_mismatch` + `received` |
+| PUT | `uploads/{id}?offset=N[&complete=1]` | ham bayt (≤ 50 MB) veya `Content-Range: bytes a-b/total` | `{received}`; `complete=1` ve son parçaysa yükleme hemen tamamlanır: `{received, complete:{status,asset}}`; konum farklıysa 409 `offset_mismatch` + `received` |
 | GET | `uploads/{id}` | – | `{received}` (devam için) |
 | POST | `uploads/{id}/complete` | – | `{status:"created"\|"duplicate"\|"deleted_before", asset}`; özet tutmazsa 422 `checksum_mismatch`, eksikse 409 `incomplete` |
 | GET | `albums` | – | `{albums:[…]}` (sahip olunan + paylaşılan) |
