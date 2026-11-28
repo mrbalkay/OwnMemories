@@ -663,3 +663,48 @@ a.person-card:hover .p-ava, .person-card a.person-face:hover .p-ava { transform:
 }
 /* Seçici açılır listesi pencere kenarında kırpılmasın */
 dialog.modal:has(.pp-dialog) { overflow: visible; }
+
+/* ------------------------------------------------ Sunucu yedeği (yalnızca yönetici)
+   .backup-alert[data-level="unconfigured|warn|error"]  kenar çubuğunda .me'nin üstünde uyarı kartı
+   .nav-settings[data-alert]                            Ayarlar bağlantısında küçük uyarı noktası
+   .settings-backup > .backup-card[data-level]          Ayarlar'da özet kartı */
+:root { --warn: #9a6510; }
+:root[data-skin="sinema"] { --warn: #f0c46b; }
+@media (prefers-color-scheme: dark) { :root[data-skin="yerel"], :root:not([data-skin]) { --warn: #f0c46b; } }
+.backup-alert, .backup-card { --lv: var(--warn); }
+.backup-alert[data-level="error"], .backup-card[data-level="error"] { --lv: var(--danger); }
+.backup-card[data-level="ok"] { --lv: var(--ok); }
+.backup-alert { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 14px 0 10px; padding: 12px 13px; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--lv) 11%, var(--surface)); border: 1px solid color-mix(in srgb, var(--lv) 32%, transparent);
+  color: var(--text); text-decoration: none; font-size: 12.5px; line-height: 1.4; transition: border-color .15s, background .15s; }
+.backup-alert:hover { border-color: var(--lv); background: color-mix(in srgb, var(--lv) 16%, var(--surface)); }
+.backup-alert:focus-visible { outline: 2px solid var(--lv); outline-offset: 2px; }
+.backup-alert-ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--lv) 18%, transparent); grid-row: span 2; align-self: start; }
+.backup-alert-ic svg, .backup-card-ic svg { width: 17px; height: 17px; fill: none; stroke: var(--lv); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.backup-alert-text { display: grid; gap: 2px; min-width: 0; }
+.backup-alert-text strong { color: var(--ink); font-size: 13px; font-weight: 650; }
+.backup-alert-text span { color: var(--muted); }
+.backup-alert-cta { grid-column: 2; color: var(--lv); font-weight: 650; font-size: 12.5px; }
+.backup-alert-cta::after { content: " →"; }
+.nav-settings, .menu-btn { position: relative; }
+.menu-btn[data-alert]::after { content: ""; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px var(--bg); }
+.nav-settings[data-alert="error"]::after, .menu-btn[data-alert="error"]::after { background: var(--danger); }
+.nav-settings[data-alert]::after { content: ""; position: absolute; top: 50%; right: 12px; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
+.backup-card { margin-top: 14px; padding: 16px 18px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--lv); max-width: 640px; }
+.backup-card[data-level="loading"] { --lv: var(--line); }
+.backup-card p { margin: 0; }
+.backup-card-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.backup-card-ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, var(--lv) 14%, transparent); flex: none; }
+.backup-card-ic svg { width: 21px; height: 21px; }
+.backup-card-title { display: grid; flex: 1; min-width: 160px; }
+.backup-card-title strong { color: var(--ink); font-size: 15px; }
+.backup-card-title span { font-size: 13px; }
+.backup-targets { list-style: none; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.backup-target { display: flex; align-items: center; gap: 10px; font-size: 14px; flex-wrap: wrap; }
+.backup-target { --lv: var(--ok); } .backup-target[data-level="warn"] { --lv: var(--warn); } .backup-target[data-level="error"] { --lv: var(--danger); }
+.backup-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--lv); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lv) 20%, transparent); flex: none; }
+.backup-target-name { font-weight: 550; color: var(--ink); }
+.backup-target-when { margin-left: auto; font-size: 13px; }
+.backup-setup { margin-top: 12px; display: grid; gap: 6px; font-size: 13px; }
+.backup-setup code { display: block; padding: 9px 11px; border-radius: 9px; background: var(--sunken); color: var(--ink); font: 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; white-space: nowrap; }
+@media (max-width: 600px) { .backup-target-when { margin-left: 19px; width: 100%; } .backup-card { padding: 14px; } }

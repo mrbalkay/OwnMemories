@@ -13,6 +13,7 @@ $boot = [
     'locale' => locale(),
     't' => t_group('app'),
     'version' => OM_VERSION,
+    'backup_alert' => backup_alert($user),
 ];
 $nonce = csp_nonce();
 $skin = $boot['user']['theme'];

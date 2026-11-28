@@ -1,9 +1,22 @@
-# OwnMemories gece yedeği: veritabanı dökümü + depo klasörünün ikinci diske eşlenmesi.
-# Yedek hedefini /etc/ownmemories-backup.env içinde BACKUP_DIR=/mnt/yedek/ownmemories olarak ayarlayın.
+# OwnMemories sunucu yedeği (restic): veritabanı dökümü + orijinaller → her hedefe şifreli, sürümlü yedek.
+# Kurulum ve ayarlar: sudo bash ~/OwnMemories/server/setup-backup.sh  (ayarlar /etc/ownmemories/backup.env)
+# Elle: sudo systemctl start ownmemories-backup   ·   Günlük: journalctl -u ownmemories-backup
 [Unit]
-Description=OwnMemories nightly backup
+Description=OwnMemories sunucu yedeği (restic)
+Documentation=file:///var/www/ownmemories/docs/INSTALL.md
+# Yeni yedek kuruluysa ya da (geçiş dönemi) eski rsync yedeği ayarlıysa çalışır.
+ConditionPathExists=|/etc/ownmemories/backup.env
+ConditionPathExists=|/etc/ownmemories-backup.env
+Wants=network-online.target
+After=network-online.target mysql.service mariadb.service
 
 [Service]
 Type=oneshot
-EnvironmentFile=/etc/ownmemories-backup.env
-ExecStart=/var/www/ownmemories/server/backup.sh
+ExecStart=/bin/bash /var/www/ownmemories/server/backup.sh
+# İlk uzak yükleme günler sürebilir; zaman aşımı yok.
+TimeoutStartSec=infinity
+Nice=10
+CPUSchedulingPolicy=batch
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=yes

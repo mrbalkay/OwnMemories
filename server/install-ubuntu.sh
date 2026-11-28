@@ -27,7 +27,7 @@ has_pkg libheif-examples && HEIF_PKG=libheif-examples
 has_pkg libheif-plugin-libde265 && HEIF_PKG="$HEIF_PKG libheif-plugin-libde265"
 apt-get install -y -qq apache2 "$DB_PKG" \
   php libapache2-mod-php php-cli php-mysql php-gd php-imagick php-zip php-intl php-mbstring php-xml \
-  libimage-exiftool-perl ffmpeg libvips-tools $HEIF_PKG imagemagick rsync openssl curl python3-venv
+  libimage-exiftool-perl ffmpeg libvips-tools $HEIF_PKG imagemagick rsync openssl curl python3-venv restic
 
 PHPV="$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')"
 if ! php -r 'exit(version_compare(PHP_VERSION, "8.1.0", ">=") ? 0 : 1);'; then
@@ -68,13 +68,14 @@ mysql -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLA
 mysql -e "CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS'; ALTER USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS'; GRANT ALL ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost'; FLUSH PRIVILEGES;"
 
 echo "==> systemd birimleri"
-for u in ownmemories-worker.service ownmemories-cron.service ownmemories-cron.timer ownmemories-backup.service ownmemories-backup.timer; do
+for u in ownmemories-worker.service ownmemories-cron.service ownmemories-cron.timer ownmemories-backup.service ownmemories-backup.timer ownmemories-backup.path; do
   cp "$SRC/server/$u" /etc/systemd/system/
 done
 systemctl daemon-reload
 systemctl enable --now ownmemories-cron.timer
 # İşçi kurulum (setup.php) bittikten sonra başlar; kurulmadan başlatılırsa hata verip yeniden dener.
 systemctl enable ownmemories-worker.service
+# Yedek birimleri kurulur ama setup-backup.sh çalışana kadar etkin değildir (ConditionPathExists=/etc/ownmemories/backup.env).
 
 echo "==> Akıllı arama (ownmemories-ml, ~1.5 GB model indirilir)"
 ML_OK=1
@@ -88,8 +89,9 @@ Kurulum hazır. Sıradaki adımlar:
        Depolama klasörü: $STORAGE
   2) Kurulumdan sonra işçiyi başlatın:  sudo systemctl start ownmemories-worker
   3) Cloudflare Tunnel: docs/INSTALL.md → "Cloudflare Tunnel"
-  4) Yedek: /etc/ownmemories-backup.env içine BACKUP_DIR=/mnt/yedek/ownmemories yazın,
-     sonra:  sudo systemctl enable --now ownmemories-backup.timer
+  4) Sunucu yedeği (ÖNEMLİ — kurulmadan fotoğrafların tek kopyası bu diskte olur):
+       sudo bash $SRC/server/setup-backup.sh
+     Harici disk ve/veya Backblaze B2 / SFTP hedefi seçilir; ayrıntı: docs/INSTALL.md → Yedekleme
 Bu parolayı not alın; tekrar gösterilmeyecek.
 DONE
 if (( ! ML_OK )); then

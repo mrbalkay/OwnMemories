@@ -63,7 +63,7 @@ Betik şunları yapar:
 - Dosyaları `/var/www/ownmemories` klasörüne kopyalar.
 - Veritabanını ve kullanıcısını oluşturur.
 - Depo klasörünü (`/srv/ownmemories`) hazırlar.
-- Şu systemd birimlerini kurar: `ownmemories-worker` (işçi), `ownmemories-cron.timer` (dakikalık), `ownmemories-backup.timer` (gece yedeği).
+- Şu systemd birimlerini kurar: `ownmemories-worker` (işçi), `ownmemories-cron.timer` (dakikalık), `ownmemories-backup.timer` (gece yedeği; `server/setup-backup.sh` çalıştırılınca etkinleşir, bkz. D).
 
 Betik sonunda veritabanı parolasını yazar; bunu not alın. Ardından:
 
@@ -187,29 +187,121 @@ Google'ın çöp kutusundaki öğeler alınmaz.
 
 ## D. Yedekleme (önemli)
 
-Google'ı bıraktığınızda bu sunucu tek kopya olur. **Gece yedeğini mutlaka açın.**
+Google'ı bıraktığınızda bu sunucu fotoğraflarınızın **tek kopyası** olur. Disk bozulursa, sunucu çalınırsa ya da
+yanlışlıkla bir şey silinirse geri getirmenin tek yolu yedektir. Yedekleme [restic](https://restic.net) ile yapılır:
+**şifreli** (AES-256; parola olmadan okunamaz), **sürümlü** (eski hâllere dönülebilir), **tekilleştirmeli** (her gece yalnızca
+değişen kısım gönderilir) ve **doğrulanır** (haftada bir bütünlük denetimi ve geri yükleme testi).
 
-1. Yedek hedefini ayarlayın; ikinci bir disk veya harici disk olabilir:
-   ```bash
-   echo 'BACKUP_DIR=/mnt/yedek/ownmemories' | sudo tee /etc/ownmemories-backup.env
-   ```
-2. Gece yedeğini açın:
-   ```bash
-   sudo systemctl enable --now ownmemories-backup.timer
-   ```
-3. Elle denemek için:
-   ```bash
-   sudo systemctl start ownmemories-backup.service
-   ```
-   ```bash
-   journalctl -u ownmemories-backup -n 20
-   ```
+En iyi düzen **iki hedef**: evde bir harici disk (hızlı geri yükleme) + evin dışında bir kopya (yangın, hırsızlık, sel).
 
-`server/backup.sh` her gece 03:30'da şunları yapar:
-- Veritabanını gzip'li döküm olarak kaydeder; son 30 gün saklanır.
-- Depo klasörünü `rsync` ile eşler. Silinen dosyalar 30 gün boyunca `deleted/<tarih>` klasöründe tutulur.
+### D1. Kurulum (bir kez, ~5 dakika)
 
-Mümkünse yedeğin bir kopyasını evin dışında da tutun (ikinci bir konum veya şifreli bulut).
+```bash
+cd ~/OwnMemories && git pull && sudo bash server/update.sh     # restic ve systemd birimlerini kurar
+sudo bash ~/OwnMemories/server/setup-backup.sh                 # sihirbaz (Türkçe)
+```
+
+Sihirbaz sırayla sorar:
+
+1. **Yerel / harici disk** — ör. `/mnt/yedek/ownmemories-restic`. Disk bağlı (mount) olmalı; sihirbaz klasör fotoğraflarla
+   veya sistemle aynı diskteyse uyarır. Harici USB diski her açılışta bağlamak için `/etc/fstab`'a `nofail` ile ekleyin
+   (ör. `UUID=… /mnt/yedek ext4 defaults,nofail 0 2`; UUID için `lsblk -f`). Disk takılı değilse o geceki yedek başarısız olur
+   ve panel kırmızıya döner — sessizce kaybolmaz.
+2. **Uzak hedef** — Backblaze B2 (önerilen), diğer S3 uyumlu depolama (Wasabi, Hetzner Object Storage, MinIO, AWS), SFTP
+   (başka bir bilgisayar, arkadaşınızın sunucusu; Tailscale adı da olur) veya bağlı ağ klasörü (NAS). İsterseniz yükleme hız
+   sınırı (KiB/s) verin; ev internetini yormaz (ör. `2500` ≈ 20 Mbit/s).
+3. **Kapsam ve saat** — orijinaller + veritabanı + ayarlar her zaman; küçük resim/önizlemeler isteğe bağlı (yeniden üretilebilir).
+   Varsayılan saat 03:10 (± 20 dk rastgele).
+4. **Şifreleme parolası** — güçlü bir parola üretilir ve **bir kez** gösterilir. **Parola yöneticinize kaydedin.** Sunucu
+   tamamen kaybolursa yedekleri yalnızca bu parolayla açabilirsiniz. (Sunucu çalışırken yeniden görmek için:
+   `sudo bash ~/OwnMemories/server/setup-backup.sh --show-password`)
+
+Erişim anahtarları ve parola **yalnızca** `/etc/ownmemories/backup.env` dosyasındadır (root:root 0600); depoda, veritabanında
+veya web panelinde bulunmaz. Ayarları değiştirmek için sihirbazı yeniden çalıştırın; mevcut değerler öneri olarak gelir,
+parola korunur, var olan yedek depoları yeniden oluşturulmaz.
+
+### D2. Backblaze B2 hesabı (uzak kopya için önerilen)
+
+1. <https://www.backblaze.com/sign-up/cloud-storage> adresinden hesap açın (kredi kartı ilk 10 GB için gerekmez).
+2. **Buckets → Create a Bucket**: ad benzersiz olmalı (ör. `ownmemories-mehmet-2026`), **Private**, *Default Encryption*
+   kapalı kalabilir (restic zaten şifreler), *Object Lock* kapalı. Bucket sayfasındaki **Endpoint** değerini not alın
+   (ör. `s3.eu-central-003.backblazeb2.com`). Avrupa bölgesi Türkiye'ye daha yakındır.
+3. **Lifecycle Settings**: "Keep only the last version of the file" seçin (restic eski sürümleri kendisi yönetir).
+4. **Application Keys → Add a New Application Key**: yalnızca bu bucket'a erişim, *Read and Write*. Görünen **keyID** ve
+   **applicationKey** değerlerini sihirbaza girin (applicationKey yalnızca bir kez gösterilir).
+
+**Maliyet:** depolama ~**6 $/TB/ay** (100 GB ≈ 0,60 $/ay; ilk 10 GB ücretsiz). Yükleme ücretsizdir; indirme aylık depolamanın
+3 katına kadar ücretsizdir (geri yükleme testi birkaç MB indirir). 500 GB'lık bir kütüphane ≈ 3 $/ay.
+İlk yükleme internet hızınıza bağlıdır: 500 GB, 20 Mbit/s yüklemeyle ~2,5 gün sürer; sonraki geceler yalnızca yenileri gönderir.
+Bu sırada yedek kesilirse kaldığı yerden devam eder.
+
+### D3. Ne yedeklenir?
+
+| Yedeklenir | Yedeklenmez (yeniden üretilebilir / geçici) |
+|---|---|
+| Orijinal fotoğraf ve videolar (`<depo>/blobs`) | Küçük resim, önizleme, dönüştürülmüş videolar (`derived`; sihirbazda isteğe bağlı) |
+| Veritabanının tutarlı dökümü (`mysqldump --single-transaction`): albümler, kişiler, yüzler, açıklamalar, akıllı arama vektörleri, kullanıcılar | Yarım kalan yüklemeler, Takeout zip'leri, oturumlar, günlükler |
+| `config.php` ve sürüm/şema bilgisi (`MANIFEST.json`) | Akıllı arama modeli (yeniden indirilir) |
+
+Döküm sıkıştırılmadan yedeğe konur: restic kendisi sıkıştırır (zstd) ve değişmeyen kısımları tekilleştirir; böylece her gece
+veritabanının tamamı değil yalnızca değişen kısmı gönderilir.
+
+**Saklama:** son 7 günlük, 8 haftalık, 24 aylık ve 5 yıllık sürüm. Yanlışlıkla silinen bir fotoğrafı aylar sonra bile geri
+getirebilirsiniz.
+
+### D4. Durumu izleme
+
+- **Web:** Yönetim → **Yedekleme**: her hedef için yeşil/sarı/kırmızı durum (kırmızı = 48 saattir başarılı yedek yok), son
+  anlık görüntü, depo boyutu, bütünlük denetimi, geri yükleme testi, sonraki yedek saati ve **Şimdi yedekle** düğmesi.
+  Yedek kurulmamış veya başarısızsa yöneticiler fotoğraflar uygulamasının kenar çubuğunda ve Ayarlar'da uyarı görür.
+- **iPhone:** Ayarlar → Tanılama → Sunucu (yalnızca yönetici hesapta).
+- **Sunucuda:** `systemctl list-timers ownmemories-backup` · `journalctl -u ownmemories-backup -n 50` ·
+  elle yedek: `sudo systemctl start ownmemories-backup`
+
+### D5. Geri yükleme testi (ayda bir kendiniz de yapın)
+
+```bash
+sudo bash ~/OwnMemories/server/restore.sh test
+```
+
+Son yedekten rastgele 30 orijinal dosyayı ve veritabanı dökümünü geçici bir klasöre geri yükler; her dosyanın SHA-1
+özetinin dosya adıyla aynı olduğunu doğrular, dökümü geçici bir veritabanına içe aktarıp tablo/öğe sayısını kontrol eder ve
+her şeyi siler. Canlı sisteme dokunmaz. Gece yedeği bunu haftada bir kendiliğinden de yapar (sonuç panelde).
+Uzak hedef için: `sudo bash ~/OwnMemories/server/restore.sh test --target offsite`
+
+### D6. Geri yükleme
+
+```bash
+sudo bash ~/OwnMemories/server/restore.sh                     # menü
+sudo bash ~/OwnMemories/server/restore.sh list                # sürümler (anlık görüntüler)
+sudo bash ~/OwnMemories/server/restore.sh to /mnt/geri-yukleme --db ownmemories_eski   # yeni klasöre + ayrı veritabanına (güvenli)
+sudo bash ~/OwnMemories/server/restore.sh in-place            # canlı sistemi en son yedekten geri getir
+sudo bash ~/OwnMemories/server/restore.sh in-place --snapshot 1a2b3c4d   # belirli bir sürümden
+```
+
+`in-place` önce yer denetimi yapar ve onay ister (`GERİ YÜKLE` yazılır); web, işçi ve zamanlanmış işleri durdurur, mevcut
+veritabanının güvenlik dökümünü `/var/lib/ownmemories/pre-restore-<tarih>.sql.gz` olarak alır, yalnızca diskte **eksik** olan
+orijinalleri geri yazar (diskteki hiçbir dosyayı silmez ve üzerine yazmaz; boyutu yedektekinden farklı, yani bozuk kopyalar
+silinmeden `<depo>/.restore-damaged-<tarih>/` klasörüne taşınır), veritabanını yedekteki hâliyle değiştirir ve servisleri
+yeniden başlatır (bir hata olsa bile). `to KLASÖR --db YENI_DB` canlı veritabanı adını ve dolu bir veritabanını reddeder. Küçük resimler yedekte yoksa: Yönetim → İşler → "Tüm küçük
+resimleri yeniden üret".
+
+**Sunucu tamamen kaybolduysa (yeni disk / yeni bilgisayar):**
+
+1. Ubuntu'yu kurun, depoyu indirin, `sudo bash server/install-ubuntu.sh` ve `setup.php` ile boş bir kurulum yapın.
+2. `sudo bash ~/OwnMemories/server/setup-backup.sh` — **eski** hedefi (aynı B2 bucket/klasör veya aynı harici disk yolu) ve
+   parola sorusunda **eski yedek parolasını** girin. Sihirbaz mevcut depoyu tanır, yenisini oluşturmaz.
+3. `sudo bash ~/OwnMemories/server/restore.sh in-place` (harici disk yoksa `--target offsite`).
+
+### D7. Eski rsync yedeğinden geçiş
+
+Önceki sürümün `/etc/ownmemories-backup.env` (`BACKUP_DIR`) rsync yedeği, yeni yedek kurulana kadar her gece çalışmaya
+devam eder (`server/backup-legacy.sh`; fotoğraf klasörü boşsa/bağlı değilse artık durur). Panel bu arada "kurulmadı" uyarısı
+gösterir. Sihirbaz o klasörün yanını (`…-restic`) öneri olarak getirir; sihirbazı çalıştırınca eski yedek kendiliğinden
+devre dışı kalır. Yeni yedek ilk kez başarıyla tamamlanınca eski klasörü ve `/etc/ownmemories-backup.env` dosyasını silebilirsiniz.
+
+**Fotoğraf diski bağlı değilse:** veritabanındaki orijinallerin yarısından fazlası diskte yoksa yedek *alınmaz*, panel kırmızı
+olur ("Fotoğraf diski bağlı mı?"); yedekteki eski sürümler olduğu gibi kalır.
 
 ## E. Test hostingden Ubuntu'ya taşıma
 

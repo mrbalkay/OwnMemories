@@ -645,3 +645,10 @@
   :root[data-skin="galeri"] .people-head .people-sub { display: none; } /* sayı üst çubukta (#pageSub) */
   :root[data-skin="galeri"] .people-head { justify-content: flex-end; min-height: 0; margin-bottom: 4px; padding-top: 0; }
 }
+
+/* Sunucu yedeği uyarısı: müze etiketi gibi, kenar boşluğu menüyle hizalı */
+:root[data-skin="galeri"] .backup-alert { margin: 18px 20px 8px 28px; border-radius: var(--g-r1, 2px); background: var(--g-duvar); border: 1px solid var(--g-cizgi); border-left: 2px solid var(--lv); }
+:root[data-skin="galeri"] .backup-alert-ic { background: none; width: 20px; }
+:root[data-skin="galeri"] .backup-alert-text strong { font-family: var(--serif); font-weight: 400; font-size: 15px; }
+:root[data-skin="galeri"] .backup-card { border-radius: var(--g-r1, 2px); box-shadow: none; border-left-width: 2px; }
+:root[data-skin="galeri"] .backup-card-title strong { font-family: var(--serif); font-weight: 400; font-size: 18px; }

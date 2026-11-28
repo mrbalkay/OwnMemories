@@ -1,8 +1,13 @@
+# Her gece 03:10 civarı (± 20 dk). Saat setup-backup.sh tarafından ownmemories-backup.timer.d/schedule.conf ile değiştirilir.
 [Unit]
-Description=OwnMemories her gece 03:30 yedek
+Description=OwnMemories gece yedeği zamanlayıcısı
+# Yeni yedek kuruluysa ya da (geçiş dönemi) eski rsync yedeği ayarlıysa çalışır.
+ConditionPathExists=|/etc/ownmemories/backup.env
+ConditionPathExists=|/etc/ownmemories-backup.env
 
 [Timer]
-OnCalendar=*-*-* 03:30:00
+OnCalendar=*-*-* 03:10:00
+RandomizedDelaySec=20min
 Persistent=true
 
 [Install]

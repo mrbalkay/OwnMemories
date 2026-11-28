@@ -86,6 +86,16 @@
  * Görüntüleyici (.viewer .v-bar .v-stage .v-img .v-nav .v-info), albümler (.album-card ...), ayarlar (.settings .theme-card)
  *   mevcut sınıflarıyla biçimlenir.
  *
+ * Sunucu yedeği (yalnızca yönetici; main.js renderBackupAlert, settings.js backupSection)
+ *   a.backup-alert[data-level="unconfigured|warn|error"]   kenar çubuğunda .me'nin hemen üstünde (yedek kurulmamış/başarısız)
+ *       > .backup-alert-ic (svg) + .backup-alert-text > strong + span | .backup-alert-cta   --lv: durum rengi   S G Y
+ *   .nav-settings[data-alert=level], #menuBtn.menu-btn[data-alert=level]   ::after uyarı noktası (mobilde menü düğmesinde)
+ *   .settings-section.settings-backup > .backup-card[data-level="ok|warn|error|unconfigured|loading"]
+ *       > .backup-card-head > .backup-card-ic + .backup-card-title > strong + span | a.btn.btn-soft
+ *       > ul.backup-targets > li.backup-target[data-level] > .backup-dot + .backup-target-name + .backup-target-when
+ *       | .backup-setup > span + code (kurulum komutu)
+ *   Renkler app.css'te --warn/--danger/--ok ve tema --surface/--line/--radius değişkenleriyle; temalar isterse geçersiz kılar.
+ *
  * Kişiler (people.js) — #app[data-route="people|person"]; menüde .nav-item[data-nav="people"][data-group="library"]
  *   (favorites'ten sonra; Y `order` ile Harita'dan önce tutar).
  *   .p-ava(.is-empty | .is-photo) > img(.in) | .p-ini (baş harf) | .ic   yuvarlak avatar; boyut --ava (G: kare)   S G Y

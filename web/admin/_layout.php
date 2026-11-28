@@ -20,7 +20,7 @@ function admin_page_start(string $active): array
 function admin_head(string $title): void
 {
     $active = $GLOBALS['__admin_active'] ?? '';
-    $items = ['index' => 'overview', 'users' => 'users', 'imports' => 'imports', 'jobs' => 'jobs', 'system' => 'system'];
+    $items = ['index' => 'overview', 'users' => 'users', 'imports' => 'imports', 'jobs' => 'jobs', 'backup' => 'backup', 'system' => 'system'];
     echo '<!doctype html><html lang="' . e(locale()) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<meta name="robots" content="noindex,nofollow"><title>' . e($title) . ' · ' . e(t('admin.title')) . '</title>'
         . '<link rel="icon" href="' . e(asset('img/icon.svg')) . '" type="image/svg+xml">'
