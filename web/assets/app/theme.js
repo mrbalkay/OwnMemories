@@ -7,7 +7,7 @@
  * S = sinema, G = galeri, Y = yerel (beklenen kullanım).
  *
  * Kabuk (web/app/index.php)
- *   #app.app[data-route="photos|favorites|people|person|albums|album|shared|map|archive|trash|search|settings"]  her rotada güncellenir
+ *   #app.app[data-route="photos|favorites|people|person|albums|album|shared|map|places|place|archive|trash|search|settings"]  her rotada güncellenir
  *   .ambient#ambient          #app'in ilk çocuğu, tam ekran katman (gizli). --ambient / --ambient-rgb ile boya   S
  *   .sidebar .logo .nav .nav-item .nav-settings .me .me-name .me-usage .me-links   (mevcut)
  *   .me-avatar                .me-name içinde baş harf (gizli)   Y
@@ -23,7 +23,7 @@
  *   .selbar, .v-bar, .story-top    diğer cam yüzeyler (mevcut)
  *
  * Menü (#nav, main.js renderNav) — düz liste, sırası: nav-h[library], photos, favorites, people, nav-h[albums], albums, shared,
- *   map, .nav-sep, nav-h[other], archive, trash
+ *   map, places, .nav-sep, nav-h[other], archive, trash
  *   .nav-item[data-nav="photos|favorites|people|albums|shared|map|archive|trash"][data-group="library|albums|other"] > .ic + .nav-label
  *   .nav-h[data-group="library|albums|other"]   grup başlığı "Kitaplık/Albümler/Diğer" (gizli)   Y
  *       Y, Harita'yı Kitaplık grubuna almak için #nav{display:flex} içinde CSS `order` kullanır.
@@ -31,7 +31,7 @@
  *
  * Anılar (memories.js) — fotoğraflar sayfasında zaman çizelgesinin üstünde, anı varsa:
  *   .mem-block.has-hero > .mem-hero + .mem-strip
- *   .mem-hero[data-kind="on_this_day|this_week|favorites"][data-years]   ilk anının büyük afişi (gizli)   S (Y isteğe bağlı)
+ *   .mem-hero[data-kind="on_this_day|this_week|trip|favorites"][data-years]   trip: üst satır "3 yıl önce", başlık "Bozcaada'da bir hafta"   ilk anının büyük afişi (gizli)   S (Y isteğe bağlı)
  *     .mem-hero-media > img (kapak önizlemesi, yüklenince img.in; tıklayınca gösteri) | .mem-hero-shade
  *     .mem-hero-text > .mem-hero-eyebrow (i.mem-hero-dot + "N yıl önce bugün") | h2.mem-hero-title ("Kasım 2023")
  *                     | p.mem-hero-meta > .mem-hero-date ("24–29 Kasım 2023") · .mem-hero-count ("12 öğe")
@@ -107,6 +107,20 @@
  *     > .p-chips > .p-chip(.is-unnamed)[data-person][data-source] > a|button.p-chip-main > .p-ava + .p-chip-name | button.p-chip-x
  *     > .p-add-slot > button.p-add | .pp   > .f-loose-head + .f-loose > .f-item[data-face] > .p-ava.f-ava + button.f-name-btn | .pp
  *   Yüz kutuları: .v-stage > .v-faces(.has-hot) > button.v-face(.is-named|.is-cluster|.is-unknown|.is-hot) > .v-face-label
+ *
+ * Yerler (places.js) — #app[data-route="places|place"]; menüde .nav-item[data-nav="places"][data-group="library"] (Harita'dan sonra).
+ *   nav.view-seg > a.seg-item(.on)[aria-current] > .ic + span   Harita | Yerler geçişi (.page-head.map-head ve .places-head içinde)   S G Y
+ *   Yerler: .page-head.places-head > div > h1 + p.places-sub ("10 yer · 4 ülke") | nav.view-seg
+ *     .places-body > .places-status (yer bulunuyorsa) > .places-status-dot | section.places-section[data-country]
+ *       > .places-section-head > h2 (ülke + .places-section-count) > .places-grid > a.place-card[data-id][data-country]
+ *         > .place-cover > img(.in) + .place-shade (gizli; S afiş gölgesi) + .place-region ("Kapadokya", varsa)
+ *         > .place-text > strong.place-name + small.place-meta > .place-admin (il) + .place-count
+ *       a.place-card.is-ghost (yüklenirken) | .empty.places-empty > .places-empty-art + h2 + p | p.places-attrib (GeoNames atfı)
+ *   Yer sayfası (zaman çizelgesi başlığı): .place-head > a.place-back | .place-head-text > .place-head-region? + h1.place-title
+ *     + p.place-head-meta > .place-head-where (.ic + "Çanakkale, Türkiye") + .place-head-count + .place-head-when
+ *   Gün başlığı: h3.day > … .day-sub + span.day-place ("Moda, Kadıköy"; boşsa gizli; yer sayfasında gizli) + .day-sel
+ *   Bilgi paneli Konum: .i-val > a.i-place (yer adı → yer sayfası) + .i-coords (küçük koordinat + "Haritada aç")
+ *   Harita: .map-thumb(.has-tip) > .map-tip (üzerine gelince/odakta yer adı ipucu)
  */
 import { api } from './api.js';
 import { OM } from './util.js';

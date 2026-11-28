@@ -36,6 +36,10 @@ function memoryYears(m) {
 
 const kindAttr = (m) => ({ kind: m.kind, years: m.years_ago ?? '' });
 
+/** Üst satır ve başlık: gezilerde "3 yıl önce" + "Bozcaada'da bir hafta"; diğerlerinde anı adı + ay. */
+const memEyebrow = (m) => (m.kind === 'trip' ? t('trip_years_ago', { n: m.years_ago }) : m.title);
+const memHeading = (m) => (m.kind === 'trip' ? m.title : (m.kind === 'favorites' ? memoryYears(m) : memoryMonth(m)));
+
 /** Günün anısı için büyük afiş (.mem-hero). Varsayılan CSS'te gizli; temalar açar. */
 function memoryHero(m, viewerCtx) {
   const img = h('img', { src: previewUrl(m.cover_asset_id), alt: '', decoding: 'async' });
@@ -46,8 +50,8 @@ function memoryHero(m, viewerCtx) {
     h('div', { class: 'mem-hero-media', onclick: play }, img),
     h('div', { class: 'mem-hero-shade', 'aria-hidden': 'true' }),
     h('div', { class: 'mem-hero-text' },
-      h('div', { class: 'mem-hero-eyebrow' }, h('i', { class: 'mem-hero-dot', 'aria-hidden': 'true' }), m.title),
-      h('h2', { class: 'mem-hero-title' }, m.kind === 'favorites' ? memoryYears(m) : memoryMonth(m)),
+      h('div', { class: 'mem-hero-eyebrow' }, h('i', { class: 'mem-hero-dot', 'aria-hidden': 'true' }), memEyebrow(m)),
+      h('h2', { class: 'mem-hero-title' }, memHeading(m)),
       h('p', { class: 'mem-hero-meta' },
         h('span', { class: 'mem-hero-date' }, memoryRange(m)), ' · ',
         h('span', { class: 'mem-hero-count' }, t('items', { n: m.count }))),
@@ -79,8 +83,8 @@ export async function memoriesStrip(viewerCtx = () => ({})) {
     h('span', { class: 'mem-shade' }),
     h('span', { class: 'mem-play', 'aria-hidden': 'true' }, icon('play')),
     h('span', { class: 'mem-text' },
-      h('small', { class: 'mem-eyebrow' }, m.title),
-      h('strong', {}, m.kind === 'favorites' ? memoryYears(m) : memoryMonth(m)),
+      h('small', { class: 'mem-eyebrow' }, memEyebrow(m)),
+      h('strong', {}, memHeading(m)),
       h('small', { class: 'mem-count' }, t('items', { n: m.count })),
       h('span', { class: 'mem-date' }, memoryRange(m))))));
   const scrollBy = (dir) => row.scrollBy({ left: dir * row.clientWidth * 0.8, behavior: 'smooth' });
@@ -156,7 +160,7 @@ export function openStory(memory, viewerCtx = () => ({})) {
   const media = h('div', { class: 'story-media' });
   const bg = h('div', { class: 'story-bg' });
   const caption = h('div', { class: 'story-caption' });
-  const heading = memory.kind === 'favorites' ? memoryYears(memory) : memoryMonth(memory);
+  const heading = memory.kind === 'trip' ? memoryRange(memory) : (memory.kind === 'favorites' ? memoryYears(memory) : memoryMonth(memory));
   // Tema kancaları (varsayılan CSS'te gizli): yan bilgi paneli, alt başlık, sayaç, denetimler, film şeridi.
   const capSub = h('small', { class: 'story-cap-sub' });
   const capTitle = h('strong', { class: 'story-cap-title' });

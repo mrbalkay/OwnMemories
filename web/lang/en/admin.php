@@ -32,4 +32,7 @@ return [
     'smart_search' => 'Smart search', 'ml_down' => 'Cannot reach the smart search service ({url}). Search currently only matches file names, captions and cameras. On the server: sudo systemctl status ownmemories-ml',
     'ml_ready' => 'Running', 'ml_starting' => 'Starting', 'ml_model' => 'Model', 'ml_pending' => 'Index queue',
     'ml_indexed' => 'Indexed', 'ml_total' => 'Total items', 'ml_progress' => 'Progress', 'ml_dim' => 'dims',
+    'geo' => 'Place names (GeoNames)', 'geo_state' => 'Status', 'geo_ready' => 'Installed', 'geo_missing' => 'Not installed', 'geo_places' => '{n} places',
+    'geo_imported' => 'Last import', 'geo_located' => 'Items with location', 'geo_pending' => '{n} items waiting for a place', 'geo_run' => 'Find missing places now',
+    'geo_queued' => 'Place lookup job queued.', 'geo_note' => 'Place names come from offline GeoNames data on this server (CC BY 4.0); locations are never sent to an outside service. The data is refreshed on every update (update.sh).',
 ];

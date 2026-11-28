@@ -76,6 +76,10 @@ function job_handlers(): array
         'render' => 'job_render',
         'transcode' => 'job_transcode',
     ];
+    if (function_exists('job_geocode')) {
+        $h['geocode'] = 'job_geocode';
+        $h['geocode_backfill'] = 'job_geocode_backfill';
+    }
     if (function_exists('import_job_step')) {
         $h['import_step'] = 'import_job_step';
     }

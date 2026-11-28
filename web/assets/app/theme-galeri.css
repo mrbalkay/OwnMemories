@@ -645,3 +645,64 @@
   :root[data-skin="galeri"] .people-head .people-sub { display: none; } /* sayı üst çubukta (#pageSub) */
   :root[data-skin="galeri"] .people-head { justify-content: flex-end; min-height: 0; margin-bottom: 4px; padding-top: 0; }
 }
+
+/* ------------------------------------------------------------ yerler: kare baskılar, sergi etiketi */
+:root[data-skin="galeri"] .view-seg { padding: 0; border-radius: 0; background: none; box-shadow: inset 0 0 0 1px var(--g-cizgi); }
+:root[data-skin="galeri"] .seg-item { min-height: 34px; border-radius: 0; color: var(--g-grafit); font-size: 13px; font-weight: 500; }
+:root[data-skin="galeri"] .seg-item svg { display: none; }
+:root[data-skin="galeri"] .seg-item:hover { color: var(--g-murekkep); }
+:root[data-skin="galeri"] .seg-item.on { background: var(--g-murekkep); color: var(--g-duvar); box-shadow: none; }
+:root[data-skin="galeri"] .places-section { padding-top: 6px; }
+:root[data-skin="galeri"] .places-section + .places-section { margin-top: 44px; }
+:root[data-skin="galeri"] .places-section-head h2 { font-weight: 400; font-size: 30px; color: var(--g-murekkep); }
+:root[data-skin="galeri"] .places-section-count { color: var(--g-grafit); font-weight: 400; }
+:root[data-skin="galeri"] .places-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 40px 28px; padding-top: 18px; }
+:root[data-skin="galeri"] .place-card { gap: 14px; border-radius: 0; }
+:root[data-skin="galeri"] .place-cover { aspect-ratio: 1; border-radius: var(--g-r1); background: var(--g-tas); box-shadow: none; outline: 1px solid transparent; outline-offset: 5px; transition: outline-color .35s var(--g-ease); }
+:root[data-skin="galeri"] .place-card:hover .place-cover img { transform: none; }
+:root[data-skin="galeri"] .place-card:hover .place-cover { outline-color: var(--g-murekkep); }
+:root[data-skin="galeri"] .place-card:focus-visible { outline: none; }
+:root[data-skin="galeri"] .place-card:focus-visible .place-cover { outline: 2px solid var(--g-muze); }
+:root[data-skin="galeri"] .place-text { gap: 4px; padding-left: 1px; }
+:root[data-skin="galeri"] .place-name { color: var(--g-murekkep); font-family: var(--serif); font-weight: 400; font-size: 20px; letter-spacing: -.005em; }
+:root[data-skin="galeri"] .place-meta { color: var(--g-grafit); font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; }
+:root[data-skin="galeri"] .place-region { top: 0; left: 0; padding: 5px 9px; border-radius: 0; background: var(--g-duvar); color: var(--g-murekkep); font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-skin="galeri"] .places-status { border-radius: 0; background: var(--g-muze-acik); color: var(--g-muze); }
+:root[data-skin="galeri"] .places-status-dot { background: var(--g-muze); }
+:root[data-skin="galeri"] .places-attrib { margin-top: 56px; color: var(--g-grafit); letter-spacing: .04em; }
+:root[data-skin="galeri"] .places-empty .places-empty-art { border-radius: 0; background: var(--g-tas); color: var(--g-murekkep); }
+:root[data-skin="galeri"] .places-empty h2 { font-weight: 400; }
+:root[data-skin="galeri"] .place-head { gap: 16px; padding: 0 0 28px; margin-bottom: 28px; border-bottom: 1px solid var(--g-cizgi); }
+:root[data-skin="galeri"] .place-back { margin-left: 0; padding: 0; border-radius: 0; color: var(--g-grafit); font-size: 13px; }
+:root[data-skin="galeri"] .place-back:hover { background: none; color: var(--g-murekkep); }
+:root[data-skin="galeri"] .place-back svg { width: 16px; height: 16px; }
+:root[data-skin="galeri"] .place-head-region { color: var(--g-muze); font-weight: 600; letter-spacing: .12em; }
+:root[data-skin="galeri"] .place-title { color: var(--g-murekkep); font-weight: 400; font-size: 52px; letter-spacing: -.015em; }
+:root[data-skin="galeri"] .place-head-meta { color: var(--g-grafit); font-size: 12px; letter-spacing: .07em; text-transform: uppercase; }
+:root[data-skin="galeri"] .place-head-where { color: var(--g-murekkep); }
+:root[data-skin="galeri"] .place-head-where { gap: 0; }
+:root[data-skin="galeri"] .place-head-where svg { display: none; }
+:root[data-skin="galeri"] .day-place { color: var(--g-grafit); font-weight: 400; }
+:root[data-skin="galeri"] .i-place { font-family: var(--serif); font-weight: 400; font-size: 16px; }
+:root[data-skin="galeri"] a.i-place:hover { color: var(--g-muze); }
+:root[data-skin="galeri"] .map-tip { border-radius: var(--g-r1); background: var(--g-duvar); color: var(--g-murekkep); font-weight: 500; box-shadow: 0 0 0 1px var(--g-cizgi), 0 8px 20px rgba(0, 0, 0, .12); }
+@media (max-width: 860px) {
+  :root[data-skin="galeri"] .page-head:has(.view-seg) { display: flex; border-bottom: 0; padding-bottom: 4px; margin-bottom: 18px; }
+  :root[data-skin="galeri"] .page-head:has(.view-seg) h1 { display: none; }
+  :root[data-skin="galeri"] .page-head:has(.view-seg) { justify-content: flex-end; }
+  :root[data-skin="galeri"] .page-head.places-head .places-sub { display: none; }   /* sayı üst çubukta (#pageSub) */
+  :root[data-skin="galeri"] .place-head { padding-bottom: 18px; margin-bottom: 18px; }
+}
+@media (max-width: 600px) {
+  :root[data-skin="galeri"] .places-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 14px; }
+  :root[data-skin="galeri"] .place-name { font-size: 17px; }
+  :root[data-skin="galeri"] .place-meta { font-size: 10.5px; }
+  :root[data-skin="galeri"] .place-title { font-size: 38px; }
+}
+/* gezi anıları: etiket satırında yer başlığı ("Bozcaada'da bir hafta") */
+:root[data-skin="galeri"] .mem-card[data-kind="trip"] .mem-text .mem-eyebrow { display: none; }
+:root[data-skin="galeri"] .mem-card[data-kind="trip"] .mem-text strong { order: 1; display: block; flex: 1 0 100%; font-family: var(--serif); font-weight: 400; font-size: 19px; line-height: 1.25; color: var(--g-murekkep); }
+:root[data-skin="galeri"] .mem-card.is-first[data-kind="trip"] .mem-text strong { font-size: 24px; line-height: 1.15; }
+@media (max-width: 860px) {
+  :root[data-skin="galeri"] .mem-card[data-kind="trip"] .mem-text strong, :root[data-skin="galeri"] .mem-card.is-first[data-kind="trip"] .mem-text strong { font-size: 15px; line-height: 1.2; }
+}

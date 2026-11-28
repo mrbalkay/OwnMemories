@@ -81,4 +81,13 @@ return [
     'removed_from_person' => '{n} fotoğraf bu kişiden çıkarıldı', 'open_person' => '{name} kişisinin fotoğrafları',
     'name_face' => 'Adlandır', 'show_faces' => 'Yüzleri göster', 'hide_faces' => 'Yüzleri gizle', 'detected_faces' => 'Tanınmayan yüzler',
     'faces_on_photo' => 'Fotoğraftaki yüzler', 'face_of' => '{name} kişisinin yüzü', 'name_this_face' => 'Bu yüzü adlandır', 'unknown_face' => 'Bu kim?',
+    // Yerler
+    'places' => 'Yerler', 'places_sub' => '{n} yer · {c} ülke', 'place_photos' => '{n} öğe', 'places_empty_title' => 'Henüz yer yok',
+    'places_empty' => 'Konum bilgisi olan fotoğraflar burada şehir şehir toplanır. Yer adları sunucudaki çevrimdışı GeoNames verisiyle bulunur; konumunuz hiçbir dış servise gönderilmez.',
+    'places_no_data' => 'Yer adı verisi henüz kurulmamış. Sunucuda şunu çalıştırın: sudo bash server/install-geo.sh',
+    'places_pending' => '{n} fotoğrafın yeri bulunuyor…', 'places_all' => 'Tüm yerler', 'place_not_found' => 'Bu yer bulunamadı.',
+    'place_range' => '{from} – {to}', 'map_view' => 'Harita', 'places_view' => 'Yerler', 'map_place' => '{place} · {n} öğe',
+    'places_attribution' => 'Yer adları: GeoNames (CC BY 4.0)', 'coords' => 'Koordinatlar', 'trip_years_ago' => '{n} yıl önce',
+    'place_country_count' => '{n} yer', 'view_switch' => 'Görünüm',
+    'open_place' => '{name} fotoğrafları',
 ];

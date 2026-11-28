@@ -57,6 +57,8 @@ export const icons = {
   merge: '<svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19a5 5 0 0 1 9-3 5 5 0 0 1 9 3"/></svg>',
   faceScan: '<svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="10.5" r="2.5"/><path d="M8 16.5a4.5 4.5 0 0 1 8 0"/></svg>',
   map: '<svg viewBox="0 0 24 24"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.2"/></svg>',
+  pin: '<svg viewBox="0 0 24 24"><path d="M12 17.5s-4.5-4.2-4.5-8.2a4.5 4.5 0 0 1 9 0c0 4-4.5 8.2-4.5 8.2Z"/><circle cx="12" cy="9.3" r="1.6"/><path d="M8 17.2c-2.4.4-4 1.1-4 1.9 0 1.2 3.6 2.2 8 2.2s8-1 8-2.2c0-.8-1.6-1.5-4-1.9"/></svg>',
+  globe: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.6 5.2 3.6 8.5s-1.2 6.1-3.6 8.5c-2.4-2.4-3.6-5.2-3.6-8.5s1.2-6.1 3.6-8.5Z"/></svg>',
 };
 
 export function icon(name) {

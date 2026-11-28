@@ -32,4 +32,7 @@ return [
     'smart_search' => 'Akıllı arama', 'ml_down' => 'Akıllı arama hizmetine ({url}) ulaşılamıyor. Arama şimdilik yalnızca dosya adı, açıklama ve kamera bilgisinde çalışır. Sunucuda: sudo systemctl status ownmemories-ml',
     'ml_ready' => 'Çalışıyor', 'ml_starting' => 'Hazırlanıyor', 'ml_model' => 'Model', 'ml_pending' => 'Dizin kuyruğu',
     'ml_indexed' => 'Dizinlenen', 'ml_total' => 'Toplam öğe', 'ml_progress' => 'İlerleme', 'ml_dim' => 'boyut',
+    'geo' => 'Yer adları (GeoNames)', 'geo_state' => 'Durum', 'geo_ready' => 'Kurulu', 'geo_missing' => 'Kurulu değil', 'geo_places' => '{n} yer',
+    'geo_imported' => 'Son içe aktarma', 'geo_located' => 'Konumlu öğe', 'geo_pending' => '{n} öğenin yeri bekliyor', 'geo_run' => 'Eksik yerleri şimdi bul',
+    'geo_queued' => 'Yer bulma işi kuyruğa alındı.', 'geo_note' => 'Yer adları sunucudaki çevrimdışı GeoNames verisinden bulunur (CC BY 4.0); konumlar hiçbir dış servise gönderilmez. Veri her güncellemede (update.sh) yenilenir.',
 ];

@@ -71,6 +71,9 @@ tests/                php tests/run.php
 - `jobs` — iş kuyruğu (`render`, `import_step`); 3 deneme, sonra `failed`
 - `imports`, `import_items` — her içe aktarma ve her medya dosyasının sonucu (`imported`/`duplicate`/`no_metadata`/`skipped_trashed`/`failed`)
 - `uploads`, `site_settings`, `rate_limits`, `audit_log`
+- `geo_places` — GeoNames yerleşimleri (id = geonameid, name, name_tr (Türkçe ad: "Roma", "İstanbul"), feature_code, country_code, admin1/admin2 kod + ad (il/eyalet, ilçe), lat/lng, population, cell = 0,1°'lik ızgara hücresi, indeksli). `bin/geo-import.php` doldurur (§8)
+- `geo_countries` — code PK, name (İngilizce), name_tr (ICU'dan Türkçe: "Fransa")
+- `asset_places` — asset_id PK, user_id, place_id (en yakın yer), city_id (şehir düzeyi; Yerler sayfası ve `place=` süzgeci bunu kullanır), name/city/district (yalnız TR, ilçe)/admin1/country/country_code/region, distance_km, lat/lng (bulunurken kullanılan konum: değişince yeniden bulunur), search_key (katlanmış adlar, metin araması), geo_version. Konumu olup yakında yer olmayan asset için place_id NULL satır (işlendi)
 - `asset_embeddings` — asset_id PK, user_id, model (ör. `ViT-B-16-SigLIP2__webli`), vec (MEDIUMBLOB, float32 little-endian, L2-normalize, 768 boyut = 3072 bayt), created_at. ownmemories-ml yazar; asset kalıcı silinince PHP siler (§7)
 
 ### Yineleme kuralları
@@ -101,8 +104,11 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
  "latitude":38.4192,"longitude":27.1287,"altitude":12.0,"camera_make":"Apple","camera_model":"iPhone 8","lens":null,
  "description":null,"is_favorite":false,"is_archived":false,"shared_from_others":false,"trashed_at":null,
  "source":"takeout","live_pair_id":null,"edited_of_id":null,"thumb_state":"ready",
+ "place":{"id":311046,"name":"Alsancak","city":"İzmir","district":"Konak","admin1":"İzmir","country":"Türkiye",
+          "country_code":"TR","region":null,"label":"Alsancak, Konak, İzmir, Türkiye","short":"Alsancak, Konak"},
  "updated_at":"2026-11-26T10:00:00Z","version":42}
 ```
+`place` konum yoksa, yer verisi kurulu değilse ya da yer henüz bulunmadıysa `null`; `place.id` şehir düzeyindeki yerin kimliğidir (§8).
 `GET assets/{id}` ek olarak `access` (`own`/`view`), `people[]`, `albums[{id,title}]` ve (paylaşılan ise) `owner_name` döner.
 
 ### Album nesnesi
@@ -121,10 +127,10 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | POST | `auth/login` | `{email,password,device_name,platform}` | `{token,user}` (10 deneme/15 dk) |
 | POST | `auth/logout` | – | `{ok}` (token silinir / web oturumu kapanır) |
 | GET | `me` | – | `{user}` |
-| GET | `assets` | `limit≤500 (200)`, `before` (ISO), `before_id`, `favorite=1`, `archived=1`, `trashed=1`, `album=<id>`, `person=<id>` (kendi kişisi; değilse 404), `q` (dosya adı/açıklama/kamera/kişi adı), `from`, `to`, `has_location=1`, `type=photo\|video` | `{assets:[…], next:{before,before_id}\|null}` — `taken_at DESC, id DESC`, anahtar kümesi sayfalama |
+| GET | `assets` | `limit≤500 (200)`, `before` (ISO), `before_id`, `favorite=1`, `archived=1`, `trashed=1`, `album=<id>`, `person=<id>` (kendi kişisi; değilse 404), `place=<şehir id>` (§8; sayı değilse 404), `q` (dosya adı/açıklama/kamera/kişi adı/yer adı — yer adları Türkçe büyük/küçük harf ve aksan duyarsız: "kadikoy" = "KADIKÖY"), `from`, `to`, `has_location=1`, `type=photo\|video` | `{assets:[…], next:{before,before_id}\|null}` — `taken_at DESC, id DESC`, anahtar kümesi sayfalama |
 | GET | `assets/summary` | aynı süzgeçler | `{months:[{month:"2019-07",count}]}` (ay, yerel çekim gününe göre) |
 | GET | `assets/days` | süzgeçler + `month=YYYY-MM` (zorunlu; hatalıysa 422) | `{month, days:[{day:"2019-07-14",count,cover_asset_id,before}]}` — yerel güne göre (`taken_at + taken_tz_offset`, yoksa UTC; gün başlıklarıyla aynı), yeni gün önce; `before` o güne atlamak için `assets?before=` imleci (günün en yeni `taken_at`'i + 1 sn). Web takvimi kullanır. |
-| GET | `assets/map` | süzgeçler + `bbox=minLng,minLat,maxLng,maxLat` | `{points:[{id,lat,lng}]}` (≤ 5000) |
+| GET | `assets/map` | süzgeçler + `bbox=minLng,minLat,maxLng,maxLat` | `{points:[{id,lat,lng,city?,place?}]}` (≤ 5000; `city`/`place` yer bulunduysa — harita ipuçları) |
 | POST | `assets/check` | `{sha1:[…≤500]}` | `{missing:[…]}` (silinmişler "var" sayılır) |
 | POST | `assets/trash` · `assets/restore` · `assets/purge` | `{ids:[…≤1000]}` | `{count}` |
 | GET | `assets/{id}` | – | `{asset}` |
@@ -144,7 +150,9 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | DELETE | `albums/{id}/members/{userId}` | – | `{ok}` (sahip çıkarır veya üye ayrılır) |
 | GET | `users/lookup?email=` | – | `{exists,name}` |
 | GET | `assets/random?count=12` | – | `{assets:[…]}` — son 30 gün dışındaki rastgele fotoğraflar (widget) |
-| GET | `memories?date=YYYY-MM-DD` | (varsayılan: kullanıcının bugünü) | `{date, memories:[{id,kind,title,years_ago,date,count,cover_asset_id,asset_ids,assets}]}` — `kind`: `on_this_day` / `this_week` (bugün yoksa ±3 gün) / `favorites` |
+| GET | `memories?date=YYYY-MM-DD` | (varsayılan: kullanıcının bugünü) | `{date, memories:[{id,kind,title,place,years_ago,date,count,cover_asset_id,asset_ids,assets}]}` — `kind`: `on_this_day` / `this_week` (bugün yoksa ±3 gün) / `trip` (yıldönümü bugünün ±3 gününe düşen gezi; aynı yılın günlük anısının yerini alır, `end_date`, `days`) / `favorites`. Başlıklar yer adlarıyla Türkçe ekli kurulur (§8) |
+| GET | `places` | `favorite=1`, `type` | `{places:[{id,name,admin1,country,country_code,region,count,cover_asset_id,lat,lng}], ready, pending}` — şehir düzeyinde yerler (zaman çizelgesi görünürlük kuralları), sayıya göre azalan; kapak: fotoğraf > favori > en yeni. `ready`: yer verisi kurulu mu; `pending`: yeri bekleyen konumlu öğe |
+| GET | `places/{id}` | – | `{place:{…, first_at, last_at}}`; kullanıcının o yerde öğesi yoksa 404 |
 | POST | `devices/report` | `{device_id,name,model,os_version,app_version,pending,uploaded_total,last_backup_at,last_error}` | `{ok,server_time}` — iOS yedekleme durumu (Yönetim → Genel bakış) |
 | GET | `search` | `q` (≤ 200 karakter), `from`, `to` (ISO), `favorite=1`, `sort=relevance\|date` (varsayılan relevance), `limit≤200 (60)`, `offset` | `{mode:"smart"\|"text", assets:[…], next_offset:int\|null, total, status:{indexed,total,pending,model,ready}\|null}` — akıllı mod: ML hizmetinden (config `ml.url`, varsayılan `http://127.0.0.1:8765`, zaman aşımı `ml.timeout` 3 sn, isteğe bağlı `ml.min_score`) en fazla 500 sıralı kimlik alınır; zaman çizelgesi görünürlük kurallarıyla (yalnız kendi kütüphanesi, çöp/arşiv hariç, tek kare kuralı) süzülür, sıra korunur. Dosya adı/açıklama/kamera/kişi eşleşmeleri öne alınır (hibrit). Sorguda adlandırılmış (gizli olmayan) bir kişinin adı tam sözcük olarak geçerse (`Ali plajda`; büyük/küçük harf ve i/ı duyarsız, en uzun ad) o kişinin fotoğrafları en başa gelir, kendi aralarında kalan sözcüklerle (`plajda`) akıllı sırada; diğer sonuçlar ardından korunur (ör. `Deniz` adlı kişi varken `deniz kenarı` aramasında manzaralar kaybolmaz). Hizmet yok, hata ya da sonuç yoksa `assets?q=` ile aynı metin araması (`mode:"text"`, tarihe göre); hizmet yanıt verip ilgi eşiğini geçen olmadığında metin araması da boşsa `mode:"smart"`, boş liste. Boş `q` → boş liste. `status` yalnız ilk sayfada (offset=0) |
 | GET | `search/status` | – | ML `/status` vekili: `{available:true,indexed,total,pending,model,ready}` ya da `{available:false}` |
@@ -177,6 +185,8 @@ Aynı `#edited` kaynağının yeni hali gelince eski düzenlenmiş kopya çöpe 
 
 ## 5. İş kuyruğu ve cron
 
+- `geocode` — tek asset'in yerini bulur (konumlu yükleme / içe aktarma ve konum değişikliği sonrası; yer verisi yoksa iş koyulmaz).
+- `geocode_backfill` — eksik, konumu değişmiş ya da eski veri sürümüyle işlenmiş asset'leri id sırasıyla 400'lük gruplar halinde işler; süresi dolunca `after` imleciyle kendini yeniden kuyruğa koyar (kaldığı yerden sürer). `geo-import` veri değişince ve Yönetim → Sistem'deki düğme koyar.
 - `render` — küçük resim + önizleme (vipsthumbnail → Imagick → GD; video için ffmpeg karesi). Araç yoksa `placeholder` ve iş `skipped`.
 - `import_step` — Takeout içe aktarmasını dilim dilim ilerletir ve kendini yeniden kuyruğa koyar.
 - Tüketiciler: Ubuntu'da `bin/worker.php` (systemd), hostingde `bin/cron.php` veya `web/cron.php?key=…` (dakikalık).
@@ -353,3 +363,37 @@ verilirse PHP gibi MySQL Unix soketi kullanılır.
 `ml/tests/xm3600_bench.py` (Türkçe kalite karşılaştırması, yukarıda), `ml/tests/test_faces.py` (yüz tanıma,
 geçici DB + LFW ile uçtan uca), `ml/tests/face_eval.py` (LFW uzaklık/kümeleme/gecikme/RAM ölçümü),
 `ml/tests/test_face_ops.py` (NMS, Umeyama, hizalama, kümeleme birim testleri; model/DB gerekmez).
+
+## 8. Yerler (çevrimdışı ters coğrafi kodlama)
+
+Fotoğraf konumları **hiçbir dış servise gönderilmeden** yer adlarına çevrilir. Veri: [GeoNames](https://www.geonames.org)
+(Creative Commons Attribution 4.0 — atıf web'de Yerler sayfasının altında, iOS'ta Yerler listesinin altında ve Yönetim → Sistem'de).
+
+- **İndirme** (`server/install-geo.sh`, `update.sh` ve `install-ubuntu.sh` çağırır): `/var/lib/ownmemories/geo` içine
+  `cities500.zip` (dünya, nüfusu 500+ yerleşimler), `TR.zip` (Türkiye'nin tüm yerleşimleri ve mahalleleri; il/ilçe adları
+  Türkçe harfli), `admin1CodesASCII.txt`, `admin2Codes.txt`, `countryInfo.txt` — ~30 MB indirme. 30 günden yeni dosyalar
+  yeniden indirilmez (`--force`). İndirme başarısızsa eldeki kopya kullanılır; ilk kurulumda başarısızsa güncelleme yine biter.
+- **İçe aktarma** (`bin/geo-import.php` → `geo_import()`): dosya özetinden bir sürüm (`site_settings.geo_version`) üretir;
+  değişmediyse atlar. `geo_places_new`'e 500'lük toplu INSERT ile yükler, `RENAME TABLE` ile atomik değiştirir
+  (~290 bin yer, ~46 MB, ~7 sn, 128 MB PHP belleği yeter). Tarihî/terk edilmiş/dinî (PPLH, PPLQ, PPLW, PPLCH) ve adında rakam
+  olan yerler ("Paris 01 Louvre") alınmaz. Türkçe adlar: Türkiye'deki yerlerde `alternatenames` içinden aynı yazılışın Türkçe
+  harfli biçimi ("Istanbul" → "İstanbul"); yabancı şehirlerde `web/includes/places_data.php` tablosu (Rome → Roma, Athens → Atina…);
+  ülkelerde ICU (`Locale::getDisplayRegion(…, 'tr')`, yoksa tablo). Veri değiştiyse `geocode_backfill` kuyruğa girer.
+- **Arama** (`geo_lookup`): noktanın 0,1°'lik hücresi ve ±2 komşu hücredeki yerler (yoksa ±6) tek indeksli sorguyla gelir,
+  uzaklık PHP'de (haversine) hesaplanır (~1,5 ms). 50 km'de yer yoksa `null`.
+  - `name`: en yakın yer 3 km içindeyse o (mahalle/köy: "Moda", "Alsancak"), değilse şehir.
+  - `city`: mahalle (PPLX) olmayan yerler arasında `uzaklık / nüfus^¼` en küçük olan; seçilen il merkezi değilse ve 12 km
+    (nüfus ≥ 1 M) / 6 km (≥ 250 bin) içinde daha kalabalık bir il merkezi/başkent varsa o (Konak → İzmir, Üsküdar → İstanbul);
+    il merkezi olmayan ama en az 5 kat kalabalık (≥ 100 bin; 3 km) bir yerleşim de şehri kapsar (Libération semti → Nice).
+  - `district`: yalnız Türkiye'de ilçe; `admin1`: il / eyalet; `region`: `places_data.php` bölgeleri (Kapadokya, 16 km).
+- **Biçim**: `label` = ad, ilçe, şehir, il, ülke (tekrarsız; boşluk farkı yok sayılır): "Moda, Kadıköy, İstanbul, Türkiye".
+  Türkiye'de ilçe biliniyorsa "şehir" (yakındaki büyük yerleşim, başka ilçede olabilir) etikete girmez: "Çavuşin, Avanos, Nevşehir";
+  yer il merkezinin kendisiyse ilçe önce: "Osmangazi, Bursa". `short` (gün başlığı) = ilk iki parça, Türkiye dışında ülkeyle:
+  "Moda, Kadıköy" · "Bozcaada, Çanakkale" · "Paris, Fransa". Konum, yer bulunduktan sonra değiştiyse (iş bekliyor) `place` null.
+- **Arama anahtarı**: tüm adlar (Türkçe + yerel + İngilizce ülke adı + bölge) `places_fold()` ile katlanır ("Kadıköy" → "kadikoy");
+  `q` de katlanıp kelime başı `LIKE` ile eşleşir.
+- **Anılar**: Türkçe bulunma eki `tr_locative()` (ünlü uyumu, sert ünsüzden sonra -ta/-te, kesme işareti; okunuşu farklı adlar
+  tablodan: "Nice'te"). Ev = en çok farklı ayda (≥ 3) fotoğraf çekilen şehir. Ev dışında (40 km+) geçen ardışık günler (en çok 1 boş
+  gün) gezidir (≥ 3 öğe); baskın yer en az %60 ise o yer (bölge önce), değilse tek ülkedeyse ülke. Başlıklar: 1 gün "Bozcaada'da bir
+  gün", hafta sonunu içeren 2–3 gün "Paris'te bir hafta sonu", 2–5 gün "Roma'da 4 gün", 6–9 gün "Bozcaada'da bir hafta",
+  10+ gün ya da ülke "Kapadokya, Kasım 2021". Günlük anılar evden uzaktaysa: "2 yıl önce bugün Roma'da".

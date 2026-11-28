@@ -253,3 +253,87 @@ final class PeopleModelTests: XCTestCase {
         XCTAssertEqual(bulk.person.name, "Ali")
     }
 }
+
+final class PlaceModelTests: XCTestCase {
+    func testDecodeAssetPlaceAndMissingPlace() throws {
+        let json = """
+        {"id":"6f1c0f3e-1111-4222-8333-444455556666","type":"photo","filename":"IMG_2.HEIC","mime":"image/heic","size":1,
+         "width":1,"height":1,"duration_ms":null,"taken_at":"2023-11-25T07:00:00Z","taken_local":"2023-11-25T10:00:00+03:00",
+         "tz_offset":180,"date_source":"exif","latitude":40.987,"longitude":29.0262,"camera_make":null,"camera_model":null,
+         "description":null,"is_favorite":false,"is_archived":false,"live_pair_id":null,"edited_of_id":null,"thumb_state":"ready","place":{"id":745044,"name":"Moda","city":"İstanbul","district":"Kadıköy","admin1":"İstanbul","country":"Türkiye",
+          "country_code":"TR","region":null,"label":"Moda, Kadıköy, İstanbul, Türkiye","short":"Moda, Kadıköy"}}
+        """
+        let a = try JSONDecoder().decode(Asset.self, from: Data(json.utf8))
+        XCTAssertEqual(a.place?.id, 745044)
+        XCTAssertEqual(a.place?.label, "Moda, Kadıköy, İstanbul, Türkiye")
+        XCTAssertEqual(a.place?.short, "Moda, Kadıköy")
+        XCTAssertEqual(a.place?.district, "Kadıköy")
+        XCTAssertEqual(a.place?.countryCode, "TR")
+        XCTAssertNil(a.place?.region)
+        // Eski sunucu / konumsuz öğe: alan yok ya da null
+        let start = json.range(of: #","place":{"#)!.lowerBound
+        let noPlace = String(json[..<start]) + "}"
+        XCTAssertNil(try JSONDecoder().decode(Asset.self, from: Data(noPlace.utf8)).place)
+        let nullPlace = json.replacingOccurrences(of: #""place":{"#, with: #""place":null,"x":{"#)
+        XCTAssertNil(try JSONDecoder().decode(Asset.self, from: Data(nullPlace.utf8)).place)
+    }
+
+    func testDecodePlacesAndGroupByCountry() throws {
+        let json = """
+        {"places":[
+         {"id":745044,"name":"İstanbul","admin1":"İstanbul","country":"Türkiye","country_code":"TR","region":null,"count":72,"cover_asset_id":"a","lat":41.01,"lng":28.95},
+         {"id":2988507,"name":"Paris","admin1":"Île-de-France","country":"Fransa","country_code":"FR","region":null,"count":40,"cover_asset_id":"b","lat":48.85,"lng":2.35},
+         {"id":320700,"name":"Bozcaada","admin1":"Çanakkale","country":"Türkiye","country_code":"TR","region":null,"count":20,"cover_asset_id":"c","lat":39.83,"lng":26.07},
+         {"id":313947,"name":"Göreme","admin1":"Nevşehir","country":"Türkiye","country_code":"TR","region":"Kapadokya","count":15,"cover_asset_id":null,"lat":null,"lng":null}
+        ],"ready":true,"pending":3}
+        """
+        let r = try JSONDecoder().decode(PlacesResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(r.places.count, 4)
+        XCTAssertEqual(r.pending, 3)
+        XCTAssertEqual(r.ready, true)
+        XCTAssertEqual(r.places[3].region, "Kapadokya")
+        XCTAssertNil(r.places[3].coverAssetId)
+        XCTAssertNil(r.places[0].subtitle, "il = şehir adı: ikinci satır yok")
+        XCTAssertEqual(r.places[2].subtitle, "Çanakkale")
+        let groups = PlaceText.group(r.places)
+        XCTAssertEqual(groups.map(\.code), ["TR", "FR"])
+        XCTAssertEqual(groups[0].name, "Türkiye")
+        XCTAssertEqual(groups[0].count, 107)
+        XCTAssertEqual(groups[0].places.map(\.name), ["İstanbul", "Bozcaada", "Göreme"])
+        let one = try JSONDecoder().decode(PlaceEnvelope.self, from: Data(#"{"place":{"id":320700,"name":"Bozcaada","admin1":"Çanakkale","country":"Türkiye","country_code":"TR","region":null,"count":20,"first_at":"2023-11-25T07:00:00Z","last_at":"2023-11-30T11:52:00Z","lat":39.83,"lng":26.07}}"#.utf8))
+        XCTAssertEqual(one.place.firstAt, "2023-11-25T07:00:00Z")
+        XCTAssertNil(one.place.coverAssetId)
+    }
+
+    func testPlaceTextFoldAndItems() {
+        XCTAssertEqual(PlaceText.fold("İZMİR"), PlaceText.fold("izmir"))
+        XCTAssertEqual(PlaceText.fold("Kadıköy"), "kadikoy")
+        XCTAssertEqual(PlaceText.items(1240), "1.240 öğe")
+    }
+
+    func testDecodeTripMemoryWithPlace() throws {
+        let json = """
+        {"date":"2026-11-28","memories":[{"id":"trip:2023-11-25","kind":"trip","title":"Bozcaada'da bir hafta","place":"Bozcaada",
+        "years_ago":3,"date":"2023-11-25","count":0,"cover_asset_id":"c","asset_ids":[],"assets":[]}]}
+        """
+        let m = try JSONDecoder().decode(MemoriesResponse.self, from: Data(json.utf8)).memories[0]
+        XCTAssertEqual(m.kind, "trip")
+        XCTAssertEqual(m.title, "Bozcaada'da bir hafta")
+        XCTAssertEqual(m.place, "Bozcaada")
+    }
+
+    private func asset(_ id: String, city: String?, short: String? = nil) throws -> Asset {
+        let place = city.map { #","place":{"id":1,"name":"x","city":"\#($0)","district":null,"admin1":null,"country":"Türkiye","country_code":"TR","region":null,"label":"x","short":"\#(short ?? $0)"}"# } ?? ""
+        let json = #"{"id":"\#(id)","type":"photo","filename":"a.jpg","mime":null,"size":1,"width":null,"height":null,"duration_ms":null,"taken_at":"2026-01-01T10:00:00Z","taken_local":null,"tz_offset":null,"date_source":null,"latitude":null,"longitude":null,"camera_make":null,"camera_model":null,"description":null,"is_favorite":false,"is_archived":false,"live_pair_id":null,"edited_of_id":null,"thumb_state":null\#(place)}"#
+        return try JSONDecoder().decode(Asset.self, from: Data(json.utf8))
+    }
+
+    func testDayPlace() throws {
+        XCTAssertNil(DayGrouping.place(for: [try asset("1", city: nil)]))
+        let one = [try asset("1", city: "İstanbul", short: "Moda, Kadıköy"), try asset("2", city: "İstanbul", short: "Moda, Kadıköy"),
+                   try asset("3", city: "İstanbul", short: "Beşiktaş"), try asset("4", city: nil)]
+        XCTAssertEqual(DayGrouping.place(for: one), "Moda, Kadıköy")
+        let two = [try asset("1", city: "Çeşme"), try asset("2", city: "İzmir"), try asset("3", city: "İzmir"), try asset("4", city: "Urla")]
+        XCTAssertEqual(DayGrouping.place(for: two), "İzmir, Çeşme")
+    }
+}

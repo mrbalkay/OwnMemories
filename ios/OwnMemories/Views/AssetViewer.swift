@@ -649,8 +649,28 @@ private struct AssetInfoView: View {
                 }
                 if let lat = asset.latitude, let lng = asset.longitude {
                     Section("Konum") {
-                        Text(String(format: "%.5f, %.5f", lat, lng))
-                        if let url = URL(string: "https://maps.apple.com/?ll=\(lat),\(lng)&q=Foto%C4%9Fraf") {
+                        // Yer adı (sunucu çevrimdışı bulur): "Moda, Kadıköy, İstanbul, Türkiye"; koordinatlar küçük, ikincil.
+                        if let place = asset.place {
+                            VStack(alignment: .leading, spacing: 3) {
+                                if let region = place.region, PlaceText.fold(region) != PlaceText.fold(place.name) {
+                                    Text(region)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(theme.name == .yerel ? theme.accent : theme.muted)
+                                }
+                                Text(place.label)
+                                    .font(.body.weight(.semibold))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text(String(format: "%.5f, %.5f", lat, lng))
+                                    .font(.caption)
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel(Text(verbatim: "Koordinatlar \(String(format: "%.5f, %.5f", lat, lng))"))
+                            }
+                            .padding(.vertical, 2)
+                        } else {
+                            Text(String(format: "%.5f, %.5f", lat, lng)).monospacedDigit()
+                        }
+                        if let url = URL(string: "https://maps.apple.com/?ll=\(lat),\(lng)&q=\((asset.place?.name ?? "Fotoğraf").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "Foto%C4%9Fraf")") {
                             Link("Haritada aç", destination: url)
                         }
                     }

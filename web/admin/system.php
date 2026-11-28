@@ -3,8 +3,15 @@ declare(strict_types=1);
 
 require __DIR__ . '/_layout.php';
 $admin = admin_page_start('system');
-$tools = tools_detect($_SERVER['REQUEST_METHOD'] === 'POST');
+$geoAction = $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'geocode';
+$tools = tools_detect($_SERVER['REQUEST_METHOD'] === 'POST' && !$geoAction);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($geoAction) {
+        csrf_verify();
+        places_enqueue_backfill();
+        flash('ok', t('admin.geo_queued'));
+        redirect('/admin/system.php');
+    }
     flash('ok', t('admin.saved'));
     redirect('/admin/system.php');
 }
@@ -21,6 +28,16 @@ $limits = ['upload_max_filesize', 'post_max_size', 'memory_limit', 'max_executio
 <?php foreach ($rows as [$n, $v]): ?><tr><td><?= e($n) ?></td><td class="<?= $v ? 'yes' : 'no' ?>"><?= $v ? e(t('admin.found')) : e(t('admin.missing')) ?></td><td class="muted small"><?= e((string) $v) ?></td></tr><?php endforeach; ?>
 </tbody></table>
 <form method="post"><?= csrf_field() ?><button class="btn"><?= e(t('admin.refresh_tools')) ?></button></form>
+<?php $geo = admin_places_status(); ?>
+<h2><?= e(t('admin.geo')) ?></h2>
+<table class="tbl"><tbody>
+<tr><td><?= e(t('admin.geo_state')) ?></td><td class="<?= $geo['ready'] ? 'yes' : 'no' ?>"><?= e($geo['ready'] ? t('admin.geo_ready') : t('admin.geo_missing')) ?></td>
+  <td class="muted small"><?= $geo['ready'] ? e(t('admin.geo_places', ['n' => number_format($geo['places'], 0, ',', '.')])) : '<code>sudo bash server/install-geo.sh</code>' ?></td></tr>
+<tr><td><?= e(t('admin.geo_imported')) ?></td><td><?= $geo['imported_at'] ? admin_ago($geo['imported_at']) : '—' ?></td><td></td></tr>
+<tr><td><?= e(t('admin.geo_located')) ?></td><td><?= e(number_format($geo['located'], 0, ',', '.')) ?></td><td class="muted small"><?= e(t('admin.geo_pending', ['n' => number_format($geo['pending'], 0, ',', '.')])) ?></td></tr>
+</tbody></table>
+<?php if ($geo['ready']): ?><form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="geocode"><button class="btn"><?= e(t('admin.geo_run')) ?></button></form><?php endif; ?>
+<p class="muted small"><?= e(t('admin.geo_note')) ?></p>
 <h2><?= e(t('admin.php_limits')) ?></h2>
 <table class="tbl"><tbody>
 <tr><td>PHP</td><td><?= e(PHP_VERSION) ?> (<?= e(PHP_SAPI) ?>)</td></tr>

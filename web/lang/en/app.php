@@ -81,4 +81,13 @@ return [
     'removed_from_person' => 'Removed {n} photos from this person', 'open_person' => 'Photos of {name}',
     'name_face' => 'Name', 'show_faces' => 'Show faces', 'hide_faces' => 'Hide faces', 'detected_faces' => 'Unrecognised faces',
     'faces_on_photo' => 'Faces in this photo', 'face_of' => 'Face of {name}', 'name_this_face' => 'Name this face', 'unknown_face' => 'Who is this?',
+    // Places
+    'places' => 'Places', 'places_sub' => '{n} places · {c} countries', 'place_photos' => '{n} items', 'places_empty_title' => 'No places yet',
+    'places_empty' => 'Photos with a location are gathered here city by city. Place names come from offline GeoNames data on your server; your location is never sent to any outside service.',
+    'places_no_data' => 'Place name data is not installed yet. On the server run: sudo bash server/install-geo.sh',
+    'places_pending' => 'Finding places for {n} photos…', 'places_all' => 'All places', 'place_not_found' => 'Place not found.',
+    'place_range' => '{from} – {to}', 'map_view' => 'Map', 'places_view' => 'Places', 'map_place' => '{place} · {n} items',
+    'places_attribution' => 'Place names: GeoNames (CC BY 4.0)', 'coords' => 'Coordinates', 'trip_years_ago' => '{n} years ago',
+    'place_country_count' => '{n} places', 'view_switch' => 'View',
+    'open_place' => 'Photos in {name}',
 ];

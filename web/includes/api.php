@@ -123,6 +123,8 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['DELETE', "#^/v1/assets/$uuid/people/(\d+)$#", fn($m) => api_asset_people_remove(api_need_user($user), $m[1], $m[2])],
         ['PATCH', '#^/v1/faces/(\d+)$#', fn($m) => api_face_patch(api_need_user($user), $m[1], $body)],
         ['GET', '#^/v1/faces/(\d+)/thumb$#', fn($m) => api_face_thumb(api_need_user($user), $m[1])],
+        ['GET', '#^/v1/places$#', fn() => api_places_list(api_need_user($user), $query)],
+        ['GET', '#^/v1/places/(\d+)$#', fn($m) => api_place_get(api_need_user($user), $m[1])],
         ['POST', '#^/v1/devices/report$#', fn() => api_ok(device_report((int) api_need_user($user)['id'], $body))],
     ];
     $methodMismatch = false;
@@ -215,6 +217,14 @@ function api_asset_filters(array $user, array $q): array
         $where[] = 'a.id IN (SELECT asset_id FROM asset_person WHERE person_id = ?)';
         $args[] = (int) $personId;
     }
+    $placeId = (string) ($q['place'] ?? '');
+    if ($placeId !== '') {
+        if (!ctype_digit($placeId)) {
+            api_not_found();
+        }
+        $where[] = 'EXISTS (SELECT 1 FROM asset_places pl WHERE pl.asset_id = a.id AND pl.city_id = ?)';
+        $args[] = (int) $placeId;
+    }
     if (api_bool($q['favorite'] ?? null)) {
         $where[] = 'a.is_favorite = 1';
     }
@@ -236,8 +246,14 @@ function api_asset_filters(array $user, array $q): array
     $text = trim((string) ($q['q'] ?? ''));
     if ($text !== '') {
         $like = '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], mb_substr($text, 0, 100)) . '%';
-        $where[] = '(a.original_filename LIKE ? OR a.description LIKE ? OR a.camera_model LIKE ? OR a.camera_make LIKE ? OR EXISTS (SELECT 1 FROM asset_person ap JOIN people p ON p.id = ap.person_id WHERE ap.asset_id = a.id AND p.name LIKE ?))';
+        // Yer adları: katlanmış anahtar ("Kadıköy" = "KADIKÖY" = "kadikoy"; İ/ı dahil).
+        $fold = places_fold(mb_substr($text, 0, 100));
+        $placeCond = $fold !== '' ? ' OR EXISTS (SELECT 1 FROM asset_places pk WHERE pk.asset_id = a.id AND pk.search_key LIKE ?)' : '';
+        $where[] = '(a.original_filename LIKE ? OR a.description LIKE ? OR a.camera_model LIKE ? OR a.camera_make LIKE ? OR EXISTS (SELECT 1 FROM asset_person ap JOIN people p ON p.id = ap.person_id WHERE ap.asset_id = a.id AND p.name LIKE ?)' . $placeCond . ')';
         array_push($args, $like, $like, $like, $like, $like);
+        if ($placeCond !== '') {
+            $args[] = '% ' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $fold) . '%';
+        }
     }
     return [implode(' AND ', $where), $args];
 }
@@ -265,7 +281,7 @@ function api_assets_list(array $user, array $q): array
         $last = end($rows);
         $next = ['before' => iso_utc($last['taken_at']), 'before_id' => $last['id']];
     }
-    return api_ok(['assets' => array_map('asset_to_json', $rows), 'next' => $next]);
+    return api_ok(['assets' => assets_json($rows), 'next' => $next]);
 }
 
 function api_assets_summary(array $user, array $q): array
@@ -328,8 +344,11 @@ function api_assets_map(array $user, array $q): array
         $where .= ' AND a.latitude BETWEEN ? AND ? AND a.longitude BETWEEN ? AND ?';
         array_push($args, $minLat, $maxLat, $minLng, $maxLng);
     }
-    $rows = db_all("SELECT a.id, a.latitude, a.longitude FROM assets a WHERE $where ORDER BY a.taken_at DESC LIMIT 5000", $args);
-    return api_ok(['points' => array_map(fn($r) => ['id' => $r['id'], 'lat' => (float) $r['latitude'], 'lng' => (float) $r['longitude']], $rows)]);
+    $rows = db_all("SELECT a.id, a.latitude, a.longitude, pl.city, pl.name AS place_name FROM assets a LEFT JOIN asset_places pl ON pl.asset_id = a.id
+        WHERE $where ORDER BY a.taken_at DESC LIMIT 5000", $args);
+    // Yer adı (varsa): küme ipuçları için şehir ve en yakın yer.
+    return api_ok(['points' => array_map(fn($r) => ['id' => $r['id'], 'lat' => (float) $r['latitude'], 'lng' => (float) $r['longitude']]
+        + ($r['city'] !== null ? ['city' => $r['city'], 'place' => $r['place_name']] : []), $rows)]);
 }
 
 /** Kimlik listesiyle öğeleri getirir (haritadaki bir kümenin fotoğrafları gibi): yalnızca kullanıcının
@@ -350,6 +369,7 @@ function api_assets_lookup(array $user, array $b): array
     foreach ($rows as $r) {
         $byId[$r['id']] = $r;
     }
+    places_prefetch(array_keys($byId));
     $out = [];
     foreach ($ids as $id) {
         if (isset($byId[$id])) {
@@ -484,6 +504,13 @@ function api_asset_patch(array $user, string $id, array $b): array
         $set[] = 'updated_at = ?';
         array_push($args, $v, now_utc(), $id, $uid);
         db_exec('UPDATE assets SET ' . implode(', ', $set) . ' WHERE id = ? AND user_id = ?', $args);
+        if (array_key_exists('latitude', $b) || array_key_exists('longitude', $b)) {
+            if (($b['latitude'] ?? null) === null) {
+                asset_place_delete($id);
+            } else {
+                places_enqueue_asset($id);
+            }
+        }
     }
     return api_asset_get($user, $id);
 }
@@ -568,7 +595,7 @@ function api_assets_random(array $user, array $q): array
     $rows = db_all('SELECT a.* FROM assets a WHERE ' . memories_base_where() . " AND a.type = 'photo' AND a.taken_at < ? ORDER BY RAND() LIMIT $n", [
         (int) $user['id'], gmdate('Y-m-d H:i:s', time() - 30 * 86400),
     ]);
-    return api_ok(['assets' => array_map('asset_to_json', $rows)]);
+    return api_ok(['assets' => assets_json($rows)]);
 }
 
 function api_memories(array $user, array $q): array
