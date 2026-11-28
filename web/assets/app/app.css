@@ -150,8 +150,8 @@ svg.fill { fill: currentColor; stroke: none; }
 
 .scrubber { position: fixed; right: 8px; top: 84px; bottom: 16px; display: flex; flex-direction: column; overflow-y: auto; scrollbar-width: none; z-index: 5; }
 .scrubber::-webkit-scrollbar { display: none; }
-.scrubber button { border: 0; background: none; color: var(--faint); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; padding: 3px 7px; border-radius: 7px; cursor: pointer; text-align: right; transition: color .15s, background .15s; }
-.scrubber button:hover { color: var(--accent); background: var(--accent-soft); }
+.scrubber button[data-year] { border: 0; background: none; color: var(--faint); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; padding: 3px 7px; border-radius: 7px; cursor: pointer; text-align: right; transition: color .15s, background .15s; }
+.scrubber button[data-year]:hover { color: var(--accent); background: var(--accent-soft); }
 
 /* ------------------------------------------------------------ seçim çubuğu */
 .selbar { position: absolute; top: 12px; left: 24px; right: 24px; z-index: 11; display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 14px; background: var(--raised); box-shadow: var(--shadow-2); flex-wrap: wrap; }
@@ -328,10 +328,119 @@ dialog.modal h3 { font-size: 14px; margin: 18px 0 6px; }
 .month-count { display: none; }
 .day-sub { font-weight: 500; opacity: .8; }
 .day-sel { display: none; }
-.scrub-now { display: none; }
-.scrubber button.on { color: var(--accent); }
+/* .scrub-now: takvimi açan düğme (bkz. calendar.js); temalar biçimler. */
+.scrubber button[data-year].on { color: var(--accent); }
 
 .story-heading, .story-side, .story-bottom { display: none; }
 .story-film { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 .story-thumb { flex: none; border: 0; padding: 0; background: none; cursor: pointer; }
 .story-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* ------------------------------------------------------------ takvim (calendar.js)
+   Yıl rayındaki .scrub-now / yıl düğmeleri ve mobilde .cal-fab açar. Masaüstü: raya bağlı açılır kutu,
+   ≤ 860px: alt sayfa. Temalar renk/yazı/rozet biçimini geçersiz kılar. */
+.scrub-now {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 1px; margin: 0 0 8px; padding: 6px 8px; border: 0; border-radius: 9px;
+  background: none; color: var(--ink); font: 600 11px/1.2 var(--sans); text-align: right; cursor: pointer; transition: background .15s, color .15s;
+}
+.scrub-now:empty { display: none; }
+.scrub-now:hover, .scrub-now[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+.scrub-now:focus-visible, .scrubber button[data-year]:focus-visible, .cal-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scrub-month { text-transform: capitalize; }
+.scrub-year { font-variant-numeric: tabular-nums; color: var(--muted); }
+.cal-fab { display: none; }
+
+.cal-layer { position: fixed; inset: 0; z-index: 40; }
+.cal-backdrop { position: absolute; inset: 0; background: transparent; }
+.cal {
+  --cal-cell: 42px;
+  position: fixed; top: 84px; right: 96px; width: 340px; max-height: calc(100dvh - 24px); overflow: auto; overscroll-behavior: contain;
+  padding: 14px 14px 12px; border-radius: 18px; background: var(--raised); color: var(--text);
+  border: 1px solid var(--line); box-shadow: var(--shadow-2);
+  opacity: 0; transform: translateX(10px) scale(.98); transform-origin: 100% 0; transition: opacity .18s ease, transform .22s cubic-bezier(.2, .8, .2, 1);
+}
+.cal:focus { outline: none; }
+.cal-layer.in .cal { opacity: 1; transform: none; }
+.cal-layer.out .cal { opacity: 0; transform: translateX(6px) scale(.985); }
+.cal-grabber { display: none; }
+.cal-head { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 4px; margin-bottom: 10px; }
+.cal-title { display: flex; flex-direction: column; align-items: center; min-width: 0; text-align: center; }
+.cal-title-main { font-family: var(--serif); font-size: 21px; line-height: 1.15; color: var(--ink); white-space: nowrap; }
+.cal-month { text-transform: capitalize; }
+.cal-year { font-variant-numeric: tabular-nums; }
+.cal-sub { min-height: 16px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cal-nav, .cal-close {
+  display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: var(--ink); cursor: pointer; transition: background .15s, color .15s, opacity .15s;
+}
+.cal-nav .ic svg, .cal-close .ic svg { width: 18px; height: 18px; }
+.cal-nav:hover:not(:disabled), .cal-close:hover { background: var(--accent-soft); color: var(--accent); }
+.cal-nav:disabled { opacity: .25; cursor: default; }
+.cal-nav:focus-visible, .cal-close:focus-visible, .cal-jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cal-close { width: 30px; height: 30px; margin-left: 2px; color: var(--muted); }
+.cal-week, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-week { margin-bottom: 4px; }
+.cal-wd { font-size: 11px; font-weight: 600; text-align: center; color: var(--muted); letter-spacing: .02em; }
+.cal-wd.is-weekend { color: var(--faint); }
+.cal-row { display: contents; }
+.cal-cell, .cal-pad { display: block; min-width: 0; }
+.cal-day {
+  position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 1; min-height: 36px; padding: 0;
+  border: 0; border-radius: 11px; background: none; color: var(--faint); font: 500 13px/1 var(--sans); font-variant-numeric: tabular-nums;
+  cursor: default; isolation: isolate; transition: background .15s, color .15s, transform .15s;
+}
+.cal-day[aria-disabled="true"] { opacity: .6; }
+.cal-num { position: relative; z-index: 2; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; }
+.cal-day.is-today .cal-num { box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent); font-weight: 700; }
+.cal-day.has { color: var(--ink); font-weight: 700; background: var(--sunken); cursor: pointer; }
+.cal-day.has:hover { transform: translateY(-1px); }
+.cal-day.has:active { transform: scale(.96); }
+.cal-day:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 3; }
+.cal-cover { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; opacity: 0; transition: opacity .3s ease; pointer-events: none; }
+.cal-cover.in { opacity: .3; }
+.cal-count {
+  position: absolute; z-index: 2; top: -5px; right: -5px; min-width: 17px; height: 16px; padding: 0 4.5px; border-radius: 8px;
+  box-shadow: 0 0 0 2px var(--raised);
+  background: var(--accent); color: var(--accent-ink); font: 700 9.5px/16px var(--sans); text-align: center; letter-spacing: -.01em; font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.cal.is-loading .cal-grid { animation: om-cal-wait 1.1s ease-in-out infinite alternate; }
+@keyframes om-cal-wait { from { opacity: 1; } to { opacity: .55; } }
+.cal-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.cal-hint { font-size: 12px; color: var(--muted); }
+.cal-jump { flex: none; border: 0; background: none; padding: 4px 2px; color: var(--accent); font: 600 12.5px/1.2 var(--sans); cursor: pointer; border-radius: 6px; }
+.cal-jump:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* Takvimden gidilen gün kısa bir an vurgulanır. */
+.day-group.day-flash { animation: om-day-flash 2.1s ease-out; border-radius: 12px; }
+@keyframes om-day-flash {
+  0%, 25% { background: var(--accent-soft); box-shadow: 0 0 0 8px var(--accent-soft); }
+  100% { background: transparent; box-shadow: 0 0 0 8px transparent; }
+}
+
+@media (max-width: 860px) {
+  .cal-fab {
+    position: fixed; z-index: 9; right: 14px; bottom: calc(18px + env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: 7px;
+    height: 40px; padding: 0 15px 0 12px; border: 1px solid var(--line); border-radius: 20px; background: var(--glass); color: var(--ink);
+    backdrop-filter: saturate(1.6) blur(18px); -webkit-backdrop-filter: saturate(1.6) blur(18px); box-shadow: var(--shadow-1);
+    font: 600 13px/1 var(--sans); cursor: pointer;
+  }
+  .cal-fab:empty, .cal-fab-text:empty { display: none; }
+  .cal-fab-text { text-transform: capitalize; }
+  .cal-fab-ic svg { display: block; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .cal-backdrop { background: rgba(0, 0, 0, .38); opacity: 0; transition: opacity .2s ease; }
+  .cal-layer.in .cal-backdrop { opacity: 1; }
+  .cal-layer.out .cal-backdrop { opacity: 0; }
+  .cal {
+    --cal-cell: auto; top: auto; right: 0; left: 0; bottom: 0; width: auto; max-height: 88dvh;
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; border-width: 1px 0 0;
+    transform: translateY(100%); transition: opacity .2s ease, transform .3s cubic-bezier(.2, .8, .2, 1);
+  }
+  .cal-layer.in .cal { transform: none; }
+  .cal-layer.out .cal { transform: translateY(100%); opacity: 1; }
+  .cal-grabber { display: block; width: 38px; height: 5px; margin: 0 auto 10px; border-radius: 3px; background: var(--faint); opacity: .5; }
+  .cal-week, .cal-grid { gap: 5px; }
+  .cal-day { font-size: 15px; border-radius: 13px; }
+  .cal-num { width: 30px; height: 30px; }
+  .cal-count { top: -5px; right: -4px; height: 18px; min-width: 19px; border-radius: 9px; font-size: 10.5px; line-height: 18px; }
+}

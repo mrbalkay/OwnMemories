@@ -20,9 +20,11 @@ struct OwnMemoriesApp: App {
                 .environmentObject(router)
                 .onOpenURL { router.handle($0) }
         }
-        .onChange(of: scenePhase) { _, phase in
+        .onChange(of: scenePhase) { old, phase in
+            DiagLog.add("Sahne: \(Self.phaseName(old)) → \(Self.phaseName(phase))")
             switch phase {
             case .active:
+                engine.setSceneActive(true)
                 if session.isLoggedIn {
                     engine.start(reason: "açılış")
                     Task {
@@ -33,9 +35,19 @@ struct OwnMemoriesApp: App {
             case .background:
                 engine.enterBackground()
                 BackgroundJobs.schedule()
+                Task { await ImageLoader.shared.purge() }
             default:
-                break
+                engine.setSceneActive(false)
             }
+        }
+    }
+
+    private static func phaseName(_ phase: ScenePhase) -> String {
+        switch phase {
+        case .active: return "etkin"
+        case .inactive: return "etkin değil"
+        case .background: return "arka plan"
+        @unknown default: return "bilinmiyor"
         }
     }
 }

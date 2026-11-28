@@ -265,17 +265,18 @@ const API_LOCAL_TAKEN = 'DATE_ADD(a.taken_at, INTERVAL COALESCE(a.taken_tz_offse
  */
 function api_assets_days(array $user, array $q): array
 {
-    $month = (string) ($q['month'] ?? '');
+    $month = is_string($q['month'] ?? null) ? $q['month'] : '';
     if (!preg_match('/^(\d{4})-(\d{2})$/', $month, $m) || (int) $m[2] < 1 || (int) $m[2] > 12 || (int) $m[1] < 1900 || (int) $m[1] > 9999) {
         throw new ValidationError('Geçersiz ay (YYYY-MM).', 'month');
     }
     [$where, $args] = api_asset_filters($user, $q);
     $local = API_LOCAL_TAKEN;
     $start = sprintf('%04d-%02d-01 00:00:00', (int) $m[1], (int) $m[2]);
-    $end = gmdate('Y-m-d H:i:s', (int) strtotime("$start UTC +1 month"));
+    // Ay sonu SQL'de hesaplanır (9999-12 gibi uçlarda PHP 5 haneli yıl üretmesin; MySQL NULL verir → boş).
+    $end = 'DATE_ADD(CAST(? AS DATETIME), INTERVAL 1 MONTH)';
     // taken_at aralığı dizini kullanır (±14 sa dengeleme payı); yerel ifade kesin süzer.
-    $where .= " AND a.taken_at >= DATE_SUB(?, INTERVAL 14 HOUR) AND a.taken_at < DATE_ADD(?, INTERVAL 14 HOUR) AND $local >= ? AND $local < ?";
-    array_push($args, $start, $end, $start, $end);
+    $where .= " AND a.taken_at >= DATE_SUB(?, INTERVAL 14 HOUR) AND a.taken_at < DATE_ADD($end, INTERVAL 14 HOUR) AND $local >= ? AND $local < $end";
+    array_push($args, $start, $start, $start, $start);
     $rows = db_all(
         "SELECT day, n, last_at, id FROM (
             SELECT DATE($local) AS day, a.id, a.taken_at,

@@ -71,7 +71,15 @@ export function openCalendar(o) {
     h('div', { class: 'cal-grabber', 'aria-hidden': 'true' }),
     h('header', { class: 'cal-head' }, prevBtn, title, nextBtn, closeBtn),
     week, grid, foot);
-  const backdrop = h('div', { class: 'cal-backdrop', onclick: () => close() });
+  // Dışarı tıklama kapatır; tıklanan yer yıl rayındaki başka bir düğmeyse takvim o yılda yeniden açılır.
+  const backdrop = h('div', {
+    class: 'cal-backdrop',
+    onclick: (e) => {
+      const under = document.elementsFromPoint(e.clientX, e.clientY).find((el) => el.matches?.('.scrubber button') && el !== o.anchor);
+      close(!under);
+      under?.click();
+    },
+  });
   const layer = h('div', { class: 'cal-layer' }, backdrop, dialog);
 
   /** Fotoğraflı aylar arasında gezinme: dir=1 daha eski, dir=-1 daha yeni. */
@@ -204,6 +212,8 @@ export function openCalendar(o) {
   }
 
   function onKey(e) {
+    // Kalıcı (modal) iletişim kutusu: genel kısayollar ("/" arama, Escape ile seçimi temizleme) çalışmasın.
+    e.stopPropagation();
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
     if (e.key === 'Tab') {
       const f = [...dialog.querySelectorAll('button:not([disabled])')].filter((b) => b.tabIndex >= 0 && b.offsetParent !== null);
@@ -213,7 +223,8 @@ export function openCalendar(o) {
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       return;
     }
-    if (e.key === 'PageUp' || e.key === 'PageDown') { e.preventDefault(); step(e.key === 'PageUp' ? -1 : 1, grid.contains(document.activeElement)); return; }
+    // APG tarih seçici: PageUp önceki (daha eski), PageDown sonraki (daha yeni) ay.
+    if (e.key === 'PageUp' || e.key === 'PageDown') { e.preventDefault(); step(e.key === 'PageUp' ? 1 : -1, grid.contains(document.activeElement)); return; }
     if (!grid.contains(document.activeElement)) return;
     const btn = document.activeElement;
     const moves = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
@@ -243,26 +254,31 @@ export function openCalendar(o) {
   }
 
   const onResize = () => position();
-  const onDocKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+  // Odak kutunun dışındayken de Escape kapatır (yakalama evresi: genel Escape işleyicisi seçimi temizlemesin).
+  const onDocKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
 
   function close(restoreFocus = true) {
     if (current !== api_) return;
     current = null;
     o.anchor.setAttribute('aria-expanded', 'false');
     window.removeEventListener('resize', onResize);
-    document.removeEventListener('keydown', onDocKey);
+    document.removeEventListener('keydown', onDocKey, true);
     layer.classList.remove('in');
     layer.classList.add('out');
     const done = () => layer.remove();
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) done();
     else setTimeout(done, 200);
-    if (restoreFocus && o.anchor.isConnected) o.anchor.focus({ preventScroll: true });
+    if (restoreFocus) {
+      // Ray yeniden kurulduysa (ör. yükleme sonrası) aynı türdeki yeni düğmeye dön.
+      const back = o.anchor.isConnected ? o.anchor : document.querySelector(o.anchor.classList.contains('cal-fab') ? '.cal-fab' : '.scrub-now');
+      back?.focus({ preventScroll: true });
+    }
   }
 
   const api_ = { close, dialog };
   current = api_;
   dialog.addEventListener('keydown', onKey);
-  document.addEventListener('keydown', onDocKey);
+  document.addEventListener('keydown', onDocKey, true);
   window.addEventListener('resize', onResize);
   o.anchor.setAttribute('aria-expanded', 'true');
   layer.classList.toggle('is-sheet', mobile());

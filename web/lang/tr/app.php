@@ -43,4 +43,7 @@ return [
     'nav_library' => 'Kitaplık', 'nav_albums' => 'Albümler', 'nav_other' => 'Diğer', 'memories_prev' => 'Önceki anılar', 'memories_next' => 'Sonraki anılar',
     'in_this_memory' => 'Bu anıda', 'when' => 'Tarih', 'photo_n_of' => '{i} / {n}',
     'from_library' => 'Kitaplığınızdan',
+    'calendar' => 'Takvim', 'open_calendar' => 'Takvimi aç', 'cal_prev_month' => 'Önceki ay', 'cal_next_month' => 'Sonraki ay',
+    'cal_weekdays' => 'Pzt,Sal,Çar,Per,Cum,Cmt,Paz', 'cal_no_photos' => 'fotoğraf yok', 'cal_days' => '{n} gün',
+    'cal_go_month' => 'Bu ayın başına git', 'cal_hint' => 'Fotoğraflı bir gün seçin',
 ];
