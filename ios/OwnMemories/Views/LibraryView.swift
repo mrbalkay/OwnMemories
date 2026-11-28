@@ -83,31 +83,34 @@ struct LibraryView: View {
     @EnvironmentObject private var memories: MemoryService
     @EnvironmentObject private var engine: BackupEngine
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.theme) private var theme
     @StateObject private var model = LibraryModel()
     /// Yedekleme sürerken yeni yüklenenleri listeye getiren, sık istek atmamak için ertelenmiş yenileme.
     @State private var pendingRefresh: Task<Void, Never>?
     @State private var viewing: Asset?
     @State private var story: Memory?
-    private let columns = [GridItem(.adaptive(minimum: 96), spacing: 1.5)]
+
+    private var columns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: theme.gridSpacing), count: theme.gridColumns)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
+                    LibraryHeader(title: "Fotoğraflar", initial: session.user?.name)
                     if !memories.memories.isEmpty {
                         MemoriesStrip(memories: memories.memories) { story = $0 }
                     }
                     ForEach(Array(model.sections.enumerated()), id: \.element.id) { i, section in
                         if i == 0 || model.sections[i - 1].id.prefix(7) != section.id.prefix(7) {
-                            Text(MonthTitle.text(for: String(section.id.prefix(7))))
-                                .font(.system(.title, design: .serif).weight(.medium))
-                                .padding(.horizontal, 16).padding(.top, 26).padding(.bottom, 2)
+                            monthHeader(String(section.id.prefix(7)), first: i == 0)
                         }
                         Text(DayGrouping.title(for: section.id))
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 8)
-                        LazyVGrid(columns: columns, spacing: 1.5) {
+                            .font(theme.dayFont)
+                            .foregroundStyle(theme.name == .galeri ? theme.ink : theme.ink.opacity(0.92))
+                            .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
+                        LazyVGrid(columns: columns, spacing: theme.gridSpacing) {
                             ForEach(section.assets) { asset in
                                 Button { viewing = asset } label: { Tile(asset: asset) }
                                     .buttonStyle(.plain)
@@ -118,20 +121,33 @@ struct LibraryView: View {
                         }
                     }
                     if model.loading {
-                        ProgressView().frame(maxWidth: .infinity).padding()
+                        ProgressView().tint(theme.muted).frame(maxWidth: .infinity).padding()
                     } else if let err = model.error {
                         VStack(spacing: 10) {
-                            Text(err).multilineTextAlignment(.center).foregroundStyle(.secondary)
+                            Text(err).multilineTextAlignment(.center).foregroundStyle(theme.muted)
                             Button("Tekrar dene") { Task { await model.loadMore(client: session.client) } }
                         }
                         .frame(maxWidth: .infinity).padding(30)
                     } else if model.assets.isEmpty && model.done {
                         Text("Henüz fotoğraf yok. Yedekleme sekmesinden yedeklemeyi başlatın.")
-                            .multilineTextAlignment(.center).foregroundStyle(.secondary).padding(40)
+                            .font(theme.isSerif ? Font.system(.body, design: .serif) : Font.body)
+                            .multilineTextAlignment(.center).foregroundStyle(theme.muted).padding(40)
+                            .frame(maxWidth: .infinity)
                     }
                 }
+                .padding(.bottom, 28)
             }
-            .navigationTitle("Fotoğraflar")
+            .foregroundStyle(theme.ink)
+            .background(alignment: .top) { AmbientGlow(assetId: ambientAssetId) }
+            .background(theme.canvas.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
+            .overlay(alignment: .bottom) {
+                if showSyncPill {
+                    SyncPill(done: engine.counts.done, total: engine.counts.total)
+                        .padding(.bottom, 12)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
             .refreshable {
                 await model.reload(client: session.client)
                 await memories.refresh(force: true)
@@ -149,12 +165,42 @@ struct LibraryView: View {
                 if phase == .active, !model.assets.isEmpty { scheduleRefresh(delay: 0.5) }
             }
             .fullScreenCover(item: $story) { m in
-                MemoryStoryView(memory: m).environmentObject(session)
+                MemoryStoryView(memory: m).environmentObject(session).environment(\.theme, theme)
             }
             .fullScreenCover(item: $viewing) { asset in
                 AssetViewer(assets: model.assets, startId: asset.id, onChange: { model.update($0) })
                     .environmentObject(session)
+                    .environment(\.theme, theme)
             }
+        }
+    }
+
+    /// Yerel: yedekleme sürerken sekme çubuğunun üstünde durum hapı.
+    private var showSyncPill: Bool {
+        guard theme.name == .yerel, engine.counts.total > 0 else { return false }
+        return engine.isRunning || engine.counts.inFlight > 0
+    }
+
+    /// Sinema: ekranın üstünde, günün anısının (yoksa en yeni fotoğrafın) bulanık rengi.
+    private var ambientAssetId: String? {
+        guard theme.ambientGlow else { return nil }
+        return memories.memories.first?.coverAssetId ?? model.assets.first?.id
+    }
+
+    @ViewBuilder
+    private func monthHeader(_ ym: String, first: Bool) -> some View {
+        let title = Text(MonthTitle.text(for: ym)).font(theme.monthFont)
+        switch theme.name {
+        case .sinema:
+            title.padding(.horizontal, 20).padding(.top, first ? 22 : 30).padding(.bottom, 2)
+        case .galeri:
+            VStack(alignment: .leading, spacing: 0) {
+                Rectangle().fill(theme.hairline).frame(height: 1)
+                title.padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 2)
+            }
+            .padding(.top, first ? 0 : 18)
+        case .yerel:
+            title.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 2)
         }
     }
 
@@ -167,6 +213,102 @@ struct LibraryView: View {
             await model.refreshInPlace(client: session.client)
             pendingRefresh = nil
         }
+    }
+}
+
+/// Kitaplık/Yedekleme ekran başlığı: Sinema ve Galeri'de serif, Yerel'de SF kalın büyük başlık.
+struct LibraryHeader: View {
+    let title: String
+    var subtitle: String? = nil
+    var initial: String? = nil
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(theme.largeTitle)
+                    .tracking(theme.name == .yerel ? -0.8 : -0.5)
+                    .foregroundStyle(theme.ink)
+                if let subtitle {
+                    Text(subtitle).font(.system(size: 13)).foregroundStyle(theme.muted)
+                }
+            }
+            Spacer(minLength: 8)
+            if let initial, let ch = initial.first {
+                Text(String(ch).uppercased())
+                    .font(.system(size: theme.name == .galeri ? 12 : 15, weight: .semibold))
+                    .foregroundStyle(theme.name == .yerel ? Color.white : theme.ink)
+                    .frame(width: avatarSize, height: avatarSize)
+                    .background(avatarFill, in: Circle())
+                    .overlay(Circle().stroke(theme.hairline, lineWidth: theme.name == .yerel ? 0 : 1))
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, theme.name == .galeri ? 16 : 12)
+    }
+
+    private var avatarSize: CGFloat { theme.name == .galeri ? 26 : 36 }
+
+    private var avatarFill: AnyShapeStyle {
+        switch theme.name {
+        case .sinema: return AnyShapeStyle(Color.white.opacity(0.1))
+        case .galeri: return AnyShapeStyle(theme.background)
+        case .yerel: return AnyShapeStyle(LinearGradient(colors: [Color(hex: 0x8E8E93), Color(hex: 0x5A5A5F)], startPoint: .top, endPoint: .bottom))
+        }
+    }
+}
+
+/// Sinema ortam ışığı: fotoğrafın yoğun bulanık, doygun, karartılmış hâli; aşağı doğru zemine karışır.
+struct AmbientGlow: View {
+    let assetId: String?
+    var height: CGFloat = 460
+
+    var body: some View {
+        if let assetId {
+            RemoteImage(assetId: assetId, variant: "thumb")
+                .frame(height: height)
+                .frame(maxWidth: .infinity)
+                .blur(radius: 60, opaque: true)
+                .saturation(1.5)
+                .brightness(-0.25)
+                .opacity(0.9)
+                .clipped()
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black.opacity(0.55), location: 0.45), .init(color: .clear, location: 1)],
+                                     startPoint: .top, endPoint: .bottom))
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// Yerel: sekme çubuğunun üstünde yüzen yedekleme durumu ("Yedekleniyor 4.812 / 6.552").
+private struct SyncPill: View {
+    let done: Int
+    let total: Int
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                Circle().stroke(theme.ink.opacity(0.12), lineWidth: 3)
+                Circle().trim(from: 0, to: total > 0 ? CGFloat(done) / CGFloat(total) : 0)
+                    .stroke(theme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 18, height: 18)
+            Text("Yedekleniyor").font(.system(size: 13, weight: .semibold)).foregroundStyle(theme.ink)
+            Text(verbatim: "\(done.formatted()) / \(total.formatted())").font(.system(size: 13, weight: .medium)).foregroundStyle(theme.muted)
+                .monospacedDigit()
+        }
+        .padding(.leading, 8).padding(.trailing, 14)
+        .frame(height: 34)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().stroke(theme.hairline, lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.16), radius: 14, y: 6)
     }
 }
 
@@ -187,12 +329,13 @@ enum MonthTitle {
 
 private struct Tile: View {
     let asset: Asset
+    @Environment(\.theme) private var theme
 
     var body: some View {
-        Color.clear
+        theme.placeholder
             .aspectRatio(1, contentMode: .fit)
             .overlay(RemoteImage(assetId: asset.id))
-            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: theme.tileRadius, style: .continuous))
             .overlay(alignment: .topTrailing) {
                 HStack(spacing: 4) {
                     if asset.isVideo {
@@ -202,9 +345,9 @@ private struct Tile: View {
                     if asset.livePairId != nil && !asset.isVideo { Image(systemName: "livephoto") }
                     if asset.isFavorite { Image(systemName: "heart.fill") }
                 }
-                .font(.caption2.bold())
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.white)
-                .shadow(radius: 2)
+                .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
                 .padding(5)
             }
             .contentShape(Rectangle())

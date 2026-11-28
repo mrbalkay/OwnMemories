@@ -11,6 +11,7 @@ struct DiagnosticsView: View {
     @State private var notifStatus = "…"
     @State private var refreshing = false
     @State private var copied = false
+    @Environment(\.theme) private var theme
 
     var body: some View {
         List {
@@ -33,6 +34,7 @@ struct DiagnosticsView: View {
                 }
                 .disabled(refreshing)
             }
+            .listRowBackground(theme.groupSurface)
             Section("Arka plan") {
                 row("Arka planda uygulama yenileme", refreshStatus.text, ok: refreshStatus.ok)
                 row("Düşük Güç Modu", ProcessInfo.processInfo.isLowPowerModeEnabled ? "Açık (arka plan kısıtlı)" : "Kapalı", ok: !ProcessInfo.processInfo.isLowPowerModeEnabled)
@@ -42,11 +44,12 @@ struct DiagnosticsView: View {
                 row("Yedeklenen", "\(engine.counts.done)")
                 if engine.counts.failed > 0 { row("Başarısız", "\(engine.counts.failed)", ok: false) }
             }
+            .listRowBackground(theme.groupSurface)
             Section {
                 if log.isEmpty { Text("Henüz kayıt yok.").foregroundStyle(.secondary) }
                 ForEach(log.prefix(80)) { e in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(e.date.formatted(date: .abbreviated, time: .standard)).font(.caption2).foregroundStyle(.secondary)
+                        Text(e.date.formatted(date: .abbreviated, time: .standard)).font(.caption2).foregroundStyle(theme.muted)
                         Text(e.text).font(.footnote)
                     }
                 }
@@ -61,7 +64,9 @@ struct DiagnosticsView: View {
                     .font(.footnote)
                 }
             }
+            .listRowBackground(theme.groupSurface)
         }
+        .themedList(theme)
         .navigationTitle("Tanılama")
         .task {
             let s = await UNUserNotificationCenter.current().notificationSettings()
@@ -94,7 +99,7 @@ struct DiagnosticsView: View {
             Spacer()
             Text(value)
                 .multilineTextAlignment(.trailing)
-                .foregroundStyle(ok == false ? Color.red : Color.secondary)
+                .foregroundStyle(ok == false ? Color.red : theme.muted)
         }
     }
 }

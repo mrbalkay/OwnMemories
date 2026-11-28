@@ -22,16 +22,36 @@ const NAV = [
   ['trash', 'trash', '#/trash'],
 ];
 
+// Menü grupları: temalar başlıkları (.nav-h) gösterebilir ve öğeleri CSS `order` ile yeniden dizebilir.
+const NAV_GROUP = { photos: 'library', favorites: 'library', map: 'library', albums: 'albums', shared: 'albums', archive: 'other', trash: 'other' };
+
 function renderNav() {
   document.getElementById('navSettings')?.classList.toggle('active', route.name === 'settings');
-  nav.replaceChildren(...NAV.map(([key, ic, href]) => h('a', {
-    href, class: 'nav-item' + (route.name === key || (key === 'albums' && route.name === 'album' && !route.shared) ? ' active' : ''),
-    'aria-current': route.name === key ? 'page' : null,
-  }, icon(ic), h('span', {}, t(key)))));
+  const heading = (g) => h('div', { class: 'nav-h', role: 'presentation', dataset: { group: g } }, t('nav_' + g));
+  const items = [];
+  for (const [key, ic, href] of NAV) {
+    if (key === 'photos') items.push(heading('library'));
+    if (key === 'albums') items.push(heading('albums'));
+    if (key === 'archive') items.push(h('div', { class: 'nav-sep', role: 'presentation' }), heading('other'));
+    items.push(h('a', {
+      href, class: 'nav-item' + (route.name === key || (key === 'albums' && route.name === 'album' && !route.shared) ? ' active' : ''),
+      'aria-current': route.name === key ? 'page' : null, dataset: { nav: key, group: NAV_GROUP[key] },
+    }, icon(ic), h('span', { class: 'nav-label' }, t(key))));
+  }
+  nav.replaceChildren(...items);
+}
+
+/** Üst çubuktaki büyük sayfa başlığı (#pageTitle; yalnızca bazı temalar gösterir). */
+function setPageTitle(text, sub = '') {
+  document.getElementById('pageTitleText').textContent = text;
+  document.getElementById('pageSub').textContent = sub;
 }
 
 function renderUsage() {
   const u = OM.user;
+  const bar = document.getElementById('usageBar');
+  bar.dataset.quota = u.quota_bytes ? '1' : '0';
+  bar.style.setProperty('--used', u.quota_bytes ? String(Math.min(1, u.used_bytes / u.quota_bytes)) : '0');
   document.getElementById('usage').textContent = u.quota_bytes
     ? t('used_quota', { used: formatBytes(u.used_bytes), quota: formatBytes(u.quota_bytes) })
     : t('used', { used: formatBytes(u.used_bytes) });
@@ -129,6 +149,9 @@ async function render() {
   timeline = null;
   store.clear();
   route = parseRoute();
+  document.getElementById('app').dataset.route = route.name;
+  const TITLES = { favorites: 'favorites', archive: 'archive', trash: 'trash', search: 'search_results', albums: 'albums', shared: 'shared', settings: 'settings', map: 'map', album: 'albums' };
+  setPageTitle(t(TITLES[route.name] || 'photos'));
   renderNav();
   document.getElementById('app').classList.remove('nav-open');
   view.scrollTop = 0;
@@ -165,6 +188,7 @@ async function render() {
       try {
         const album = (await api('GET', `albums/${route.id}`)).album;
         route.album = album;
+        setPageTitle(album.title || t('albums'));
         route.shared = album.role !== 'owner';
         renderNav();
         showTimeline({ album: album.id }, t('empty_album'), m.albumHeader(album, { onChanged: render }));
@@ -185,6 +209,7 @@ async function render() {
       break;
     default: {
       route.name = 'photos';
+      document.getElementById('app').dataset.route = 'photos';
       renderNav();
       const head = h('div', { class: 'mem-slot' });
       showTimeline({}, t('empty_photos'), head);
@@ -228,6 +253,12 @@ window.addEventListener('drop', (e) => {
   if (e.dataTransfer?.files?.length) enqueue([...e.dataTransfer.files]);
 });
 document.addEventListener('keydown', (e) => {
+  // "/" arama kutusuna odaklanır (.search-kbd ipucu)
+  if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.closest?.('input, textarea, select, [contenteditable]') && !document.querySelector('.viewer, .story, dialog[open]')) {
+    e.preventDefault();
+    document.getElementById('searchInput').focus();
+    return;
+  }
   if (e.key === 'Escape' && store.selection.size && !document.querySelector('.viewer, dialog[open]')) store.clear();
 });
 

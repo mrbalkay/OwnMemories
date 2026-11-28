@@ -7,6 +7,7 @@ struct AssetViewer: View {
     var onChange: (Asset) -> Void
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.theme) private var theme
     @State private var selection: String = ""
     @State private var current: [String: Asset] = [:]
     @State private var showInfo = false
@@ -20,7 +21,7 @@ struct AssetViewer: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.black.opacity(1 - dragProgress * 0.85).ignoresSafeArea()
+            Color.black.opacity(Double(1 - dragProgress * 0.85)).ignoresSafeArea()
             TabView(selection: $selection) {
                 ForEach(assets) { a in
                     AssetPageView(asset: a, dragY: $dragY, onDismiss: dismissBySwipe)
@@ -33,27 +34,52 @@ struct AssetViewer: View {
             .scaleEffect(1 - dragProgress * 0.25)
             .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() } }
 
-            HStack {
-                Button { dismiss() } label: { Image(systemName: "xmark").padding(10) }
+            HStack(spacing: theme.usesGlass ? 8 : 0) {
+                Button { dismiss() } label: { chromeIcon("xmark") }
+                    .accessibilityLabel("Kapat")
                 Spacer()
                 if let a = asset(selection), a.access != "view" {
                     Button { Task { await toggleFavorite(a) } } label: {
-                        Image(systemName: a.isFavorite ? "heart.fill" : "heart").padding(10)
+                        chromeIcon(a.isFavorite ? "heart.fill" : "heart")
                     }
+                    .accessibilityLabel(a.isFavorite ? "Favorilerden çıkar" : "Favorilere ekle")
                 }
-                Button { showInfo = true } label: { Image(systemName: "info.circle").padding(10) }
+                Button { showInfo = true } label: { chromeIcon(theme.usesGlass ? "info" : "info.circle") }
+                    .accessibilityLabel("Ayrıntılar")
             }
-            .font(.title3)
             .foregroundStyle(.white)
-            .padding(.horizontal, 8)
-            .background(LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+            .padding(.horizontal, theme.usesGlass ? 14 : 8)
+            .padding(.vertical, theme.usesGlass ? 4 : 0)
+            .background(LinearGradient(colors: [.black.opacity(theme.name == .galeri ? 0.45 : 0.6), .clear], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
             .opacity(chrome && dragY == 0 ? 1 : 0)
         }
         .presentationBackground(.clear)
         .statusBarHidden(!chrome)
         .onAppear { selection = startId }
         .sheet(isPresented: $showInfo) {
-            if let a = asset(selection) { AssetInfoView(asset: a).presentationDetents([.medium, .large]) }
+            if let a = asset(selection) {
+                AssetInfoView(asset: a)
+                    .environment(\.theme, theme)
+                    .preferredColorScheme(theme.colorScheme)
+                    .presentationDetents([.medium, .large])
+            }
+        }
+    }
+
+    /// Üst çubuk düğmesi: Sinema/Yerel'de koyu cam daire, Galeri'de çerçevesiz ince simge.
+    @ViewBuilder
+    private func chromeIcon(_ name: String) -> some View {
+        if theme.usesGlass {
+            Image(systemName: name)
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: 36, height: 36)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 1))
+                .environment(\.colorScheme, .dark)
+        } else {
+            Image(systemName: name)
+                .font(.system(size: 19, weight: .light))
+                .padding(10)
         }
     }
 
@@ -119,7 +145,7 @@ private struct AssetPageView: View {
             } else {
                 ZStack {
                     RemoteImage(assetId: asset.id, variant: "thumb", contentMode: .fit)
-                    RemoteImage(assetId: asset.id, variant: "preview", contentMode: .fit)
+                    RemoteImage(assetId: asset.id, variant: "preview", contentMode: .fit, showsPlaceholder: false)
                 }
                 .scaleEffect(scale)
                 .gesture(MagnificationGesture().onChanged { scale = max(1, $0) }.onEnded { _ in withAnimation { scale = 1 } })
@@ -141,6 +167,7 @@ private struct AssetPageView: View {
 
 private struct AssetInfoView: View {
     let asset: Asset
+    @Environment(\.theme) private var theme
 
     var body: some View {
         NavigationStack {
@@ -167,6 +194,7 @@ private struct AssetInfoView: View {
                     }
                 }
             }
+            .themedList(theme)
             .navigationTitle("Ayrıntılar")
             .navigationBarTitleDisplayMode(.inline)
         }

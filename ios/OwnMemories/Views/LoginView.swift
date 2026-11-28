@@ -7,14 +7,20 @@ struct LoginView: View {
     @State private var password = ""
     @State private var busy = false
     @State private var error: String?
+    @Environment(\.theme) private var theme
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("OwnMemories").font(.largeTitle.weight(.semibold))
-                        Text("Fotoğraflarınız kendi sunucunuzda.").foregroundStyle(.secondary)
+                        Text("OwnMemories")
+                            .font(theme.largeTitle)
+                            .tracking(theme.name == .yerel ? -0.8 : -0.5)
+                            .foregroundStyle(theme.ink)
+                        Text("Fotoğraflarınız kendi sunucunuzda.")
+                            .font(theme.isSerif ? Font.system(.body, design: .serif) : Font.body)
+                            .foregroundStyle(theme.muted)
                     }
                     .padding(.vertical, 8)
                     .listRowBackground(Color.clear)
@@ -27,13 +33,16 @@ struct LoginView: View {
                 } footer: {
                     Text("Tailscale ile yayınladığınız adres. Telefonda Tailscale uygulaması bağlı olmalı.")
                 }
+                .listRowBackground(theme.groupSurface)
                 Section("Hesap") {
                     TextField("E-posta", text: $email)
                         .textContentType(.username).keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
                     SecureField("Parola", text: $password).textContentType(.password)
                 }
+                .listRowBackground(theme.groupSurface)
                 if let error {
                     Section { Text(error).foregroundStyle(.red) }
+                        .listRowBackground(theme.groupSurface)
                 }
                 Section {
                     Button {
@@ -47,7 +56,9 @@ struct LoginView: View {
                     }
                     .disabled(busy || server.isEmpty || email.isEmpty || password.isEmpty)
                 }
+                .listRowBackground(theme.groupSurface)
             }
+            .themedList(theme)
         }
     }
 

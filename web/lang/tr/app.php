@@ -39,4 +39,7 @@ return [
     'theme_galeri' => 'Galeri', 'theme_galeri_desc' => 'Müze kataloğu sakinliği: bol beyaz alan, ince çizgiler, zarif serif başlıklar.',
     'theme_yerel' => 'Yerel iOS', 'theme_yerel_desc' => 'Apple uygulamaları kadar tanıdık: büyük kalın başlıklar, cam yüzeyler.',
     'theme_saved' => 'Görünüm kaydedildi', 'default_badge' => 'Varsayılan', 'profile' => 'Profil', 'your_name' => 'Adınız',
+    'play_memory' => 'Anıyı oynat', 'pause' => 'Duraklat', 'play' => 'Oynat', 'select_day' => 'Seç', 'jump_to_year' => 'Yıla atla',
+    'nav_library' => 'Kitaplık', 'nav_albums' => 'Albümler', 'nav_other' => 'Diğer', 'memories_prev' => 'Önceki anılar', 'memories_next' => 'Sonraki anılar',
+    'in_this_memory' => 'Bu anıda', 'when' => 'Tarih', 'photo_n_of' => '{i} / {n}',
 ];

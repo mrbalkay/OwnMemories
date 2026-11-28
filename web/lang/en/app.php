@@ -39,4 +39,7 @@ return [
     'theme_galeri' => 'Gallery', 'theme_galeri_desc' => 'The calm of a museum catalogue: generous white space, hairlines, elegant serif titles.',
     'theme_yerel' => 'Native iOS', 'theme_yerel_desc' => 'As familiar as Apple\'s own apps: large bold titles, glass surfaces.',
     'theme_saved' => 'Appearance saved', 'default_badge' => 'Default', 'profile' => 'Profile', 'your_name' => 'Your name',
+    'play_memory' => 'Play memory', 'pause' => 'Pause', 'play' => 'Play', 'select_day' => 'Select', 'jump_to_year' => 'Jump to year',
+    'nav_library' => 'Library', 'nav_albums' => 'Albums', 'nav_other' => 'Other', 'memories_prev' => 'Previous memories', 'memories_next' => 'Next memories',
+    'in_this_memory' => 'In this memory', 'when' => 'Date', 'photo_n_of' => '{i} / {n}',
 ];

@@ -40,6 +40,7 @@ export const icons = {
   right: '<svg viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></svg>',
   check: '<svg viewBox="0 0 24 24"><path d="m6 12.5 4 4 8-9"/></svg>',
   play: '<svg viewBox="0 0 24 24" class="fill"><path d="M8 5.5v13l10.5-6.5Z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" class="fill"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>',
   live: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="6" stroke-dasharray="2 2"/><circle cx="12" cy="12" r="9"/></svg>',
   share: '<svg viewBox="0 0 24 24"><circle cx="17" cy="6" r="2.5"/><circle cx="7" cy="12" r="2.5"/><circle cx="17" cy="18" r="2.5"/><path d="m9.2 10.8 5.6-3.4M9.2 13.2l5.6 3.4"/></svg>',
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
@@ -80,6 +81,33 @@ export function formatDay(key) {
   const opts = { day: 'numeric', month: 'long', weekday: 'long', timeZone: 'UTC' };
   if (y !== now.getFullYear()) opts.year = 'numeric';
   return new Intl.DateTimeFormat(loc(), opts).format(dt);
+}
+
+/** Gün başlığının parçaları: {label: "Bugün" | "26 Kasım" | "26 Kasım 2019", weekday: "Perşembe"} */
+export function dayParts(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const full = formatDay(key);
+  const now = new Date();
+  const weekday = new Intl.DateTimeFormat(loc(), { weekday: 'long', timeZone: 'UTC' }).format(dt);
+  if (full === t('today') || full === t('yesterday')) return { label: full, weekday };
+  const opts = { day: 'numeric', month: 'long', timeZone: 'UTC' };
+  if (y !== now.getFullYear()) opts.year = 'numeric';
+  return { label: new Intl.DateTimeFormat(loc(), opts).format(dt), weekday };
+}
+
+/** Ay başlığının parçaları: {name: "Kasım", year: "2026"} */
+export function monthParts(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return { name: new Intl.DateTimeFormat(loc(), { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, 1))), year: String(y) };
+}
+
+/** "2023-11-28" → "28 Kasım 2023" (weekday: true ise "28 Kasım 2023 Salı") */
+export function formatDate(ymd, weekday = false) {
+  const [y, m, d] = ymd.slice(0, 10).split('-').map(Number);
+  const o = { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' };
+  if (weekday) o.weekday = 'long';
+  return new Intl.DateTimeFormat(loc(), o).format(new Date(Date.UTC(y, m - 1, d)));
 }
 
 export function formatDateTime(a) {
