@@ -20,7 +20,7 @@ struct AssetViewer: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.black.opacity(1 - dragProgress * 0.85).ignoresSafeArea()
+            Color.black.opacity(Double(1 - dragProgress * 0.85)).ignoresSafeArea()
             TabView(selection: $selection) {
                 ForEach(assets) { a in
                     AssetPageView(asset: a, dragY: $dragY, onDismiss: dismissBySwipe)
