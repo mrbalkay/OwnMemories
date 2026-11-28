@@ -1,0 +1,3 @@
+# Yalnızca kurulumda metin modelini int8'e dönüştürmek için (python -m ownmemories_ml quantize).
+onnx==1.19.1
+sympy==1.14.0

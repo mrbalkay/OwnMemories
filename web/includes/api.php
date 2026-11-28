@@ -107,6 +107,8 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['POST', "#^/v1/albums/$uuid/members$#", fn($m) => api_ok(['member' => album_share($m[1], (int) api_need_user($user)['id'], (string) ($body['email'] ?? ''), (string) ($body['role'] ?? 'viewer'))])],
         ['DELETE', "#^/v1/albums/$uuid/members/(\d+)$#", fn($m) => api_ok(['ok' => album_unshare($m[1], (int) api_need_user($user)['id'], (int) $m[2])])],
         ['GET', '#^/v1/users/lookup$#', fn() => api_user_lookup(api_need_user($user), $query)],
+        ['GET', '#^/v1/search$#', fn() => api_search(api_need_user($user), $query)],
+        ['GET', '#^/v1/search/status$#', fn() => api_search_status(api_need_user($user))],
         ['GET', '#^/v1/memories$#', fn() => api_memories(api_need_user($user), $query)],
         ['POST', '#^/v1/devices/report$#', fn() => api_ok(device_report((int) api_need_user($user)['id'], $body))],
     ];

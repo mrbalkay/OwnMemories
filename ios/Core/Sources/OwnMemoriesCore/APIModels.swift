@@ -209,3 +209,64 @@ struct MemoriesResponse: Codable {
 struct AssetList: Codable {
     let assets: [Asset]
 }
+
+/// Akıllı arama dizin durumu: GET /v1/search yanıtındaki "status" ve GET /v1/search/status.
+/// Makine öğrenimi servisi yoksa /v1/search/status yalnızca {"available":false} döner; eksik alanlar varsayılanla dolar.
+struct SearchStatus: Codable, Equatable {
+    let indexed: Int
+    let total: Int
+    let pending: Int?
+    let ready: Bool
+    let model: String?
+    let available: Bool
+
+    init(indexed: Int, total: Int, pending: Int? = nil, ready: Bool, model: String? = nil, available: Bool = true) {
+        self.indexed = indexed
+        self.total = total
+        self.pending = pending
+        self.ready = ready
+        self.model = model
+        self.available = available
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        indexed = try c.decodeIfPresent(Int.self, forKey: .indexed) ?? 0
+        total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        pending = try c.decodeIfPresent(Int.self, forKey: .pending)
+        ready = try c.decodeIfPresent(Bool.self, forKey: .ready) ?? false
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        available = try c.decodeIfPresent(Bool.self, forKey: .available) ?? true
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case indexed, total, pending, ready, model, available
+    }
+
+    /// Dizinlenen oran, 0...100 (aşağı yuvarlanır; bitmeden %100 görünmez).
+    var percent: Int {
+        guard total > 0 else { return ready ? 100 : 0 }
+        return max(0, min(100, indexed * 100 / total))
+    }
+
+    /// Dizinleme sürüyor: servis var ama tüm öğeler henüz dizinlenmedi.
+    var isIndexing: Bool { available && total > 0 && indexed < total }
+}
+
+/// GET /v1/search?q=&from=&to=&favorite=&limit=&offset= yanıtı (sonuçlar uygunluk sırasında).
+struct SearchResponse: Codable {
+    /// "smart" (anlamsal arama) | "text" (dosya adı/açıklama/kamera metin araması; ML servisi yoksa)
+    let mode: String
+    let assets: [Asset]
+    let nextOffset: Int?
+    /// Tüm eşleşmelerin sayısı (sunucu verirse; yoksa yüklenen sayfalardan "60+" gösterilir).
+    let total: Int?
+    let status: SearchStatus?
+
+    var isSmart: Bool { mode == "smart" }
+
+    enum CodingKeys: String, CodingKey {
+        case mode, assets, total, status
+        case nextOffset = "next_offset"
+    }
+}

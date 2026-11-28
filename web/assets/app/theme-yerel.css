@@ -713,3 +713,11 @@
   :root[data-skin="yerel"] .cal-fab { border: 0; background: var(--y-material); color: var(--ink); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .35), inset 0 0 0 .5px var(--y-hair); font-family: var(--font-display); font-weight: 600; }
   :root[data-skin="yerel"] .cal-fab-ic { color: #0A7CFF; }
 }
+
+/* Arama (search.js): iOS bölümlü denetim */
+:root[data-skin="yerel"] .seg { background: var(--y-fill); padding: 2px; border-radius: 9px; }
+:root[data-skin="yerel"] .seg-btn { border-radius: 7px; color: var(--ink); font-weight: 500; padding: 6px 14px; }
+:root[data-skin="yerel"] .seg-btn.on { background: var(--raised); font-weight: 600; box-shadow: 0 3px 8px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .04); }
+:root[data-skin="yerel"] .search-note { background: var(--y-accent-tint); color: var(--ink); border-radius: 12px; }
+:root[data-skin="yerel"] .search-note-bar i { background: var(--gok); }
+:root[data-skin="yerel"] .search-start h2 { font-family: inherit; font-weight: 700; letter-spacing: -.02em; }

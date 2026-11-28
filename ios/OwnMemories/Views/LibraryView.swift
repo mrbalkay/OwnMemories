@@ -114,6 +114,7 @@ struct LibraryView: View {
     @State private var featuredStart: Asset?
     @State private var calendarMonth: CalendarTarget?
     @State private var pendingScroll: String?
+    @State private var searching = false
 
     struct CalendarTarget: Identifiable { let id: String }   // "YYYY-MM" ya da "" (en yeni ay)
 
@@ -126,7 +127,7 @@ struct LibraryView: View {
           ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
-                    LibraryHeader(title: "Fotoğraflar", initial: session.user?.name, onCalendar: {
+                    LibraryHeader(title: "Fotoğraflar", initial: session.user?.name, onSearch: { searching = true }, onCalendar: {
                         calendarMonth = CalendarTarget(id: model.sections.first.map { String($0.id.prefix(7)) } ?? "")
                     })
                     .id("library-top")
@@ -259,6 +260,11 @@ struct LibraryView: View {
                     .environmentObject(session)
                     .environment(\.theme, theme)
             }
+            .fullScreenCover(isPresented: $searching) {
+                SearchView(onChange: { model.update($0) })
+                    .environmentObject(session)
+                    .environment(\.theme, theme)
+            }
           }
         }
     }
@@ -322,6 +328,7 @@ struct LibraryHeader: View {
     let title: String
     var subtitle: String? = nil
     var initial: String? = nil
+    var onSearch: (() -> Void)? = nil
     var onCalendar: (() -> Void)? = nil
     @Environment(\.theme) private var theme
 
@@ -337,17 +344,11 @@ struct LibraryHeader: View {
                 }
             }
             Spacer(minLength: 8)
+            if let onSearch {
+                headerButton("magnifyingglass", label: "Ara", action: onSearch)
+            }
             if let onCalendar {
-                Button(action: onCalendar) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(theme.name == .yerel ? theme.accent : theme.ink)
-                        .frame(width: avatarSize, height: avatarSize)
-                        .background(theme.name == .galeri ? AnyShapeStyle(Color.clear) : AnyShapeStyle(Color.primary.opacity(0.08)), in: Circle())
-                        .overlay(Circle().stroke(theme.hairline, lineWidth: theme.name == .yerel ? 0 : 1))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Takvim")
+                headerButton("calendar", label: "Takvim", action: onCalendar)
             }
             if let initial, let ch = initial.first {
                 Text(String(ch).uppercased())
@@ -365,6 +366,19 @@ struct LibraryHeader: View {
     }
 
     private var avatarSize: CGFloat { theme.name == .galeri ? 26 : 36 }
+
+    private func headerButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(theme.name == .yerel ? theme.accent : theme.ink)
+                .frame(width: avatarSize, height: avatarSize)
+                .background(theme.name == .galeri ? AnyShapeStyle(Color.clear) : AnyShapeStyle(Color.primary.opacity(0.08)), in: Circle())
+                .overlay(Circle().stroke(theme.hairline, lineWidth: theme.name == .yerel ? 0 : 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
 
     private var avatarFill: AnyShapeStyle {
         switch theme.name {

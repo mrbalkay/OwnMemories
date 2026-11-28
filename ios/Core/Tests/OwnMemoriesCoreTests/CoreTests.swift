@@ -40,6 +40,52 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(start.chunkSize, 52_428_800)
     }
 
+    func testDecodeSmartSearchResponse() throws {
+        let json = "{\"mode\":\"smart\",\"assets\":[\(assetJSON)],\"next_offset\":60,\"total\":48,\"status\":{\"indexed\":12400,\"total\":20000,\"ready\":false}}"
+        let r = try JSONDecoder().decode(SearchResponse.self, from: Data(json.utf8))
+        XCTAssertTrue(r.isSmart)
+        XCTAssertEqual(r.assets.count, 1)
+        XCTAssertEqual(r.assets[0].filename, "IMG_1.HEIC")
+        XCTAssertEqual(r.nextOffset, 60)
+        XCTAssertEqual(r.total, 48)
+        let st = try XCTUnwrap(r.status)
+        XCTAssertEqual(st.indexed, 12_400)
+        XCTAssertEqual(st.total, 20_000)
+        XCTAssertFalse(st.ready)
+        XCTAssertTrue(st.available)
+        XCTAssertEqual(st.percent, 62)
+        XCTAssertTrue(st.isIndexing)
+    }
+
+    func testDecodeTextSearchResponseWithoutStatus() throws {
+        let json = #"{"mode":"text","assets":[],"next_offset":null,"status":null}"#
+        let r = try JSONDecoder().decode(SearchResponse.self, from: Data(json.utf8))
+        XCTAssertFalse(r.isSmart)
+        XCTAssertTrue(r.assets.isEmpty)
+        XCTAssertNil(r.nextOffset)
+        XCTAssertNil(r.status)
+        let missing = try JSONDecoder().decode(SearchResponse.self, from: Data(#"{"mode":"text","assets":[]}"#.utf8))
+        XCTAssertNil(missing.nextOffset)
+        XCTAssertNil(missing.status)
+        XCTAssertNil(missing.total)
+    }
+
+    func testDecodeSearchStatus() throws {
+        let full = #"{"indexed":30000,"total":30000,"pending":0,"model":"ViT-B-16-SigLIP2__webli","ready":true}"#
+        let s = try JSONDecoder().decode(SearchStatus.self, from: Data(full.utf8))
+        XCTAssertTrue(s.ready)
+        XCTAssertEqual(s.pending, 0)
+        XCTAssertEqual(s.model, "ViT-B-16-SigLIP2__webli")
+        XCTAssertEqual(s.percent, 100)
+        XCTAssertFalse(s.isIndexing)
+        let off = try JSONDecoder().decode(SearchStatus.self, from: Data(#"{"available":false}"#.utf8))
+        XCTAssertFalse(off.available)
+        XCTAssertFalse(off.ready)
+        XCTAssertEqual(off.total, 0)
+        XCTAssertFalse(off.isIndexing)
+        XCTAssertEqual(SearchStatus(indexed: 1, total: 3, ready: false).percent, 33)
+    }
+
     func testUploadMetaEncodesSnakeCase() throws {
         let m = UploadMeta(takenAt: "2026-01-01T10:00:00Z", tzOffset: 180, latitude: nil, longitude: nil, isFavorite: true,
                            sourceRef: "ABC/L0/001#live", livePairSourceRef: "ABC/L0/001", editedOfSourceRef: nil)

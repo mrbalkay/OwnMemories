@@ -3,7 +3,7 @@
 # Dağıtımın varsayılan PHP sürümünü kullanır (en az 8.1).
 #   sudo bash server/install-ubuntu.sh
 # Yapar: paketleri kurar, /var/www/ownmemories'e kopyalar, Apache sitesini, veritabanını,
-# depo klasörünü ve systemd birimlerini (işçi, cron, yedek) hazırlar. Cloudflare Tunnel adımları docs/INSTALL.md'de.
+# depo klasörünü ve systemd birimlerini (işçi, cron, yedek, akıllı arama) hazırlar. Cloudflare Tunnel adımları docs/INSTALL.md'de.
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then echo "root olarak çalıştırın: sudo bash $0" >&2; exit 1; fi
@@ -27,7 +27,7 @@ has_pkg libheif-examples && HEIF_PKG=libheif-examples
 has_pkg libheif-plugin-libde265 && HEIF_PKG="$HEIF_PKG libheif-plugin-libde265"
 apt-get install -y -qq apache2 "$DB_PKG" \
   php libapache2-mod-php php-cli php-mysql php-gd php-imagick php-zip php-intl php-mbstring php-xml \
-  libimage-exiftool-perl ffmpeg libvips-tools $HEIF_PKG imagemagick rsync openssl
+  libimage-exiftool-perl ffmpeg libvips-tools $HEIF_PKG imagemagick rsync openssl curl python3-venv
 
 PHPV="$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;')"
 if ! php -r 'exit(version_compare(PHP_VERSION, "8.1.0", ">=") ? 0 : 1);'; then
@@ -76,6 +76,10 @@ systemctl enable --now ownmemories-cron.timer
 # İşçi kurulum (setup.php) bittikten sonra başlar; kurulmadan başlatılırsa hata verip yeniden dener.
 systemctl enable ownmemories-worker.service
 
+echo "==> Akıllı arama (ownmemories-ml, ~1.5 GB model indirilir)"
+ML_OK=1
+bash "$DEST/server/install-ml.sh" || ML_OK=0
+
 cat <<DONE
 
 Kurulum hazır. Sıradaki adımlar:
@@ -88,3 +92,7 @@ Kurulum hazır. Sıradaki adımlar:
      sonra:  sudo systemctl enable --now ownmemories-backup.timer
 Bu parolayı not alın; tekrar gösterilmeyecek.
 DONE
+if (( ! ML_OK )); then
+  echo "UYARI: Akıllı arama kurulamadı (model indirilemedi veya yetersiz RAM). Diğer her şey çalışır;" >&2
+  echo "       sonra tekrar deneyin: sudo bash $DEST/server/install-ml.sh" >&2
+fi

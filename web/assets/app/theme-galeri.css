@@ -553,3 +553,13 @@
   :root[data-skin="galeri"] .cal-fab { height: 40px; padding: 0 16px 0 13px; border-radius: 0; border: 1px solid var(--g-cizgi); background: rgba(255, 255, 255, .94); color: var(--g-murekkep); box-shadow: 0 18px 40px -20px rgba(20, 24, 28, .4); font-family: var(--serif); font-size: 15px; font-weight: 400; }
   :root[data-skin="galeri"] .cal-fab-ic svg { stroke-width: 1.3; color: var(--g-muze); }
 }
+
+/* Arama (search.js): katalog sakinliği — köşeli bölümlü düğme, ince çizgili not */
+:root[data-skin="galeri"] .seg { border-radius: var(--g-r1); background: transparent; border: 1px solid var(--g-cizgi); padding: 2px; }
+:root[data-skin="galeri"] .seg-btn { border-radius: var(--g-r1); font-weight: 500; color: var(--g-grafit); }
+:root[data-skin="galeri"] .seg-btn.on { background: var(--g-murekkep); color: var(--g-duvar); box-shadow: none; }
+:root[data-skin="galeri"] .search-note { border-radius: var(--g-r1); background: transparent; border: 1px solid var(--g-cizgi); color: var(--g-grafit); }
+:root[data-skin="galeri"] .search-note-bar i { background: var(--g-muze); }
+:root[data-skin="galeri"] .search-start h2 { font-weight: 400; font-size: 36px; }
+:root[data-skin="galeri"] .search-start-ic { background: transparent; border: 1px solid var(--g-cizgi); color: var(--g-murekkep); }
+:root[data-skin="galeri"] .chip.search-chip { padding: 7px 14px; }
