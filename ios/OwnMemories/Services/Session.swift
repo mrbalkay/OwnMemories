@@ -62,7 +62,7 @@ final class Session: ObservableObject {
         guard let client else { return }
         if let me: MeResponse = try? await client.send("GET", "me") {
             updateUser(me.user)
-            ThemeStore.shared.sync(from: me.user)
+            ThemeStore.shared.sync(from: me.user, session: self)
         }
     }
 

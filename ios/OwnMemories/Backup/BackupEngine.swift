@@ -374,7 +374,12 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
             record.state = "pending"
             record.lastError = error.localizedDescription
             record.updatedAt = Date()
-            DiagLog.add("Arka plan yüklemesi hata: \(error.localizedDescription)")
+            if (error as NSError).code == NSURLErrorCancelled {
+                // Uygulama kaydırılarak kapatılınca iOS arka plan yüklemelerini iptal eder; dosya kuyruğa döner.
+                DiagLog.add("Arka plan yüklemesi iptal edildi (uygulama kapatılmış olabilir); yeniden denenecek")
+            } else {
+                DiagLog.add("Arka plan yüklemesi hata: \(error.localizedDescription)")
+            }
         } else if let response, let r: ChunkResponse = try? APIClient.decode(data: data, response: response), let done = r.complete {
             finish(record, assetId: done.asset?.id)
             lastBackupAt = Date()

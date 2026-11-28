@@ -12,7 +12,7 @@ if (!defined('OM_ROOT')) {
     define('OM_ROOT', dirname(OM_WEB));
 }
 if (!defined('OM_VERSION')) {
-    define('OM_VERSION', '0.1.0');
+    define('OM_VERSION', '0.2.0');
 }
 
 date_default_timezone_set('UTC');
