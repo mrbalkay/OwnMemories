@@ -14,6 +14,15 @@ rsync -a --delete \
   "$SRC/" "$DEST/"
 chown -R www-data:www-data "$DEST/web/config"
 systemctl restart ownmemories-worker 2>/dev/null || true
+# Bağlantıyla paylaş: kuruluysa paylaşım sitesini güncel şablondan yenile (port korunur; bkz. server/setup-share.sh).
+if [[ -f /etc/apache2/sites-enabled/ownmemories-share.conf ]]; then
+  SHARE_PORT="$(sed -n 's/^Listen 127\.0\.0\.1:\([0-9]*\).*/\1/p' /etc/apache2/sites-available/ownmemories-share.conf | head -1)"
+  sed -e "s#__DEST__#$DEST#g" -e "s#__PORT__#${SHARE_PORT:-8091}#g" "$DEST/server/apache-ownmemories-share.conf" > /etc/apache2/sites-available/ownmemories-share.conf.new
+  if mv /etc/apache2/sites-available/ownmemories-share.conf.new /etc/apache2/sites-available/ownmemories-share.conf && ! apache2ctl configtest >/dev/null 2>&1; then
+    echo "UYARI: paylaşım sitesi yapılandırması hatalı; site kapatıldı. Yeniden kurun: sudo bash $SRC/server/setup-share.sh" >&2
+    a2dissite -q ownmemories-share || true
+  fi
+fi
 systemctl reload apache2 2>/dev/null || true
 # Yerler (GeoNames yer adları): indir/güncelle ve içe aktar. Başarısız olursa güncelleme yine tamamlanır.
 if ! bash "$DEST/server/install-geo.sh"; then
