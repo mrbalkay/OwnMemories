@@ -785,6 +785,7 @@ a.i-place:hover { color: var(--accent); text-decoration: underline; text-underli
   .place-cover img, .map-tip { transition: none; }
   .place-card:hover .place-cover img { transform: none; }
   .place-card.is-ghost .place-cover, .places-status-dot { animation: none; }
+}
 /* ------------------------------------------------------------ Temizlik (cleanup.js) */
 .cleanup, .cl-cmp-layer { --cl-ok: var(--ok); --cl-ok-ink: #fff; --cl-del: var(--danger); --cl-del-ink: #fff; --cl-gap: 14px; }
 .cleanup { max-width: 1180px; padding-bottom: 48px; }

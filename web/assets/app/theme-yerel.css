@@ -836,6 +836,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root[data-skin="yerel"] .seg-item.on { background: #636366; box-shadow: 0 3px 8px rgba(0, 0, 0, .3); }
+}
 /* ------------------------------------------------------------ Temizlik (cleanup.js)
    iOS Fotoğraflar düzeni: gruplanmış beyaz kartlar, yumuşak köşeler, sistem mavisi, düz rozetler. */
 :root[data-skin="yerel"] .cleanup, :root[data-skin="yerel"] .cl-cmp-layer { --cl-ok: var(--ok); --cl-del: var(--danger); }

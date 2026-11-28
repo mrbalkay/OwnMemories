@@ -349,6 +349,8 @@ CREATE TABLE IF NOT EXISTS asset_places (
   geo_version VARCHAR(16) NOT NULL DEFAULT '',
   updated_at DATETIME NOT NULL,
   KEY ix_ap_user_city (user_id, city_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Temizlik (008): kalite ölçümleri ve gizlenen öneriler.
 CREATE TABLE IF NOT EXISTS asset_quality (
   asset_id CHAR(36) NOT NULL PRIMARY KEY,

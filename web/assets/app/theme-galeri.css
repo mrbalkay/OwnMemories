@@ -711,6 +711,7 @@
 :root[data-skin="galeri"] .mem-card.is-first[data-kind="trip"] .mem-text strong { font-size: 24px; line-height: 1.15; }
 @media (max-width: 860px) {
   :root[data-skin="galeri"] .mem-card[data-kind="trip"] .mem-text strong, :root[data-skin="galeri"] .mem-card.is-first[data-kind="trip"] .mem-text strong { font-size: 15px; line-height: 1.2; }
+}
 /* ------------------------------------------------------------ Temizlik (cleanup.js)
    Katalog düzeni: gölgesiz yüzeyler, kılcal çizgiler, keskin köşeler, etiketler küçük büyük harf. */
 :root[data-skin="galeri"] .cleanup, :root[data-skin="galeri"] .cl-cmp-layer { --cl-ok: var(--ok); --cl-del: var(--danger); }
