@@ -20,8 +20,11 @@ struct AssetViewer: View {
     @State private var dragX: CGFloat = 0
     @State private var dragY: CGFloat = 0
     @State private var dragAxis: Axis?
-    /// İki parmakla yakınlaştırma sürerken sürükleme sayfayı oynatmaz.
+    /// Görünen sayfa yakınlaştırılmış (ya da sıkıştırma sürüyor): sürükleme sayfa yerine fotoğrafı gezdirir.
     @State private var zooming = false
+    /// Görünen video öğesinin oynatıcısı (görüntüleyiciye ait; denetimler sayfa hareketlerinin dışında durur).
+    @State private var player: AVPlayer?
+    @State private var playerAssetId: String?
     /// Sürükleme sırasında yakınlaştırma başladıysa bu sürükleme parmak kalkana dek yok sayılır.
     @State private var dragCancelled = false
 
@@ -47,6 +50,15 @@ struct AssetViewer: View {
             }
             .ignoresSafeArea()
             topBar
+            if let player, chrome, dragY == 0 {
+                VStack {
+                    Spacer()
+                    VideoControls(player: player)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                }
+                .transition(.opacity)
+            }
         }
         .presentationBackground(.clear)
         .statusBarHidden(!chrome)
@@ -61,6 +73,13 @@ struct AssetViewer: View {
         }
         .onChange(of: index) { _, i in
             if assets.indices.contains(i) { currentId = assets[i].id }
+            syncPlayer()
+        }
+        .onAppear { syncPlayer() }
+        .onDisappear {
+            player?.pause()
+            player = nil
+            playerAssetId = nil
         }
         .sheet(isPresented: $showInfo) {
             if let id = selectedId, let a = asset(id) {
@@ -85,7 +104,10 @@ struct AssetViewer: View {
         let slots = visibleRange.map { Slot(index: $0, asset: assets[$0]) }
         return ZStack {
             ForEach(slots) { slot in
-                AssetPageView(asset: slot.asset, isCurrent: slot.index == index, zooming: $zooming)
+                AssetPageView(asset: slot.asset, isCurrent: slot.index == index, zooming: $zooming,
+                              player: slot.index == index ? player : nil) {
+                    withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() }
+                }
                     .frame(width: width, height: size.height)
                     .offset(x: CGFloat(slot.index - index) * (width + 12) + dragX)
             }
@@ -96,7 +118,26 @@ struct AssetViewer: View {
         .scaleEffect(1 - dragProgress * 0.25)
         .contentShape(Rectangle())
         .simultaneousGesture(pagerGesture(width: width))
-        .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() } }
+    }
+
+    /// Görünen öğe videoysa oynatıcıyı hazırlar ve oynatır; değilse eskisini bırakır.
+    private func syncPlayer() {
+        guard let id = selectedId, let a = asset(id), a.isVideo, let client = session.client else {
+            player?.pause()
+            player = nil
+            playerAssetId = nil
+            return
+        }
+        if playerAssetId == a.id { return }
+        player?.pause()
+        let url = client.url("assets/\(a.id)/video")
+        var headers: [String: String] = [:]
+        if let token = client.token { headers["Authorization"] = "Bearer " + token }
+        let item = AVPlayerItem(asset: AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers]))
+        let p = AVPlayer(playerItem: item)
+        player = p
+        playerAssetId = a.id
+        p.play()
     }
 
     private var visibleRange: [Int] {
@@ -235,93 +276,303 @@ struct AssetViewer: View {
     }
 }
 
+/// Tek sayfa: fotoğraf ya da video yüzeyi; iOS Fotoğraflar gibi yakınlaştırma.
+/// - İki parmakla: parmakların arasındaki nokta büyür; bırakınca büyük kalır.
+/// - Büyükken tek parmakla gezdirilir (kenarlarda sınırlanır, hafif kayma ile).
+/// - Çift dokunma: dokunulan noktaya 2,5× yakınlaşır; büyükken eski boyuta döner.
+/// - Tek dokunma: üst çubuğu/denetimleri gizler-gösterir.
 private struct AssetPageView: View {
     let asset: Asset
     let isCurrent: Bool
     @Binding var zooming: Bool
-    @EnvironmentObject private var session: Session
-    @State private var player: AVPlayer?
-    /// Sıkıştırma değeri; hareket bitince ya da iptal edilince (onEnded gelmese de) kendiliğinden 1'e döner.
-    @GestureState(resetTransaction: Transaction(animation: .spring(response: 0.3, dampingFraction: 0.85)))
-    private var pinch: CGFloat = 1
-    @State private var reportedZoom = false
+    var player: AVPlayer?
+    var onSingleTap: () -> Void
+
+    @State private var scale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var pinchStart: (scale: CGFloat, offset: CGSize)?
+    @State private var panStart: CGSize?
+    /// Hareket iptal edilse de (onEnded gelmeden) sıfırlanır; böylece yarım kalan sıkıştırma/gezdirme toparlanır.
+    @GestureState private var pinchActive = false
+    @GestureState private var panActive = false
+
+    private let maxScale: CGFloat = 6
 
     var body: some View {
-        Group {
-            if asset.isVideo {
-                if let player {
-                    VideoPlayer(player: player)
-                        .overlay {
-                            // Oynatıcı (UIKit) dokunuşları kendine alır, üstteki sayfa sürüklemesi ona ulaşmaz.
-                            // Üst kısım saydam bir yakalama alanıyla örtülür: sürükleme sayfayı değiştirir/kapatır,
-                            // dokunma oynat/duraklat yapar. Alttaki denetim şeridi (ilerleme çubuğu) dokunulabilir kalır.
-                            VStack(spacing: 0) {
-                                Color.clear
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { togglePlayback(player) }
-                                    .accessibilityHidden(true)
-                                Color.clear
-                                    .frame(height: 150)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                } else {
-                    ProgressView().tint(.white)
-                }
-            } else {
-                ZStack {
-                    RemoteImage(assetId: asset.id, variant: "thumb", contentMode: .fit)
-                    RemoteImage(assetId: asset.id, variant: "preview", contentMode: .fit, showsPlaceholder: false)
-                }
-                .scaleEffect(max(1, pinch))
-                .gesture(
-                    MagnificationGesture()
-                        .updating($pinch) { value, state, _ in state = value }
-                )
-                .onChange(of: pinch != 1) { _, now in
-                    reportedZoom = now
-                    zooming = now
-                }
-            }
+        GeometryReader { geo in
+            let size = geo.size
+            let fit = fittedSize(in: size)
+            content
+                .frame(width: fit.width, height: fit.height)
+                .scaleEffect(scale)
+                .offset(offset)
+                .frame(width: size.width, height: size.height)
+                .contentShape(Rectangle())
+                .gesture(doubleTap(size: size, fit: fit).exclusively(before: singleTap))
+                .simultaneousGesture(magnify(size: size, fit: fit))
+                .simultaneousGesture(pan(size: size, fit: fit))
+                .onChange(of: pinchActive) { _, active in if !active { finishPinch(size: size, fit: fit) } }
+                .onChange(of: panActive) { _, active in if !active { finishPan(size: size, fit: fit, velocity: .zero) } }
         }
-        .onAppear { if isCurrent { preparePlayer() } }
         .onChange(of: isCurrent) { _, now in
-            if now {
-                preparePlayer()
-            } else {
-                // Görünmeyen sayfanın videosu durur.
-                player?.pause()
-            }
+            // Sayfadan çıkınca yakınlaştırma sıfırlanır.
+            if !now { reset(animated: false) }
         }
-        .onDisappear {
-            // Çizimden çıkan sayfanın oynatıcısı bırakılır (bellek); sayfaya dönülünce yeniden oluşturulur.
-            player?.pause()
-            player = nil
-            if reportedZoom {
-                reportedZoom = false
-                zooming = false
+        .onDisappear { if isCurrent { zooming = false } }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if asset.isVideo {
+            if let player {
+                PlayerSurface(player: player)
+            } else {
+                RemoteImage(assetId: asset.id, variant: "preview", contentMode: .fit, showsPlaceholder: false)
+            }
+        } else {
+            ZStack {
+                RemoteImage(assetId: asset.id, variant: "thumb", contentMode: .fit)
+                RemoteImage(assetId: asset.id, variant: "preview", contentMode: .fit, showsPlaceholder: false)
             }
         }
     }
 
-    private func togglePlayback(_ player: AVPlayer) {
+    /// İçeriğin ekrana sığdırılmış boyutu (en-boy oranı biliniyorsa); bilinmiyorsa tüm alan.
+    private func fittedSize(in size: CGSize) -> CGSize {
+        guard let w = asset.width, let h = asset.height, w > 0, h > 0, size.width > 0, size.height > 0 else { return size }
+        let aspect = CGFloat(w) / CGFloat(h)
+        if aspect > size.width / size.height {
+            return CGSize(width: size.width, height: size.width / aspect)
+        }
+        return CGSize(width: size.height * aspect, height: size.height)
+    }
+
+    // MARK: - Hareketler
+
+    private func magnify(size: CGSize, fit: CGSize) -> some Gesture {
+        MagnifyGesture()
+            .updating($pinchActive) { _, state, _ in state = true }
+            .onChanged { v in
+                if pinchStart == nil { pinchStart = (scale, offset) }
+                guard let start = pinchStart else { return }
+                if isCurrent { zooming = true }
+                // Biraz altına inmeye izin ver (lastik), bırakınca 1'e döner.
+                let raw = start.scale * v.magnification
+                let s = raw < 1 ? 1 - (1 - raw) * 0.4 : min(raw, maxScale * 1.15)
+                // Parmakların başladığı nokta yerinde kalsın: o noktanın içerikteki karşılığı sabit tutulur.
+                let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                let p = v.startLocation
+                let k = s / start.scale
+                offset = CGSize(width: (p.x - c.x) - (p.x - c.x - start.offset.width) * k,
+                                height: (p.y - c.y) - (p.y - c.y - start.offset.height) * k)
+                scale = s
+            }
+            .onEnded { _ in finishPinch(size: size, fit: fit) }
+    }
+
+    private func finishPinch(size: CGSize, fit: CGSize) {
+        guard pinchStart != nil else { return }
+        pinchStart = nil
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            if scale <= 1.02 {
+                scale = 1
+                offset = .zero
+            } else {
+                scale = min(scale, maxScale)
+                offset = clamped(offset, scale: scale, size: size, fit: fit)
+            }
+        }
+        if isCurrent { zooming = scale > 1.02 }
+    }
+
+    private func pan(size: CGSize, fit: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 4)
+            .updating($panActive) { _, state, _ in if scale > 1.02 { state = true } }
+            .onChanged { v in
+                guard scale > 1.02, pinchStart == nil else { return }
+                if panStart == nil { panStart = offset }
+                guard let start = panStart else { return }
+                let proposed = CGSize(width: start.width + v.translation.width, height: start.height + v.translation.height)
+                // Sınır dışına taşarken direnç.
+                let limit = clamped(proposed, scale: scale, size: size, fit: fit)
+                offset = CGSize(width: limit.width + (proposed.width - limit.width) * 0.3,
+                                height: limit.height + (proposed.height - limit.height) * 0.3)
+            }
+            .onEnded { v in
+                let fling = CGSize(width: (v.predictedEndTranslation.width - v.translation.width) * 0.35,
+                                   height: (v.predictedEndTranslation.height - v.translation.height) * 0.35)
+                finishPan(size: size, fit: fit, velocity: fling)
+            }
+    }
+
+    private func finishPan(size: CGSize, fit: CGSize, velocity: CGSize) {
+        guard panStart != nil else { return }
+        panStart = nil
+        let target = CGSize(width: offset.width + velocity.width, height: offset.height + velocity.height)
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.9)) {
+            offset = clamped(target, scale: scale, size: size, fit: fit)
+        }
+    }
+
+    private func doubleTap(size: CGSize, fit: CGSize) -> some Gesture {
+        SpatialTapGesture(count: 2).onEnded { v in
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                if scale > 1.02 {
+                    scale = 1
+                    offset = .zero
+                } else {
+                    let s: CGFloat = 2.5
+                    let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                    let p = v.location
+                    scale = s
+                    offset = clamped(CGSize(width: (p.x - c.x) * (1 - s), height: (p.y - c.y) * (1 - s)), scale: s, size: size, fit: fit)
+                }
+            }
+            if isCurrent { zooming = scale > 1.02 }
+        }
+    }
+
+    private var singleTap: some Gesture {
+        TapGesture(count: 1).onEnded { onSingleTap() }
+    }
+
+    /// Büyütülmüş içerik ekranın kenarından içeri girmesin.
+    private func clamped(_ o: CGSize, scale s: CGFloat, size: CGSize, fit: CGSize) -> CGSize {
+        let maxX = max(0, (fit.width * s - size.width) / 2)
+        let maxY = max(0, (fit.height * s - size.height) / 2)
+        return CGSize(width: min(max(o.width, -maxX), maxX), height: min(max(o.height, -maxY), maxY))
+    }
+
+    private func reset(animated: Bool) {
+        pinchStart = nil
+        panStart = nil
+        if animated {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { scale = 1; offset = .zero }
+        } else {
+            scale = 1
+            offset = .zero
+        }
+    }
+}
+
+/// Video yüzeyi (AVPlayerLayer): dokunuşları almaz; böylece yakınlaştırma ve sayfa hareketleri çalışır.
+private final class PlayerLayerView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+}
+
+private struct PlayerSurface: UIViewRepresentable {
+    let player: AVPlayer
+
+    func makeUIView(context: Context) -> PlayerLayerView {
+        let v = PlayerLayerView()
+        v.backgroundColor = .clear
+        v.isUserInteractionEnabled = false
+        v.playerLayer.videoGravity = .resizeAspect
+        v.playerLayer.player = player
+        return v
+    }
+
+    func updateUIView(_ v: PlayerLayerView, context: Context) {
+        if v.playerLayer.player !== player { v.playerLayer.player = player }
+    }
+}
+
+/// Video denetimleri: oynat/duraklat, ilerleme çubuğu, süre, ses. Sayfa hareketlerinin dışında durur.
+private struct VideoControls: View {
+    let player: AVPlayer
+    @State private var playing = false
+    @State private var progress: Double = 0
+    @State private var duration: Double = 0
+    @State private var scrubbing = false
+    @State private var muted = false
+    @State private var observer: Any?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button { toggle() } label: {
+                Image(systemName: playing ? "pause.fill" : "play.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 32, height: 32)
+            }
+            .accessibilityLabel(playing ? "Duraklat" : "Oynat")
+            Text(Self.time(progress * duration))
+                .font(.system(size: 12).monospacedDigit())
+            Slider(value: $progress, in: 0...1) { editing in
+                scrubbing = editing
+                if !editing { seek() }
+            }
+            .tint(.white)
+            .onChange(of: progress) { _, _ in if scrubbing { seek() } }
+            .accessibilityLabel("Video konumu")
+            Text(Self.time(duration))
+                .font(.system(size: 12).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.7))
+            Button {
+                muted.toggle()
+                player.isMuted = muted
+            } label: {
+                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 28, height: 32)
+            }
+            .accessibilityLabel(muted ? "Sesi aç" : "Sesi kapat")
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 1))
+        .environment(\.colorScheme, .dark)
+        .onAppear(perform: attach)
+        .onDisappear(perform: detach)
+        .onChange(of: ObjectIdentifier(player)) { _, _ in detach(); attach() }
+        .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { note in
+            if (note.object as? AVPlayerItem) === player.currentItem { playing = false }
+        }
+    }
+
+    private func attach() {
+        muted = player.isMuted
+        playing = player.timeControlStatus != .paused
+        observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { t in
+            // Ana kuyrukta çağrılır; görünüm durumu ana aktörde güncellenir.
+            MainActor.assumeIsolated {
+                let d = player.currentItem?.duration.seconds ?? 0
+                if d.isFinite, d > 0 { duration = d }
+                if !scrubbing, duration > 0 { progress = min(max(t.seconds / duration, 0), 1) }
+                playing = player.timeControlStatus != .paused
+            }
+        }
+    }
+
+    private func detach() {
+        if let observer { player.removeTimeObserver(observer) }
+        observer = nil
+    }
+
+    private func toggle() {
         if player.timeControlStatus == .paused {
             if let item = player.currentItem, item.duration.isNumeric, CMTimeCompare(player.currentTime(), item.duration) >= 0 {
                 player.seek(to: .zero)
             }
             player.play()
+            playing = true
         } else {
             player.pause()
+            playing = false
         }
     }
 
-    private func preparePlayer() {
-        guard asset.isVideo, player == nil, let client = session.client else { return }
-        let url = client.url("assets/\(asset.id)/video")
-        var headers: [String: String] = [:]
-        if let token = client.token { headers["Authorization"] = "Bearer " + token }
-        let item = AVPlayerItem(asset: AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers]))
-        player = AVPlayer(playerItem: item)
+    private func seek() {
+        guard duration > 0 else { return }
+        player.seek(to: CMTime(seconds: progress * duration, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    static func time(_ s: Double) -> String {
+        guard s.isFinite, s >= 0 else { return "0:00" }
+        let t = Int(s.rounded())
+        return String(format: "%d:%02d", t / 60, t % 60)
     }
 }
 
