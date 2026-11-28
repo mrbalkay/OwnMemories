@@ -7,7 +7,8 @@
  * kullanıcının vektörleriyle sıralı asset kimlikleri döner. Kimlikler burada zaman çizelgesinin
  * görünürlük kurallarıyla (yalnızca kendi kütüphanesi, çöp/arşiv hariç, Live Photo videosu ve
  * düzenlenmiş orijinal gizli) süzülür, sıra korunur. Dosya adı/açıklama/kamera/kişi eşleşmeleri
- * öne alınır (hibrit). Hizmete ulaşılamazsa ya da sonuç yoksa metin aramasına düşülür.
+ * öne alınır (hibrit). Hizmete ulaşılamazsa ya da sonuç yoksa metin aramasına düşülür (hizmet yanıt verip
+ * metin araması da boşsa kip "smart" kalır: sonuç yok).
  */
 declare(strict_types=1);
 
@@ -216,7 +217,9 @@ function api_search(array $user, array $q): array
         $next = $offset + $limit;
     }
     $total = $offset === 0 && $next === null ? count($rows) : (int) db_val("SELECT COUNT(*) FROM assets a WHERE $where", $args);
-    return api_ok(['mode' => 'text', 'assets' => array_map('asset_to_json', $rows), 'next_offset' => $next, 'total' => $total, 'status' => $status]);
+    // Hizmet yanıt verdi ama ilgi eşiğini geçen yok ve metin eşleşmesi de yok: "akıllı arama: sonuç yok".
+    $mode = $ranked !== null && $total === 0 ? 'smart' : 'text';
+    return api_ok(['mode' => $mode, 'assets' => array_map('asset_to_json', $rows), 'next_offset' => $next, 'total' => $total, 'status' => $status]);
 }
 
 function api_search_status(array $user): array

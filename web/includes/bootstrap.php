@@ -54,7 +54,7 @@ if (!$__cli) {
     header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
     if (!$__api) {
         $n = csp_nonce();
-        header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$n' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://cdnjs.cloudflare.com; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'");
+        header("Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-$n' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://tiles.openfreemap.org https://cdnjs.cloudflare.com; media-src 'self' blob:; connect-src 'self' https://tiles.openfreemap.org; worker-src 'self' blob:; child-src blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'");
     }
 }
 unset($__cli, $__api, $__debug);

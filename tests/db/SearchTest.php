@@ -170,6 +170,21 @@ search_test('test_search_falls_back_to_text_when_ml_unavailable', function () {
     assert_eq([], search_ids($u, ['q' => 'zzzyok']));
 });
 
+search_test('test_search_ml_empty_and_no_text_match_stays_smart', function () {
+    // Hizmet çalışıyor ama ilgi eşiğini geçen yok ("köpek" köpeksiz kütüphanede): metin araması da boşsa
+    // arayüz "akıllı arama: sonuç yok" göstermeli, "akıllı arama kullanılamıyor/metin araması" değil.
+    $u = api_user();
+    api_asset($u, '2020-01-01 00:00:00', 1);
+    $st = ['indexed' => 1, 'total' => 1, 'pending' => 0, 'model' => 'm', 'ready' => true];
+    search_stub([], $st);
+    $r = call('GET', '/v1/search', $u, [], ['q' => 'köpek'])['json'];
+    assert_eq('smart', $r['mode']);
+    assert_eq([], $r['assets']);
+    assert_eq(0, $r['total']);
+    assert_eq(null, $r['next_offset']);
+    assert_eq(true, $r['status']['ready']);
+});
+
 search_test('test_search_pagination_by_offset', function () {
     $u = api_user();
     $ids = [];

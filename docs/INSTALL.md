@@ -301,9 +301,16 @@ curl -s http://127.0.0.1:8765/health
 **Ayarlar** (`/etc/ownmemories/ml.env`, değiştirdikten sonra `sudo systemctl restart ownmemories-ml`):
 
 - `OM_ML_THREADS` — kullanılacak çekirdek sayısı (varsayılan en fazla 4). Az çekirdekli sunucuda 2 yapın.
-- `OM_ML_MODEL` — başka bir Immich modeli (ör. `immich-app/nllb-clip-base-siglip__v1`). Değiştirdikten sonra
-  `sudo bash server/install-ml.sh` çalıştırın; bu iki ayar sonraki güncellemelerde korunur. Model değişince
-  tüm fotoğraflar yeniden dizinlenir.
+- `OM_ML_MODEL` — başka bir Immich modeli. Varsayılan `immich-app/ViT-B-16-SigLIP2__webli` kısa sorgularda
+  ("kumsal", "karlı dağ") en iyi hız/kalite dengesidir. Aramayı çoğunlukla uzun Türkçe cümlelerle yapıyorsanız
+  ve sunucuda en az 6 GB RAM varsa `immich-app/nllb-clip-base-siglip__v1` cümlelerde belirgin daha isabetlidir
+  (ama dizinlemesi 3 kat yavaş, ~0.6 GB daha fazla RAM ister; karşılaştırma: docs/ARCHITECTURE.md §7).
+  Değiştirdikten sonra `sudo bash server/install-ml.sh` çalıştırın; tüm fotoğraflar yeniden dizinlenir.
+- `OM_ML_MIN_Z` / `OM_ML_MIN_SCORE` — sonuç eşiği. Varsayılan olarak yalnızca sorguyla belirgin şekilde
+  eşleşen fotoğraflar listelenir; daha çok (ama daha az isabetli) sonuç için `OM_ML_MIN_Z="1.5"`, eşiği
+  tamamen kapatmak için `OM_ML_MIN_Z="0"`.
+
+Elle eklediğiniz `OM_ML_*` ayarları güncellemelerde korunur (veritabanı ayarları config.php'den yeniden yazılır).
 
 **Kapatmak:** `sudo touch /etc/ownmemories/ml.disabled && sudo bash /var/www/ownmemories/server/install-ml.sh`
 (geri açmak için dosyayı silip betiği yeniden çalıştırın). Kapalıyken arama dosya adı/açıklama ile çalışır.

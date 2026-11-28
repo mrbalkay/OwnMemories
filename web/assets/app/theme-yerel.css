@@ -721,3 +721,8 @@
 :root[data-skin="yerel"] .search-note { background: var(--y-accent-tint); color: var(--ink); border-radius: 12px; }
 :root[data-skin="yerel"] .search-note-bar i { background: var(--gok); }
 :root[data-skin="yerel"] .search-start h2 { font-family: inherit; font-weight: 700; letter-spacing: -.02em; }
+
+/* Harita (MapLibre + OpenFreeMap "liberty", koyu modda "dark") */
+:root[data-skin="yerel"] .map .maplibregl-ctrl-group { border-radius: 10px; overflow: hidden; box-shadow: var(--shadow-1); }
+:root[data-skin="yerel"] .map-thumb img { border-radius: 12px; border: 2.5px solid #fff; box-shadow: 0 6px 16px rgba(0, 0, 0, .28); }
+:root[data-skin="yerel"] .map-count { background: #0A7CFF; }

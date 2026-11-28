@@ -140,7 +140,7 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | GET | `assets/random?count=12` | – | `{assets:[…]}` — son 30 gün dışındaki rastgele fotoğraflar (widget) |
 | GET | `memories?date=YYYY-MM-DD` | (varsayılan: kullanıcının bugünü) | `{date, memories:[{id,kind,title,years_ago,date,count,cover_asset_id,asset_ids,assets}]}` — `kind`: `on_this_day` / `this_week` (bugün yoksa ±3 gün) / `favorites` |
 | POST | `devices/report` | `{device_id,name,model,os_version,app_version,pending,uploaded_total,last_backup_at,last_error}` | `{ok,server_time}` — iOS yedekleme durumu (Yönetim → Genel bakış) |
-| GET | `search` | `q` (≤ 200 karakter), `from`, `to` (ISO), `favorite=1`, `sort=relevance\|date` (varsayılan relevance), `limit≤200 (60)`, `offset` | `{mode:"smart"\|"text", assets:[…], next_offset:int\|null, total, status:{indexed,total,pending,model,ready}\|null}` — akıllı mod: ML hizmetinden (config `ml.url`, varsayılan `http://127.0.0.1:8765`, zaman aşımı `ml.timeout` 3 sn, isteğe bağlı `ml.min_score`) en fazla 500 sıralı kimlik alınır; zaman çizelgesi görünürlük kurallarıyla (yalnız kendi kütüphanesi, çöp/arşiv hariç, tek kare kuralı) süzülür, sıra korunur. Dosya adı/açıklama/kamera/kişi eşleşmeleri öne alınır (hibrit). Hizmet yok, hata ya da sonuç yoksa `assets?q=` ile aynı metin araması (`mode:"text"`, tarihe göre). Boş `q` → boş liste. `status` yalnız ilk sayfada (offset=0) |
+| GET | `search` | `q` (≤ 200 karakter), `from`, `to` (ISO), `favorite=1`, `sort=relevance\|date` (varsayılan relevance), `limit≤200 (60)`, `offset` | `{mode:"smart"\|"text", assets:[…], next_offset:int\|null, total, status:{indexed,total,pending,model,ready}\|null}` — akıllı mod: ML hizmetinden (config `ml.url`, varsayılan `http://127.0.0.1:8765`, zaman aşımı `ml.timeout` 3 sn, isteğe bağlı `ml.min_score`) en fazla 500 sıralı kimlik alınır; zaman çizelgesi görünürlük kurallarıyla (yalnız kendi kütüphanesi, çöp/arşiv hariç, tek kare kuralı) süzülür, sıra korunur. Dosya adı/açıklama/kamera/kişi eşleşmeleri öne alınır (hibrit). Hizmet yok, hata ya da sonuç yoksa `assets?q=` ile aynı metin araması (`mode:"text"`, tarihe göre); hizmet yanıt verip ilgi eşiğini geçen olmadığında metin araması da boşsa `mode:"smart"`, boş liste. Boş `q` → boş liste. `status` yalnız ilk sayfada (offset=0) |
 | GET | `search/status` | – | ML `/status` vekili: `{available:true,indexed,total,pending,model,ready}` ya da `{available:false}` |
 
 Yetki: asset uçları yalnız sahibine; paylaşılan albüm üyesi albümdeki asset'leri görüntüler/indirir (salt okunur).
@@ -179,7 +179,7 @@ metnini aynı uzaya kodlar; PHP yalnızca HTTP ile konuşur, ML çalışmıyorsa
   olduğu için noktalama atılır ve küçük harfe çevrilir (Türkçe `İ` → `i`), `<pad>` ile 64 token'a doldurulur /
   kırpılır (sondaki `<eos>` tokenizer ekler), girdi `text` int32 [1,64]. NLLB modellerinde metnin önüne
   `tur_Latn` eklenir (`OM_ML_LANG`). Çıktılar L2-normalize; benzerlik = iç çarpım.
-- **Kaynak görüntü:** `derived/thumb` (360 px; kısa kenarı 224'ten küçükse `derived/preview`), yoksa
+- **Kaynak görüntü:** `derived/thumb` (360 px; kısa kenarı modelin girdisinden — SigLIP2 224, NLLB 384 — küçükse `derived/preview`), yoksa
   `preview`, `poster`. Videolar için de bu dosyalar videonun karesidir. `thumb_state='ready'` olan her asset
   (çöpteki/arşivdeki dahil — süzme PHP'de) dizinlenir. Dosya yoksa/okunamazsa asset geri bırakılır ve
   artan aralıklarla (5 dk … 6 sa) yeniden denenir.
@@ -203,8 +203,35 @@ metnini aynı uzaya kodlar; PHP yalnızca HTTP ile konuşur, ML çalışmıyorsa
 | int8 dönüşümü (kurulumda bir kez) | ~17 sn, tepe ~3.4 GB RAM; fp32 ile vektör kosinüsü min 0.9956 |
 | Örnek 18 fotoğraf / 32 TR+EN sorgu, ilk 3 isabet | fp32 30/32, int8 30/32 |
 
-Puan aralığı (SigLIP2 kosinüs): ilgili görseller tipik olarak 0.07–0.16, ilgisizler 0.02–0.07. Kesin bir
-eşik yoktur; `min_score` verilmezse en iyi `limit` sonuç döner (PHP `ml.min_score` ile süzebilir, ~0.05 makul).
+**Varsayılan ilgi eşiği:** istekte `min_score` yoksa (PHP varsayılanı) servis, sorgunun o kullanıcının tüm
+vektörlerine karşı puan dağılımına bakar ve yığından sıyrılanları tutar: `z = (puan − ort) / std ≥ OM_ML_MIN_Z`
+**veya** `puan ≥ OM_ML_MIN_SCORE` (modele özgü "kesin ilgili" puan; sorguyla eşleşen fotoğraflar kütüphanenin
+büyük kısmı olduğunda z düşük kalır diye). Varsayılanlar `config.CUTOFF`: SigLIP2 (z 2.0, puan 0.10), NLLB
+(z 2.0, puan 0.07), bilinmeyen model (z 2.0, puan yok). 50 vektörden küçük kütüphanelerde eşik uygulanmaz.
+Hiçbir şey geçmezse sonuç boştur ve PHP metin aramasına düşer ("köpek" köpeksiz kütüphanede sonuç vermez).
+İstek `min_score` gönderirse yalnızca o mutlak eşik uygulanır (PHP `ml.min_score`). Ölçüm (XM3600, 1000
+görüntü, 31 kısa Türkçe sorgu): SigLIP2'de ortalama 36 sonuç (kütüphanenin %3.6'sı), kesinlik 0.35, duyarlılık
+0.65; tek bir doğru görseli olan Türkçe açıklamalarda doğru görselin %97'si eşiği geçer.
+
+### Model karşılaştırması (Türkçe)
+
+`ml/tests/xm3600_bench.py` ile Crossmodal-3600'ün ilk 1000 görüntüsünde (kısa kenarı 360 px küçük resimler,
+uygulamadaki gibi) ölçüldü; metin modelleri int8 token tablolu. "Anahtar sorgu" = 31 kısa Türkçe sorgu
+(köpek, kumsal, karlı dağ, doğum günü pastası…), doğruluk etiketi İngilizce açıklamalardan.
+
+| Model | TR açıklama R@1 / R@5 | EN açıklama R@1 | TR anahtar sorgu P@10 / mAP | Görsel kodlama (4 çekirdek) | RSS |
+|---|---|---|---|---|---|
+| **ViT-B-16-SigLIP2__webli** (varsayılan) | 60.8 / 85.0 | 75.5 | 0.57 / 0.53 | ~120 ms | ~1.2 GB |
+| nllb-clip-base-siglip__v1 | 71.7 / 92.2 | 68.4 | 0.56 / 0.50 | ~350 ms | ~1.8 GB |
+| XLM-Roberta-Base-ViT-B-32__laion5b_s13b_b90k | 63.5 / 87.3 | 68.2 | 0.54 / 0.48 | ~100 ms | ~2.0 GB (fp32 metin) |
+
+Kullanıcıların yazdığı kısa sorgularda SigLIP2 ile NLLB başa baş (SigLIP2 "insan kalabalığı", "kilise",
+"pasta"=kek'te zayıf; NLLB "at", "çocuk", "uçak"ta zayıf), NLLB uzun cümlelerde belirgin önde ama 3 kat yavaş
+dizinler, ~0.6 GB fazla RAM ister ve İngilizcede geride. Bu yüzden varsayılan SigLIP2; uzun cümlelerle arayan
+ve RAM'i bol (≥ 6 GB) sunucular `OM_ML_MODEL=immich-app/nllb-clip-base-siglip__v1` seçebilir. Denenen ve
+alınmayan değişiklikler: sorgu başına boşluk (Gemma tokenizer ilk kelimeye `▁` koymaz) ve "bir fotoğraf: "
+şablonu kısa sorgularda +2–4 isabet verdi ama açıklama ölçümünde fark yaratmadı/NLLB'de kötüleştirdi; Immich ile
+birebir aynı ön işleme korundu.
 
 ### HTTP uçları (yalnızca `127.0.0.1:8765`, JSON)
 
@@ -219,7 +246,8 @@ eşik yoktur; `min_score` verilmezse en iyi `limit` sonuç döner (PHP `ml.min_s
 `server/install-ml.sh` yazar: `OM_DB_HOST/PORT/NAME/USER/PASS`, `OM_STORAGE` (web/config/config.php'den),
 `OM_ML_MODEL`, `OM_ML_MODEL_DIR` (`/var/lib/ownmemories/models`), `OM_ML_PORT` (8765), `OM_ML_THREADS`
 (min(4, CPU)). İsteğe bağlı: `OM_ML_BATCH` (16), `OM_ML_IDLE` (20), `OM_ML_TEXT_QUANT` (1), `OM_ML_INDEX` (1),
-`OM_ML_LANG` (tr). DB/depolama değişkenleri yoksa servis `OM_CONFIG_PHP`'yi (`php -r`) okur. `localhost`
+`OM_ML_LANG` (tr), `OM_ML_MIN_Z` / `OM_ML_MIN_SCORE` (varsayılan ilgi eşiği, yukarıda). Kurulum betiği
+kendi yazmadığı `OM_ML_*` satırlarını korur. DB/depolama değişkenleri yoksa servis `OM_CONFIG_PHP`'yi (`php -r`) okur. `localhost`
 verilirse PHP gibi MySQL Unix soketi kullanılır.
 
 ### Dosyalar
@@ -227,4 +255,5 @@ verilirse PHP gibi MySQL Unix soketi kullanılır.
 `ml/ownmemories_ml/`: `service.py` (HTTP + dizinleyici + bellek içi dizin), `model.py` (ön işleme, ONNX),
 `download.py` (HF indirici: sürdürme, boyut + sha256), `quantize.py`, `config.py`, `__main__.py`
 (`serve` / `download` / `quantize` / `embed-text`). Testler: `ml/tests/eval_samples.py` (kalite, gecikme, RAM),
-`ml/tests/test_service.py` (geçici DB ile uçtan uca).
+`ml/tests/test_service.py` (geçici DB ile uçtan uca), `ml/tests/test_cutoff.py` (ilgi eşiği, DB/model gerekmez),
+`ml/tests/xm3600_bench.py` (Türkçe kalite karşılaştırması, yukarıda).

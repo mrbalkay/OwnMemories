@@ -235,14 +235,6 @@
 /* ------------------------------------------------------------ harita */
 :root[data-skin="galeri"] .map { border-radius: 0; box-shadow: none; border: 1px solid var(--g-cizgi); margin-top: 24px; height: calc(100dvh - 240px); filter: saturate(.75); }
 /* Leaflet varsayılanları (yuvarlak gölgeli düğmeler, renkli küme daireleri) yerine kılcal çizgi */
-:root[data-skin="galeri"] .map .leaflet-bar { border: 1px solid var(--g-cizgi); border-radius: 0; box-shadow: none; }
-:root[data-skin="galeri"] .map .leaflet-bar a { width: 32px; height: 32px; line-height: 31px; border-radius: 0 !important; border-bottom-color: var(--g-cizgi); color: var(--g-murekkep); font-family: var(--sans); font-weight: 300; }
-:root[data-skin="galeri"] .map .leaflet-bar a:hover { background: var(--g-tas); }
-:root[data-skin="galeri"] .map .leaflet-control-attribution { background: rgba(255, 255, 255, .86); color: var(--g-grafit); font-size: 11px; }
-:root[data-skin="galeri"] .map .leaflet-control-attribution a { color: var(--g-grafit); }
-:root[data-skin="galeri"] .map .marker-cluster { background: rgba(27, 28, 30, .18); }
-:root[data-skin="galeri"] .map .marker-cluster div { background: var(--g-murekkep); color: #fff; font-family: var(--serif); font-size: 13px; }
-:root[data-skin="galeri"] .map-thumb img { border-radius: var(--g-r1); border: 2px solid #fff; box-shadow: 0 6px 18px rgba(20, 24, 28, .28); }
 
 /* ------------------------------------------------------------ görüntüleyici */
 :root[data-skin="galeri"] .viewer { background: var(--g-salon); color: var(--g-salon-murekkep); animation-duration: .4s; }
@@ -563,3 +555,13 @@
 :root[data-skin="galeri"] .search-start h2 { font-weight: 400; font-size: 36px; }
 :root[data-skin="galeri"] .search-start-ic { background: transparent; border: 1px solid var(--g-cizgi); color: var(--g-murekkep); }
 :root[data-skin="galeri"] .chip.search-chip { padding: 7px 14px; }
+
+/* Harita (MapLibre + OpenFreeMap "positron") */
+:root[data-skin="galeri"] .map .maplibregl-ctrl-group { border: 1px solid var(--g-cizgi); border-radius: 0; box-shadow: none; }
+:root[data-skin="galeri"] .map .maplibregl-ctrl-group button { width: 32px; height: 32px; }
+:root[data-skin="galeri"] .map .maplibregl-ctrl-group button + button { border-top-color: var(--g-cizgi); }
+:root[data-skin="galeri"] .map .maplibregl-ctrl-attrib { background: rgba(255, 255, 255, .86); color: var(--g-grafit); font-size: 11px; }
+:root[data-skin="galeri"] .map .maplibregl-ctrl-attrib a { color: var(--g-grafit); }
+:root[data-skin="galeri"] .map-thumb img { border-radius: var(--g-r1); border: 2px solid #fff; box-shadow: 0 6px 18px rgba(20, 24, 28, .28); }
+:root[data-skin="galeri"] .map-thumb.is-cluster::before { border-radius: var(--g-r1); }
+:root[data-skin="galeri"] .map-count { border-radius: 0; background: var(--g-muze, #2C4A5A); font-family: var(--serif); font-weight: 400; }

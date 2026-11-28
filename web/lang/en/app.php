@@ -58,4 +58,5 @@ return [
     'search_no_results' => 'No photos match this search. Try other or fewer words.',
     'search_try' => 'Try these',
     'search_count' => '{n} results', 'search_count_none' => 'No results', 'search_dates' => 'Dates', 'search_placeholder_short' => 'Search your photos…',
+    'map_cluster' => 'Cluster of {n} photos',
 ];

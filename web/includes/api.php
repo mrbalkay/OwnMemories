@@ -89,6 +89,7 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['GET', '#^/v1/assets/random$#', fn() => api_assets_random(api_need_user($user), $query)],
         ['GET', '#^/v1/assets/map$#', fn() => api_assets_map(api_need_user($user), $query)],
         ['POST', '#^/v1/assets/check$#', fn() => api_assets_check(api_need_user($user), $body)],
+        ['POST', '#^/v1/assets/lookup$#', fn() => api_assets_lookup(api_need_user($user), $body)],
         ['POST', '#^/v1/assets/(trash|restore|purge)$#', fn($m) => api_assets_bulk(api_need_user($user), $m[1], $body)],
         ['GET', "#^/v1/assets/$uuid$#", fn($m) => api_asset_get(api_need_user($user), $m[1])],
         ['PATCH', "#^/v1/assets/$uuid$#", fn($m) => api_asset_patch(api_need_user($user), $m[1], $body)],
@@ -309,6 +310,33 @@ function api_assets_map(array $user, array $q): array
     }
     $rows = db_all("SELECT a.id, a.latitude, a.longitude FROM assets a WHERE $where ORDER BY a.taken_at DESC LIMIT 5000", $args);
     return api_ok(['points' => array_map(fn($r) => ['id' => $r['id'], 'lat' => (float) $r['latitude'], 'lng' => (float) $r['longitude']], $rows)]);
+}
+
+/** Kimlik listesiyle öğeleri getirir (haritadaki bir kümenin fotoğrafları gibi): yalnızca kullanıcının
+ *  çöpte olmayan öğeleri, istenen sırada, tekrarsız. En fazla 500 kimlik. */
+function api_assets_lookup(array $user, array $b): array
+{
+    $ids = (array) ($b['ids'] ?? []);
+    if (count($ids) > 500) {
+        throw new ValidationError('En fazla 500 öğe.', 'ids');
+    }
+    $ids = array_values(array_unique(array_filter($ids, fn($v) => is_string($v) && preg_match('/^[0-9a-f-]{36}$/', $v))));
+    if (!$ids) {
+        return api_ok(['assets' => []]);
+    }
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    $rows = db_all("SELECT a.* FROM assets a WHERE a.user_id = ? AND a.trashed_at IS NULL AND a.id IN ($in)", array_merge([(int) $user['id']], $ids));
+    $byId = [];
+    foreach ($rows as $r) {
+        $byId[$r['id']] = $r;
+    }
+    $out = [];
+    foreach ($ids as $id) {
+        if (isset($byId[$id])) {
+            $out[] = asset_to_json($byId[$id]);
+        }
+    }
+    return api_ok(['assets' => $out]);
 }
 
 function api_assets_check(array $user, array $b): array

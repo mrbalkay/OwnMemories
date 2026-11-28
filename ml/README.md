@@ -41,4 +41,11 @@ python -I ml/tests/eval_samples.py --model-dir /tmp/models/ViT-B-16-SigLIP2__web
 # Uçtan uca: geçici veritabanı (om_mltest_<pid>) + geçici depolama, dizinleyici ve tüm uçlar
 OM_TEST_DB_HOST=127.0.0.1 OM_TEST_DB_USER=om OM_TEST_DB_PASS=om \
 python -I ml/tests/test_service.py --model-dir /tmp/models/ViT-B-16-SigLIP2__webli --images <klasör>
+# Varsayılan ilgi eşiği (DB/model gerekmez, saniyeler sürer)
+python -I ml/tests/test_cutoff.py
+# Türkçe kalite karşılaştırması: Crossmodal-3600 (indirme komutları dosyanın başında)
+python -I ml/tests/xm3600_bench.py --data <xm3600 klasörü> --model-dir /tmp/models/ViT-B-16-SigLIP2__webli
 ```
+
+Sonuç sayısı: istekte `min_score` yoksa servis yalnızca sorguyla belirgin şekilde eşleşenleri döner
+(z ≥ `OM_ML_MIN_Z` veya puan ≥ `OM_ML_MIN_SCORE`; modele göre varsayılanlar `config.CUTOFF`).

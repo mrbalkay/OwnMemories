@@ -72,6 +72,8 @@ struct MainTabView: View {
         TabView {
             LibraryView()
                 .tabItem { Label("Fotoğraflar", systemImage: "photo.on.rectangle") }
+            MapScreen()
+                .tabItem { Label("Harita", systemImage: "map") }
             BackupView()
                 .tabItem { Label("Yedekleme", systemImage: "arrow.triangle.2.circlepath.icloud") }
             SettingsView()

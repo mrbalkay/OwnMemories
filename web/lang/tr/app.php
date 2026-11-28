@@ -58,4 +58,5 @@ return [
     'search_no_results' => 'Bu aramayla eşleşen fotoğraf bulunamadı. Başka sözcüklerle ya da daha kısa bir ifadeyle deneyin.',
     'search_try' => 'Şunları deneyin',
     'search_count' => '{n} sonuç', 'search_count_none' => 'Sonuç yok', 'search_dates' => 'Tarih', 'search_placeholder_short' => 'Fotoğraflarda arayın…',
+    'map_cluster' => '{n} fotoğraflık küme',
 ];
