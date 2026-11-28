@@ -7,14 +7,23 @@ import UIKit
 /// UIApplication arka plan görev kimliği için kutu (kapanışlarda güvenle değiştirilebilsin).
 final class BackgroundTaskBox {
     var id: UIBackgroundTaskIdentifier = .invalid
+    /// Süre dolunca iptal edilecek iş.
+    var work: Task<Void, Never>?
     private let lock = NSLock()
 
+    /// Görevi bitirir. Süre dolum kapanışından (ana iş parçacığı) çağrıldığında **hemen** bitirmelidir:
+    /// iOS, kapanış dönene kadar görev bitmezse uygulamayı sonlandırır (kilit ekranında "çökme").
     func end() {
-        lock.lock(); defer { lock.unlock() }
-        guard id != .invalid else { return }
+        lock.lock()
         let current = id
         id = .invalid
-        DispatchQueue.main.async { UIApplication.shared.endBackgroundTask(current) }
+        lock.unlock()
+        guard current != .invalid else { return }
+        if Thread.isMainThread {
+            UIApplication.shared.endBackgroundTask(current)
+        } else {
+            DispatchQueue.main.async { UIApplication.shared.endBackgroundTask(current) }
+        }
     }
 }
 
@@ -142,10 +151,17 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
         let app = UIApplication.shared
         let box = BackgroundTaskBox()
         box.id = app.beginBackgroundTask(withName: "om-handoff") {
+            // Süre doldu: işi durdur ve görevi bu kapanış içinde bitir.
+            box.work?.cancel()
+            DiagLog.add("Arka plana geçiş süresi doldu; teslim yarıda bırakıldı")
             box.end()
         }
-        Task { @MainActor in
-            await backgroundHandOff(budget: 22, reason: "arka plana geçiş")
+        guard box.id != .invalid else { return }
+        // iOS'un verdiği süreden pay bırak (genelde ~30 sn; kalan süre daha azsa ona göre).
+        let remaining = app.backgroundTimeRemaining
+        let budget = remaining.isFinite ? max(3, min(20, remaining - 8)) : 20
+        box.work = Task { @MainActor in
+            await backgroundHandOff(budget: budget, reason: "arka plana geçiş")
             box.end()
         }
     }

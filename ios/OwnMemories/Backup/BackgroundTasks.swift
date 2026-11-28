@@ -35,11 +35,29 @@ enum BackgroundJobs {
                 await MemoryNotifier.shared.reschedule()
             }
         }
-        task.expirationHandler = { work.cancel(); DiagLog.add("Arka plan görevinin süresi doldu") }
+        // setTaskCompleted tam bir kez ve süre dolduğunda gecikmeden çağrılmalı; yoksa iOS uygulamayı sonlandırır.
+        let done = CompletionOnce()
+        task.expirationHandler = {
+            work.cancel()
+            DiagLog.add("Arka plan görevinin süresi doldu")
+            if done.claim() { task.setTaskCompleted(success: false) }
+        }
         Task {
             await work.value
-            task.setTaskCompleted(success: !work.isCancelled)
+            if done.claim() { task.setTaskCompleted(success: !work.isCancelled) }
             await MainActor.run { schedule() }
+        }
+    }
+
+    /// İş parçacığı güvenli "bir kez" bayrağı.
+    private final class CompletionOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var used = false
+        func claim() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            if used { return false }
+            used = true
+            return true
         }
     }
 
