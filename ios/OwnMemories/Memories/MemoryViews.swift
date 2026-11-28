@@ -28,6 +28,47 @@ extension Memory {
     var countLine: String { "\(count) öğe" }
 }
 
+/// Henüz anı yokken Sinema'nın üst afişi: kitaplıktan bir fotoğraf, kenardan kenara.
+struct FeaturedHero: View {
+    let asset: Asset
+    var onOpen: () -> Void
+    @Environment(\.theme) private var theme
+
+    private var month: String { MonthTitle.text(for: String((asset.takenLocal ?? asset.takenAt).prefix(7))) }
+
+    var body: some View {
+        Button(action: onOpen) {
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: 300)
+                .overlay { RemoteImage(assetId: asset.id, variant: "preview") }
+                .overlay(LinearGradient(stops: [.init(color: theme.background, location: 0),
+                                                .init(color: theme.background.opacity(0.55), location: 0.28),
+                                                .init(color: .clear, location: 0.7)],
+                                        startPoint: .bottom, endPoint: .top))
+                .overlay(alignment: .bottomLeading) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Rectangle().fill(theme.muted).frame(width: 18, height: 1)
+                            Text("Kitaplığınızdan").font(.system(size: 13)).foregroundStyle(Color(hex: 0xD9DBE0))
+                        }
+                        Text(month)
+                            .font(.system(size: 34, weight: .regular, design: .serif))
+                            .foregroundStyle(.white)
+                        Text(StoryText.date(asset))
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color(hex: 0xD9DBE0))
+                    }
+                    .padding(.horizontal, 20).padding(.bottom, 18)
+                }
+                .clipped()
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityLabel("Kitaplığınızdan, \(month)")
+    }
+}
+
 /// Kitaplığın üstündeki anılar şeridi. Düzen temaya göre değişir:
 /// Sinema büyük bir afişle açılır, Galeri sergi duvarı gibi dizer, Yerel zengin kapaklı kartlar gösterir.
 struct MemoriesStrip: View {

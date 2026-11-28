@@ -8,6 +8,8 @@ final class MemoryService: ObservableObject {
     static let shared = MemoryService()
 
     @Published private(set) var memories: [Memory] = []
+    /// Kitaplıktan rastgele fotoğraflar: henüz anı yokken Sinema afişi bunlarla dolar.
+    @Published private(set) var featured: [Asset] = []
     @Published private(set) var lastError: String?
     @Published private(set) var lastRefreshAt: Date?
     private var lastRefresh: Date?
@@ -38,6 +40,7 @@ final class MemoryService: ObservableObject {
         var randoms: AssetList?
         do {
             randoms = try await client.send("GET", "assets/random", query: ["count": "12"])
+            if let a = randoms?.assets, !a.isEmpty { featured = a }
         } catch {
             DiagLog.add("Rastgele fotoğraflar alınamadı: \(error.localizedDescription)")
         }
@@ -49,6 +52,7 @@ final class MemoryService: ObservableObject {
         inFlight?.cancel()
         inFlight = nil
         memories = []
+        featured = []
         lastRefresh = nil
         WidgetStore.save(.empty)
         WidgetCenter.shared.reloadAllTimelines()

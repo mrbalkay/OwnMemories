@@ -42,4 +42,5 @@ return [
     'play_memory' => 'Anıyı oynat', 'pause' => 'Duraklat', 'play' => 'Oynat', 'select_day' => 'Seç', 'jump_to_year' => 'Yıla atla',
     'nav_library' => 'Kitaplık', 'nav_albums' => 'Albümler', 'nav_other' => 'Diğer', 'memories_prev' => 'Önceki anılar', 'memories_next' => 'Sonraki anılar',
     'in_this_memory' => 'Bu anıda', 'when' => 'Tarih', 'photo_n_of' => '{i} / {n}',
+    'from_library' => 'Kitaplığınızdan',
 ];
