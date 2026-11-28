@@ -12,9 +12,11 @@ function render_simple_head(string $title, string $bodyClass = 'simple'): void
         . '<meta name="robots" content="noindex,nofollow">'
         . '<title>' . e($title) . ' · OwnMemories</title>'
         . '<link rel="icon" href="' . e(asset('img/icon.svg')) . '" type="image/svg+xml">'
+        . '<link rel="icon" href="' . e(asset('img/favicon-32.png')) . '" type="image/png" sizes="32x32">'
+        . '<link rel="apple-touch-icon" href="' . e(asset('img/apple-touch-icon.png')) . '">'
         . '<link rel="stylesheet" href="' . e(asset('css/site.css')) . '">'
         . '</head><body class="' . e($bodyClass) . '"><main class="card">'
-        . '<div class="brand"><img src="' . e(asset('img/icon.svg')) . '" alt="" width="40" height="40"><span>OwnMemories</span></div>';
+        . '<div class="brand"><img src="' . e(asset('img/logo.svg')) . '" alt="" width="40" height="40"><span>OwnMemories</span></div>';
 }
 
 function render_simple_foot(): void

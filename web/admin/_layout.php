@@ -24,6 +24,8 @@ function admin_head(string $title): void
     echo '<!doctype html><html lang="' . e(locale()) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<meta name="robots" content="noindex,nofollow"><title>' . e($title) . ' · ' . e(t('admin.title')) . '</title>'
         . '<link rel="icon" href="' . e(asset('img/icon.svg')) . '" type="image/svg+xml">'
+        . '<link rel="icon" href="' . e(asset('img/favicon-32.png')) . '" type="image/png" sizes="32x32">'
+        . '<link rel="apple-touch-icon" href="' . e(asset('img/apple-touch-icon.png')) . '">'
         . '<link rel="stylesheet" href="' . e(asset('admin/admin.css')) . '"></head><body><div class="adm">'
         . '<aside class="adm-side"><a class="adm-logo" href="/admin/"><img src="' . e(asset('img/icon.svg')) . '" alt="" width="28" height="28"> ' . e(t('admin.title')) . '</a><nav>';
     foreach ($items as $file => $key) {

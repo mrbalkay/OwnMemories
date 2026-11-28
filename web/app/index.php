@@ -24,6 +24,9 @@ $skin = $boot['user']['theme'];
 <meta name="robots" content="noindex,nofollow">
 <title>OwnMemories</title>
 <link rel="icon" href="<?= e(asset('img/icon.svg')) ?>" type="image/svg+xml">
+<link rel="icon" href="<?= e(asset('img/favicon-32.png')) ?>" type="image/png" sizes="32x32">
+<link rel="icon" href="<?= e(asset('img/favicon-16.png')) ?>" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="<?= e(asset('img/apple-touch-icon.png')) ?>">
 <link rel="stylesheet" href="<?= e(asset('app/app.css')) ?>">
 <?php foreach (UI_THEMES as $th): ?>
 <link rel="stylesheet" id="skin-<?= e($th) ?>" href="<?= e(asset('app/theme-' . $th . '.css')) ?>"<?= $th === $skin ? '' : ' disabled' ?>>

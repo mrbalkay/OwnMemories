@@ -103,7 +103,7 @@
   padding: 18px 12px 14px;
 }
 :root[data-skin="yerel"] .logo { color: var(--ink); gap: 10px; padding: 2px 8px 18px; font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
-:root[data-skin="yerel"] .logo img { border-radius: 8px; filter: hue-rotate(-38deg) saturate(1.25); box-shadow: 0 1px 3px rgba(10, 60, 160, .3); }
+:root[data-skin="yerel"] .logo img { border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
 :root[data-skin="yerel"] .nav { gap: 1px; }
 :root[data-skin="yerel"] .nav-h {
   display: block; margin: 14px 0 4px; padding: 0 10px;
