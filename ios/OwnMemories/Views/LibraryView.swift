@@ -38,18 +38,54 @@ final class LibraryModel: ObservableObject {
         }
     }
 
+    /// Yerinde yenileme: şu an yüklü aralığı (en eski yüklü öğenin tarihine kadar) baştan yeniden çeker
+    /// ve listeyi tek seferde değiştirir. Yeni yedeklenen fotoğraflar tarih sırasındaki yerlerine girer;
+    /// liste boşalmadığı için kaydırma konumu korunur.
+    func refreshInPlace(client: APIClient?) async {
+        guard let client, !loading else { return }
+        guard let oldest = assets.last?.takenAt else { await reload(client: client); return }
+        loading = true
+        defer { loading = false }
+        var fresh: [Asset] = []
+        var cursor: AssetCursor?
+        do {
+            repeat {
+                var q = ["limit": "500"]
+                if let cursor {
+                    q["before"] = cursor.before
+                    if let id = cursor.beforeId { q["before_id"] = id }
+                }
+                let page: AssetPage = try await client.send("GET", "assets", query: q)
+                fresh.append(contentsOf: page.assets)
+                cursor = page.next
+            } while cursor != nil && (fresh.last.map { $0.takenAt >= oldest } ?? false) && fresh.count < 20_000
+            assets = fresh
+            sections = DayGrouping.group(fresh)
+            next = cursor
+            done = cursor == nil
+            error = nil
+        } catch {
+            // Sessiz: bir sonraki yüklemede ya da aşağı çekince tekrar denenir.
+        }
+    }
+
     func update(_ asset: Asset) {
         if let i = assets.firstIndex(where: { $0.id == asset.id }) {
             assets[i] = asset
             sections = DayGrouping.group(assets)
         }
     }
+
 }
 
 struct LibraryView: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var memories: MemoryService
+    @EnvironmentObject private var engine: BackupEngine
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = LibraryModel()
+    /// Yedekleme sürerken yeni yüklenenleri listeye getiren, sık istek atmamak için ertelenmiş yenileme.
+    @State private var pendingRefresh: Task<Void, Never>?
     @State private var viewing: Asset?
     @State private var story: Memory?
     private let columns = [GridItem(.adaptive(minimum: 96), spacing: 1.5)]
@@ -104,6 +140,14 @@ struct LibraryView: View {
                 if model.assets.isEmpty { await model.reload(client: session.client) }
                 await memories.refresh()
             }
+            .onChange(of: engine.counts.done) { old, new in
+                guard new > old else { return }
+                scheduleRefresh()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                // Arka planda yüklenenler: uygulamaya dönünce listeyi güncelle.
+                if phase == .active, !model.assets.isEmpty { scheduleRefresh(delay: 0.5) }
+            }
             .fullScreenCover(item: $story) { m in
                 MemoryStoryView(memory: m).environmentObject(session)
             }
@@ -111,6 +155,17 @@ struct LibraryView: View {
                 AssetViewer(assets: model.assets, startId: asset.id, onChange: { model.update($0) })
                     .environmentObject(session)
             }
+        }
+    }
+
+    /// Art arda tamamlanan yüklemeleri birleştirir: ilk tamamlanmadan kısa süre sonra bir kez yeniler;
+    /// o sırada gelenler bir sonraki tura kalır (yükleme sürdükçe birkaç saniyede bir güncellenir).
+    private func scheduleRefresh(delay: Double = 2.5) {
+        guard pendingRefresh == nil else { return }
+        pendingRefresh = Task {
+            try? await Task.sleep(for: .seconds(delay))
+            await model.refreshInPlace(client: session.client)
+            pendingRefresh = nil
         }
     }
 }
