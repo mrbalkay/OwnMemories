@@ -5,7 +5,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         BackgroundJobs.register()
+        _ = BackupEngine.shared   // arka plan yükleme sonuçlarını alacak kancaları kur
         BackgroundUploader.shared.reconnect()
+        if application.applicationState == .background { DiagLog.add("Uygulama arka planda başlatıldı") }
         return true
     }
 
@@ -13,8 +15,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
         guard identifier == BackgroundUploader.identifier else { completionHandler(); return }
         BackgroundUploader.shared.backgroundCompletion = completionHandler
-        BackgroundUploader.shared.reconnect()
-        Task { @MainActor in BackupEngine.shared.start(reason: "arka plan yüklemesi") }
+        // Motoru (ve tamamlanma kancalarını) hazırla, sonra oturuma yeniden bağlan; olaylar bitince
+        // BackupEngine sıradaki grubu teslim edip sistemi bilgilendirir.
+        Task { @MainActor in
+            _ = BackupEngine.shared
+            BackgroundUploader.shared.reconnect()
+        }
     }
 
     /// Anı bildirimine dokunulunca anıyı aç.

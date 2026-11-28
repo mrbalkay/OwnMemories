@@ -26,7 +26,15 @@ enum ResourceExporter {
         return d
     }
 
-    static func export(localId: String, kind: ResourceKind) async throws -> Exported {
+    /// Arka plan yüklemesinde iOS dosyayı uygulama kapalıyken de okur; geçici klasör yerine kalıcı bir klasör kullanılır.
+    static var stagedDir: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let d = base.appendingPathComponent("om-staged", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    static func export(localId: String, kind: ResourceKind, into directory: URL? = nil) async throws -> Exported {
         guard let asset = PhotoScanner.asset(localId) else { throw ExportError.assetMissing }
         let resources = PHAssetResource.assetResources(for: asset)
         let original = resources.first { $0.type == (asset.mediaType == .video ? .video : .photo) } ?? resources.first
@@ -41,7 +49,7 @@ enum ResourceExporter {
         let baseName = ((original?.originalFilename ?? res.originalFilename) as NSString).deletingPathExtension
         let ext = (res.originalFilename as NSString).pathExtension
         let filename = ext.isEmpty ? baseName : baseName + "." + ext
-        let url = exportDir.appendingPathComponent(UUID().uuidString + (ext.isEmpty ? "" : "." + ext))
+        let url = (directory ?? exportDir).appendingPathComponent(UUID().uuidString + (ext.isEmpty ? "" : "." + ext))
         let opts = PHAssetResourceRequestOptions()
         opts.isNetworkAccessAllowed = true
         try await PHAssetResourceManager.default().writeData(for: res, toFile: url, options: opts)

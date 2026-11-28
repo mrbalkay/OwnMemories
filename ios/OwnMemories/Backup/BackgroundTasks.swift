@@ -7,26 +7,35 @@ enum BackgroundJobs {
     static let backupId = "net.balkay.ownmemories.backup"
 
     static func register() {
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: refreshId, using: nil) { task in
+        let ok1 = BGTaskScheduler.shared.register(forTaskWithIdentifier: refreshId, using: nil) { task in
             run(task, seconds: 25)
         }
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: backupId, using: nil) { task in
+        let ok2 = BGTaskScheduler.shared.register(forTaskWithIdentifier: backupId, using: nil) { task in
             run(task, seconds: nil)
         }
+        if !ok1 || !ok2 { DiagLog.add("Arka plan görevleri kaydedilemedi") }
     }
 
     private static func run(_ task: BGTask, seconds: TimeInterval?) {
         let deadline = seconds.map { Date().addingTimeInterval($0) }
+        let kind = seconds == nil ? "gece işlemi" : "yenileme"
+        DiagLog.add("Arka plan görevi başladı: \(kind)")
         let work = Task { @MainActor in
-            // Yedekleme öncelikli; anılar ve bildirimler kalan sürede (en az 8 sn varsa) yenilenir.
-            await BackupEngine.shared.runOnce(deadline: deadline.map { $0.addingTimeInterval(-8) })
+            let engine = BackupEngine.shared
+            if seconds == nil {
+                // Uzun görev: önce büyük dosyalar (sırayla), sonra büyük bir grup teslim.
+                await engine.runOnce(deadline: nil)
+                await engine.backgroundHandOff(budget: 60, reason: kind)
+            } else {
+                await engine.backgroundHandOff(budget: 15, reason: kind)
+            }
             if Task.isCancelled { return }
-            if deadline == nil || deadline!.timeIntervalSinceNow > 8 {
+            if deadline == nil || deadline!.timeIntervalSinceNow > 6 {
                 await MemoryService.shared.refresh()
                 await MemoryNotifier.shared.reschedule()
             }
         }
-        task.expirationHandler = { work.cancel() }
+        task.expirationHandler = { work.cancel(); DiagLog.add("Arka plan görevinin süresi doldu") }
         Task {
             await work.value
             task.setTaskCompleted(success: !work.isCancelled)

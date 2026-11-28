@@ -9,8 +9,10 @@ final class BackupRecord {
     var kindRaw: String
     var isVideo: Bool
     var assetDate: Date
-    /// pending | uploading | done | failed
+    /// pending | uploading (ön planda parça parça) | queued (arka plan oturumuna teslim) | done | failed
     var state: String
+    /// Arka plan yüklemesi için kalıcı geçici dosya (yükleme bitince silinir).
+    var stagedPath: String?
     var sha1: String?
     var uploadId: String?
     var fileSize: Int64

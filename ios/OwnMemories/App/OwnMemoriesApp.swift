@@ -31,6 +31,7 @@ struct OwnMemoriesApp: App {
                     }
                 }
             case .background:
+                engine.enterBackground()
                 BackgroundJobs.schedule()
             default:
                 break
