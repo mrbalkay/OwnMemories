@@ -726,3 +726,69 @@
 :root[data-skin="yerel"] .map .maplibregl-ctrl-group { border-radius: 10px; overflow: hidden; box-shadow: var(--shadow-1); }
 :root[data-skin="yerel"] .map-thumb img { border-radius: 12px; border: 2.5px solid #fff; box-shadow: 0 6px 16px rgba(0, 0, 0, .28); }
 :root[data-skin="yerel"] .map-count { background: #0A7CFF; }
+
+/* ------------------------------------------------------------ kişiler (people.js)
+   Yerel: iOS Fotoğraflar'daki "Kişiler" albümü — büyük yuvarlak yüzler, kalın adlar, gök mavisi eylemler. */
+:root[data-skin="yerel"] #nav > [data-nav="people"] { order: 3; }
+:root[data-skin="yerel"] .people-head .people-sub { display: none; }          /* alt yazı üst çubukta (#pageSub) */
+:root[data-skin="yerel"] .people-head { justify-content: flex-end; }
+:root[data-skin="yerel"] #app[data-route="person"] .page-title { visibility: hidden; } /* ad kişi başlığında büyük yazılır */
+:root[data-skin="yerel"] .p-ava { background: var(--y-fill); color: var(--y-ink-2); }
+:root[data-skin="yerel"] .p-ava.is-empty { background: linear-gradient(180deg, #A9AEB8, #8A8F99); color: #fff; }
+:root[data-skin="yerel"] .people-grid { --face: 132px; gap: 24px 22px; padding-top: 8px; }
+:root[data-skin="yerel"] .people-grid.is-unnamed { --face: 104px; }
+:root[data-skin="yerel"] .person-face .p-ava { box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 6px 18px -6px rgba(20, 20, 40, .22); }
+:root[data-skin="yerel"] a.person-card:active .p-ava { transform: scale(.97); }
+:root[data-skin="yerel"] .person-name { margin-top: 9px; font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: -.01em; color: var(--ink); }
+:root[data-skin="yerel"] .person-count { font-size: 12px; color: var(--y-ink-2); }
+:root[data-skin="yerel"] .people-section-head h2 { font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: -.015em; }
+:root[data-skin="yerel"] .people-section-head p { color: var(--y-ink-2); font-size: 13px; }
+:root[data-skin="yerel"] .people-section-count { color: var(--y-ink-3); }
+:root[data-skin="yerel"] .who-btn { background: var(--y-accent-tint); color: var(--y-accent-text); font-weight: 600; }
+:root[data-skin="yerel"] .people-status { background: var(--surface); border-radius: 12px; color: var(--y-ink-2); }
+:root[data-skin="yerel"] .people-status-dot { background: var(--gok); }
+:root[data-skin="yerel"] .people-status-bar { background: var(--y-fill); }
+:root[data-skin="yerel"] .people-status-bar i { background: var(--gok); }
+:root[data-skin="yerel"] .people-empty h2 { font-family: var(--font-display); font-weight: 700; font-size: 22px; }
+:root[data-skin="yerel"] .pp { background: var(--y-fill-2); border: 0; border-radius: var(--r-control); }
+:root[data-skin="yerel"] .pp:focus-within { box-shadow: 0 0 0 3px var(--y-accent-tint), inset 0 0 0 1px var(--accent); background: var(--surface); }
+:root[data-skin="yerel"] .pp-list { border: .5px solid var(--y-hair); border-radius: 14px; background: var(--y-material-strong); backdrop-filter: saturate(1.8) blur(24px); -webkit-backdrop-filter: saturate(1.8) blur(24px); box-shadow: var(--y-shadow-3); }
+:root[data-skin="yerel"] .pp-opt:hover, :root[data-skin="yerel"] .pp-opt[aria-selected="true"] { background: var(--y-accent-tint); }
+:root[data-skin="yerel"] .pp-create .pp-name { color: var(--y-accent-text); }
+:root[data-skin="yerel"] .merge-from { background: var(--surface); }
+/* Kişi sayfası: ortalanmış büyük yüz + ad (iOS kişi başlığı) */
+:root[data-skin="yerel"] .person-head { grid-template-columns: 1fr; grid-template-areas: "back" "face" "info"; justify-items: center; text-align: center; gap: 10px; padding: 0 0 26px; }
+:root[data-skin="yerel"] .person-back { justify-self: start; color: var(--y-accent-text); font-size: 15px; margin-left: -8px; }
+:root[data-skin="yerel"] .person-back:hover { background: none; color: var(--y-accent-text); opacity: .7; }
+:root[data-skin="yerel"] .person-hero-face .p-ava { --ava: 132px; box-shadow: 0 2px 4px rgba(0, 0, 0, .06), 0 14px 34px -10px rgba(20, 20, 40, .35); }
+:root[data-skin="yerel"] .person-info { display: flex; flex-direction: column; align-items: center; width: 100%; }
+:root[data-skin="yerel"] .person-name-box { justify-content: center; width: 100%; margin-left: 0; }
+:root[data-skin="yerel"] .person-title { flex: 0 1 auto; font-family: var(--font-display); font-weight: 700; font-size: 34px; letter-spacing: -.022em; }
+:root[data-skin="yerel"] .person-title-edit { color: var(--y-accent-text); }
+:root[data-skin="yerel"] .person-title-picker { max-width: 360px; }
+:root[data-skin="yerel"] .person-meta { justify-content: center; color: var(--y-ink-2); font-size: 15px; }
+:root[data-skin="yerel"] .person-actions { justify-content: center; }
+:root[data-skin="yerel"] .person-actions .btn { background: var(--y-fill-2); color: var(--y-accent-text); }
+:root[data-skin="yerel"] .person-actions .btn.danger { color: #E0283C; }
+/* Bilgi paneli: gruplanmış kart içinde */
+:root[data-skin="yerel"] .i-row.i-row-people { padding: 12px 14px; }
+:root[data-skin="yerel"] .i-people-head h3 { color: var(--y-ink-2); font-size: 14px; }
+:root[data-skin="yerel"] .p-chip { background: var(--y-fill-2); }
+:root[data-skin="yerel"] .p-chip.is-unnamed .p-chip-name { color: var(--y-accent-text); }
+:root[data-skin="yerel"] .p-add { border: 0; background: var(--y-accent-tint); color: var(--y-accent-text); }
+:root[data-skin="yerel"] .p-add:hover { color: var(--y-accent-text); filter: brightness(1.04); }
+:root[data-skin="yerel"] .i-faces-toggle { border: 0; background: var(--y-fill-2); color: var(--y-ink-2); }
+:root[data-skin="yerel"] .i-faces-toggle.on { background: var(--y-accent-tint); color: var(--y-accent-text); }
+:root[data-skin="yerel"] .f-name-btn { color: var(--y-accent-text); }
+:root[data-skin="yerel"] .f-item > .p-ava { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--y-hair); }
+:root[data-skin="yerel"] .f-item .pp { background: var(--surface); }
+:root[data-skin="yerel"] .v-face { border-radius: 10px; }
+@media (max-width: 860px) {
+  :root[data-skin="yerel"] .people-grid { --face: 100px; gap: 20px 14px; }
+  :root[data-skin="yerel"] .people-grid.is-unnamed { --face: 84px; }
+  :root[data-skin="yerel"] .person-hero-face .p-ava { --ava: 112px; }
+  :root[data-skin="yerel"] .person-title { font-size: 30px; }
+  :root[data-skin="yerel"] .people-head { margin-bottom: 4px; }
+}
+:root[data-skin="yerel"] .people-head { padding: 0; min-height: 0; }
+:root[data-skin="yerel"] .people-head .people-hidden-toggle { margin-top: -4px; }

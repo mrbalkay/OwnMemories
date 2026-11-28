@@ -626,3 +626,53 @@
 :root[data-skin="sinema"] .map-thumb img { border: 2px solid var(--gumus); border-radius: 10px; box-shadow: 0 8px 22px rgba(0, 0, 0, .6); }
 :root[data-skin="sinema"] .map-thumb.is-cluster::before { border-radius: 10px; background: rgba(236, 234, 230, .35); }
 :root[data-skin="sinema"] .map-count { background: var(--gumus); color: #0A0B0E; }
+
+/* ------------------------------------------------------------ kişiler (people.js) */
+:root[data-skin="sinema"] .p-ava { background: var(--kadife); color: var(--sis); }
+:root[data-skin="sinema"] .p-ava.is-empty { background: radial-gradient(120% 120% at 30% 20%, #2A2E38, #15171C); color: var(--gumus); }
+:root[data-skin="sinema"] .person-face .p-ava { box-shadow: 0 0 0 1px rgba(255, 255, 255, .10), 0 14px 34px -10px rgba(0, 0, 0, .7); }
+:root[data-skin="sinema"] a.person-card:hover .p-ava, :root[data-skin="sinema"] .person-card a.person-face:hover .p-ava { box-shadow: 0 0 0 2px rgba(255, 255, 255, .55), 0 18px 40px -10px rgba(0, 0, 0, .8); }
+:root[data-skin="sinema"] .person-card:focus-visible { outline: none; }
+:root[data-skin="sinema"] .person-card:focus-visible .p-ava { box-shadow: 0 0 0 3px var(--gumus); }
+:root[data-skin="sinema"] .person-name { color: var(--gumus); font-weight: 550; letter-spacing: .005em; }
+:root[data-skin="sinema"] .person-count { color: var(--sis); }
+:root[data-skin="sinema"] .people-section-head h2 { font-weight: 400; font-size: 28px; color: var(--gumus); }
+:root[data-skin="sinema"] .people-status { background: rgba(255, 255, 255, .04); border: 1px solid var(--cizgi); color: var(--sis); }
+:root[data-skin="sinema"] .people-status-dot { background: var(--yesil); box-shadow: 0 0 10px var(--yesil); }
+:root[data-skin="sinema"] .people-status-bar { background: rgba(255, 255, 255, .08); }
+:root[data-skin="sinema"] .people-status-bar i { background: var(--gumus); }
+:root[data-skin="sinema"] .who-btn { background: rgba(255, 255, 255, .08); color: var(--gumus); border: 1px solid var(--cizgi-guclu); }
+:root[data-skin="sinema"] .who-btn:hover { background: rgba(255, 255, 255, .16); }
+:root[data-skin="sinema"] .pp { background: rgba(255, 255, 255, .05); border-color: var(--cizgi-guclu); }
+:root[data-skin="sinema"] .pp:focus-within { border-color: rgba(255, 255, 255, .34); box-shadow: 0 0 0 4px rgba(255, 255, 255, .05); }
+:root[data-skin="sinema"] .pp-list { background: rgba(24, 26, 32, .96); border-color: var(--cizgi-guclu); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 24px 60px -12px rgba(0, 0, 0, .8); }
+:root[data-skin="sinema"] .pp-opt:hover, :root[data-skin="sinema"] .pp-opt[aria-selected="true"] { background: rgba(255, 255, 255, .08); }
+:root[data-skin="sinema"] .pp-create .pp-name { color: var(--gumus); }
+:root[data-skin="sinema"] .merge-from { background: rgba(255, 255, 255, .05); border: 1px solid var(--cizgi); }
+/* Kişi sayfası: yüz, ortam rengiyle parlayan bir halka içinde */
+:root[data-skin="sinema"] .person-head { padding: 18px 0 30px; gap: 8px 28px; }
+:root[data-skin="sinema"] .person-hero-face { position: relative; }
+:root[data-skin="sinema"] .person-hero-face::before { content: ""; position: absolute; inset: -18px; border-radius: 50%; background: radial-gradient(closest-side, rgba(var(--ambient-rgb), .55), transparent); filter: blur(10px); z-index: 0; }
+:root[data-skin="sinema"] .person-hero-face .p-ava { --ava: 128px; position: relative; z-index: 1; box-shadow: 0 0 0 1px rgba(255, 255, 255, .16), 0 20px 50px -12px rgba(0, 0, 0, .8); }
+:root[data-skin="sinema"] .person-title { font-weight: 400; font-size: 48px; letter-spacing: -.02em; color: var(--gumus); }
+:root[data-skin="sinema"] .person-title-btn:hover { background: rgba(255, 255, 255, .06); }
+:root[data-skin="sinema"] .person-meta { color: var(--sis); }
+:root[data-skin="sinema"] .person-back { color: var(--sis); }
+:root[data-skin="sinema"] .person-back:hover { color: var(--gumus); background: rgba(255, 255, 255, .06); }
+:root[data-skin="sinema"] .btn-ghost.danger { color: #F28A9C; }
+/* Bilgi paneli */
+:root[data-skin="sinema"] .i-people-head h3 { color: var(--sis); }
+:root[data-skin="sinema"] .p-chip { background: rgba(255, 255, 255, .07); color: var(--gumus); }
+:root[data-skin="sinema"] .p-chip:hover { box-shadow: 0 0 0 1px var(--cizgi-guclu) inset; }
+:root[data-skin="sinema"] .p-chip.is-unnamed .p-chip-name { color: var(--yesil); }
+:root[data-skin="sinema"] .p-chip-x:hover { background: rgba(255, 255, 255, .1); color: var(--gumus); }
+:root[data-skin="sinema"] .p-add { border-color: rgba(255, 255, 255, .22); color: var(--sis); }
+:root[data-skin="sinema"] .p-add:hover { border-color: var(--gumus); color: var(--gumus); }
+:root[data-skin="sinema"] .i-faces-toggle { border-color: var(--cizgi-guclu); color: var(--sis); }
+:root[data-skin="sinema"] .i-faces-toggle.on { background: rgba(255, 255, 255, .12); color: var(--gumus); border-color: transparent; }
+:root[data-skin="sinema"] .f-item > .p-ava { box-shadow: 0 0 0 2px #14161B, 0 0 0 3px rgba(255, 255, 255, .16); }
+:root[data-skin="sinema"] .f-item:hover > .p-ava { box-shadow: 0 0 0 2px #14161B, 0 0 0 3.5px var(--gumus); }
+:root[data-skin="sinema"] .f-name-btn { color: var(--yesil); }
+:root[data-skin="sinema"] .f-name-btn:hover { background: rgba(143, 211, 176, .12); }
+:root[data-skin="sinema"] .f-item .pp { background: #1B1D23; }
+:root[data-skin="sinema"] .v-face.is-unknown { border-color: rgba(143, 211, 176, .9); }

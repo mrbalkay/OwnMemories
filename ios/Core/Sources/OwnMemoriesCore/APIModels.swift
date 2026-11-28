@@ -270,3 +270,176 @@ struct SearchResponse: Codable {
         case nextOffset = "next_offset"
     }
 }
+
+// MARK: - Kişiler (elle etiketleme + yüz tanıma)
+
+/// GET /v1/people, GET/PATCH /v1/people/{id} kişi nesnesi. `name == nil`: adlandırılmamış yüz kümesi.
+struct Person: Codable, Identifiable, Hashable {
+    let id: Int
+    let name: String?
+    let count: Int
+    let coverFaceId: Int?
+    let coverAssetId: String?
+    let hidden: Bool
+
+    init(id: Int, name: String?, count: Int = 0, coverFaceId: Int? = nil, coverAssetId: String? = nil, hidden: Bool = false) {
+        self.id = id
+        self.name = name
+        self.count = count
+        self.coverFaceId = coverFaceId
+        self.coverAssetId = coverAssetId
+        self.hidden = hidden
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        count = try c.decodeIfPresent(Int.self, forKey: .count) ?? 0
+        coverFaceId = try c.decodeIfPresent(Int.self, forKey: .coverFaceId)
+        coverAssetId = try c.decodeIfPresent(String.self, forKey: .coverAssetId)
+        hidden = try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, count, hidden
+        case coverFaceId = "cover_face_id"
+        case coverAssetId = "cover_asset_id"
+    }
+
+    /// Adı var (boş olmayan).
+    var isNamed: Bool { !(name ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// Ekranda gösterilen ad; adsız kümelerde "Adsız".
+    var displayName: String { isNamed ? (name ?? "") : "Adsız" }
+}
+
+struct PeopleList: Codable {
+    let people: [Person]
+}
+
+struct PersonEnvelope: Codable {
+    let person: Person
+}
+
+/// GET /v1/assets/{id}/people → "people" öğesi: bu fotoğrafta kim var (kaynak: manual | takeout | face).
+struct AssetPersonTag: Codable, Identifiable, Hashable {
+    let id: Int
+    let name: String?
+    let source: String?
+
+    var isNamed: Bool { !(name ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var displayName: String { isNamed ? (name ?? "") : "Adsız" }
+}
+
+/// Fotoğrafta bulunan yüz: kutu 0...1 (yönü uygulanmış görüntüye göre); kişiye atanmamışsa person_id nil.
+struct DetectedFace: Codable, Identifiable, Hashable {
+    let id: Int
+    let x1: Double
+    let y1: Double
+    let x2: Double
+    let y2: Double
+    let personId: Int?
+    let personName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, x1, y1, x2, y2
+        case personId = "person_id"
+        case personName = "person_name"
+    }
+
+    /// Yüz adlı bir kişiye atanmış.
+    var isNamed: Bool { personId != nil && !(personName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+}
+
+/// GET/POST /v1/assets/{id}/people, DELETE /v1/assets/{id}/people/{pid}, PATCH /v1/faces/{id} yanıtı.
+struct AssetPeople: Codable, Equatable {
+    let people: [AssetPersonTag]
+    let faces: [DetectedFace]
+
+    init(people: [AssetPersonTag] = [], faces: [DetectedFace] = []) {
+        self.people = people
+        self.faces = faces
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        people = try c.decodeIfPresent([AssetPersonTag].self, forKey: .people) ?? []
+        faces = try c.decodeIfPresent([DetectedFace].self, forKey: .faces) ?? []
+    }
+
+    enum CodingKeys: String, CodingKey { case people, faces }
+
+    /// Kişinin bu fotoğraftaki bir yüzü (yuvarlak avatar için).
+    func face(of personId: Int) -> DetectedFace? { faces.first { $0.personId == personId } }
+
+    /// Adı olmayan yüzler (atanmamış ya da adsız kümede): "Adlandır" ile gösterilir.
+    var unnamedFaces: [DetectedFace] { faces.filter { !$0.isNamed } }
+
+    /// Etiket çipleri: adlı kişiler; adsız kişiler yalnızca bu fotoğrafta yüzleri yoksa (yüzleri ayrıca listelenir).
+    var chips: [AssetPersonTag] {
+        people.filter { $0.isNamed || face(of: $0.id) == nil }
+    }
+}
+
+/// POST /v1/assets/people (toplu etiket) yanıtı.
+struct BulkPeopleTagResponse: Codable {
+    let count: Int
+    let person: Person
+}
+
+/// GET /v1/people/status: yüz tarama durumu. ML servisi yoksa yalnızca {"available":false}.
+struct FaceScanStatus: Codable, Equatable {
+    let available: Bool
+    let scanned: Int
+    let total: Int
+    let faces: Int
+    let people: Int
+    let ready: Bool
+
+    init(available: Bool = true, scanned: Int, total: Int, faces: Int = 0, people: Int = 0, ready: Bool) {
+        self.available = available
+        self.scanned = scanned
+        self.total = total
+        self.faces = faces
+        self.people = people
+        self.ready = ready
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        scanned = try c.decodeIfPresent(Int.self, forKey: .scanned) ?? 0
+        total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        faces = try c.decodeIfPresent(Int.self, forKey: .faces) ?? 0
+        people = try c.decodeIfPresent(Int.self, forKey: .people) ?? 0
+        ready = try c.decodeIfPresent(Bool.self, forKey: .ready) ?? false
+        available = try c.decodeIfPresent(Bool.self, forKey: .available) ?? true
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case available, scanned, total, faces, people, ready
+    }
+
+    /// Tarama sürüyor: servis var, öğeler var ama hepsi taranmadı.
+    var isScanning: Bool { available && total > 0 && scanned < total }
+}
+
+/// PATCH /v1/people/{id} 409 yanıtı: aynı adda başka bir kişi var (istemci birleştirmeyi önerir).
+/// {"error":{"code":"name_exists","message":"…","person_id":7,"person":{…}}}
+struct PersonNameConflict: Codable {
+    struct Body: Codable {
+        let code: String
+        let message: String?
+        let personId: Int?
+        let person: Person?
+
+        enum CodingKeys: String, CodingKey {
+            case code, message, person
+            case personId = "person_id"
+        }
+    }
+    let error: Body
+
+    /// Çakışan kişinin kimliği (gövdedeki kişi nesnesi ya da person_id).
+    var otherId: Int? { error.person?.id ?? error.personId }
+}

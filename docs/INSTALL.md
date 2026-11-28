@@ -280,15 +280,27 @@ Betik şunları yapar (tekrar çalıştırmak güvenlidir):
    Yarım kalan indirme kaldığı yerden sürer; dosyalar boyut ve SHA-256 ile doğrulanır.
 3. Metin modelinin int8 kopyasını üretir (~600 MB daha az RAM; bunun için bir kerelik ~3.5 GB boş bellek
    gerekir, yoksa tam model kullanılır).
-4. `/etc/ownmemories/ml.env` dosyasını `web/config/config.php`'deki veritabanı ve depolama ayarlarından yazar.
-5. `ownmemories-ml` systemd servisini kurar, başlatır ve hazır olduğunu denetler.
+4. Yüz tanıma modelini (Kişiler; Immich'in `immich-app/buffalo_l` paketi, ~190 MB) indirir. İndirilemezse
+   kurulum durmaz: akıllı arama ve elle kişi etiketleme çalışır, yalnızca otomatik yüz tanıma kapalı kalır.
+5. `/etc/ownmemories/ml.env` dosyasını `web/config/config.php`'deki veritabanı ve depolama ayarlarından yazar.
+6. `ownmemories-ml` systemd servisini kurar, başlatır ve hazır olduğunu denetler.
 
-**Gereksinimler:** en az 2 GB RAM (servis ~1.3 GB kullanır), ~3 GB disk, ilk kurulumda internet.
+**Gereksinimler:** en az 2 GB RAM (servis ~1.3 GB kullanır; yüz tanıma ~0.4 GB daha — 2.6 GB'tan az RAM'li
+sunucuda yüz tanıma kendiliğinden kapalı kurulur), ~3.2 GB disk, ilk kurulumda internet.
+
+**Yüz tanıma lisansı:** buffalo_l model ağırlıkları (InsightFace) yalnızca **ticari olmayan** kullanım içindir.
+Kişisel arşiviniz için uygundur; ticari bir hizmette kullanacaksanız `OM_FACE_MODEL="0"` yapın.
 
 **İlk dizinleme:** servis arka planda tüm fotoğrafların (ve videoların karesinin) vektörünü çıkarır.
 4 çekirdekte saatte ~30.000 fotoğraf; düşük öncelikle çalışır, sunucuyu yormaz. Bu sürede arama sayfası
 "Akıllı arama hazırlanıyor: 12.400 / 30.000" gibi bir not gösterir; dizinlenmiş fotoğraflar hemen aranabilir.
 Yeni yüklenen fotoğraflar küçük resimleri oluştuktan sonra kendiliğinden eklenir.
+
+**Yüz tarama:** aynı servis, akıllı arama dizinlemesiyle dönüşümlü olarak fotoğraflardaki yüzleri bulur ve
+benzer yüzleri adsız kişiler halinde gruplar (Immich gibi: aynı kişiye ait en az 3 yüz gerekir). 4 çekirdekte
+fotoğraf başına ~0.1–0.4 sn (akıllı arama dizinlemesi sürerken daha yavaş, o bitince tam hız). Kişiler sayfası
+bu sürede "Yüzler taranıyor: 1.240 / 6.500" gösterir. Kişilere ad verdikçe ve grupları birleştirdikçe yeni
+fotoğraflar adlı kişilere kendiliğinden eklenir.
 
 **Durum ve günlük:**
 
@@ -309,8 +321,14 @@ curl -s http://127.0.0.1:8765/health
 - `OM_ML_MIN_Z` / `OM_ML_MIN_SCORE` — sonuç eşiği. Varsayılan olarak yalnızca sorguyla belirgin şekilde
   eşleşen fotoğraflar listelenir; daha çok (ama daha az isabetli) sonuç için `OM_ML_MIN_Z="1.5"`, eşiği
   tamamen kapatmak için `OM_ML_MIN_Z="0"`.
+- `OM_FACE_MODEL` — yüz tanıma modeli (varsayılan `immich-app/buffalo_l`); `"0"` yüz tanımayı kapatır (elle
+  kişi etiketleme yine çalışır). Kapalıyken açmak için değeri yazıp `sudo bash server/install-ml.sh` çalıştırın.
+- `OM_FACE_MAX_DISTANCE` (0.5) — iki yüzün aynı kişi sayılması için en büyük kosinüs uzaklığı. Aynı kişi çok
+  fazla gruba bölünüyorsa `0.55`–`0.6`; farklı kişiler karışıyorsa `0.45`.
+- `OM_FACE_MIN_FACES` (3) — yeni bir kişi grubu için gereken benzer yüz sayısı.
+- `OM_FACE_MIN_SIZE` (32) — bundan küçük (piksel) yüzler yok sayılır; `OM_FACE_MIN_SCORE` (0.7) algılama eşiği.
 
-Elle eklediğiniz `OM_ML_*` ayarları güncellemelerde korunur (veritabanı ayarları config.php'den yeniden yazılır).
+Elle eklediğiniz `OM_ML_*` / `OM_FACE_*` ayarları güncellemelerde korunur (veritabanı ayarları config.php'den yeniden yazılır).
 
 **Kapatmak:** `sudo touch /etc/ownmemories/ml.disabled && sudo bash /var/www/ownmemories/server/install-ml.sh`
 (geri açmak için dosyayı silip betiği yeniden çalıştırın). Kapalıyken arama dosya adı/açıklama ile çalışır.

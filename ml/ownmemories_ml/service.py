@@ -4,6 +4,12 @@ Uç noktalar (yalnızca 127.0.0.1):
   GET  /health               {"ok","model","dim","indexed","pending","ready"}
   POST /search               {"user_id","text","limit"<=500,"min_score"} -> {"results":[{"id","score"}],"model"}
   GET  /status?user_id=N     {"indexed","total","pending","model","ready"}
+  GET  /faces/status?user_id=N  {"scanned","total","faces","people","ready","available","model"}
+  POST /faces/recluster      {"user_id"} -> {"queued":true}  (tam kümeleme geçişi; ör. birleştirme/adlandırma sonrası)
+
+Yüz tanıma (faces.py + clustering.py) aynı arka plan döngüsünde CLIP'le dönüşümlü çalışır: her turda bir CLIP
+toplu işi, ardından birkaç görüntülük yüz işi (CLIP işi bitince yüz işi büyür). Yüz modeli ya da tabloları
+(migration 006) yoksa yüz kısmı sessizce kapalı kalır; CLIP etkilenmez.
 
 Kullanıcı vektörleri bellekte (numpy, kullanıcı başına bir matris) tutulur; ilk aramada DB'den yüklenir,
 her aramada COUNT/MAX(created_at) ile tazelik denetlenir: yeni satırlar eklenir, silinme varsa yeniden yüklenir.
@@ -30,6 +36,8 @@ from .config import Config
 log = logging.getLogger("ownmemories-ml")
 
 MAX_LIMIT = 500
+RECLUSTER_GAP = 30.0  # /faces/recluster: kullanıcı başına tam geçişler arası en az (sn)
+DIRTY_GAP = 1800.0  # tarama kuyruğu boşalınca yapılan tam geçişler arası en az (sn)
 VARIANTS = ("thumb", "preview", "poster")
 EXTS = ("webp", "jpg")
 
@@ -150,6 +158,26 @@ class Engine:
         self.visual_ready = threading.Event()
         self.skip: dict[str, tuple[float, int]] = {}  # asset_id -> (yeniden deneme zamanı, deneme sayısı)
         self.indexed_session = 0
+        self.wake = threading.Event()
+        # yüz tanıma
+        self.faces = None  # faces.FaceModel
+        self.face_error: str | None = None
+        self.face_skip: dict[str, tuple[float, int]] = {}
+        self.face_tables: tuple[float, bool] = (0.0, False)
+        self.clusterer = None
+        self.recluster: set[int] = set()  # tam geçiş istenen kullanıcılar
+        self.recluster_lock = threading.Lock()
+        self.face_new: dict[int, list[int]] = {}  # kullanıcı -> kümelenmemiş yeni yüz id'leri
+        self.face_dirty: set[int] = set()  # kuyruk boşalınca tam geçiş yapılacak kullanıcılar
+        self.face_initial_pass = False
+        self.last_full: dict[int, float] = {}  # kullanıcı -> son tam geçiş zamanı
+        self.recluster_gap = RECLUSTER_GAP
+        self.dirty_gap = DIRTY_GAP
+        self.clip_queue: list[tuple[str, int]] = []
+        self.clip_cursor = ""
+        self.face_queue: list[tuple[str, int]] = []
+        self.face_cursor = ""
+        self.faces_session = 0
 
     # ---------- modeller ----------
     def load_text(self) -> None:
@@ -176,6 +204,53 @@ class Engine:
         malloc_trim()
         log.info("görsel model yüklendi (%.1f sn)", time.time() - t0)
         self.visual_ready.set()
+
+    def load_faces(self) -> None:
+        from . import faces as facemod
+
+        if not self.cfg.face_model:
+            self.face_error = "yüz tanıma kapalı (OM_FACE_MODEL)"
+            return
+        d = self.cfg.face_model_dir
+        if not facemod.available(d):
+            self.face_error = f"yüz modeli yok: {d} (python -m ownmemories_ml download --model {self.cfg.face_model})"
+            log.warning("%s; yüz tanıma kapalı, akıllı arama etkilenmez", self.face_error)
+            return
+        try:
+            t0 = time.time()
+            self.faces = facemod.FaceModel(d, self.cfg.threads, min_score=self.cfg.face_min_score,
+                                           min_size=self.cfg.face_min_size)
+            malloc_trim()
+            self.face_error = None
+            log.info("yüz modeli yüklendi: %s (%.1f sn)", self.cfg.face_model_name, time.time() - t0)
+        except Exception as e:  # noqa: BLE001
+            self.faces = None
+            self.face_error = f"yüz modeli yüklenemedi: {e}"
+            log.exception("yüz modeli yüklenemedi; yüz tanıma kapalı")
+
+    def faces_tables_ok(self) -> bool:
+        """Yüz tabloları (migration 006) var mı? 5 dakikada bir yeniden denetlenir."""
+        t, ok = self.face_tables
+        if ok or time.time() - t < 300:
+            return ok
+        try:
+            have = {r[0] for r in self.db.query(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() "
+                "AND table_name IN ('faces', 'face_scans', 'people', 'asset_person')")}
+            ok = len(have) == 4
+        except Exception as e:  # noqa: BLE001
+            log.warning("DB hatası (yüz tabloları): %s", e)
+            self.db.drop()
+            ok = False
+        if not ok and t == 0.0:
+            log.info("yüz tabloları henüz yok (migration 006); yüz tanıma bekliyor")
+        self.face_tables = (time.time(), ok)
+        return ok
+
+    def request_recluster(self, user_id: int) -> None:
+        with self.recluster_lock:
+            self.recluster.add(user_id)
+        self.wake.set()
 
     @property
     def ready(self) -> bool:
@@ -303,7 +378,31 @@ class Engine:
             return {"indexed": int(indexed or 0), "total": int(total or 0)}
         return self._cached(f"user:{user_id}", 3.0, f)
 
+    def face_user_stats(self, user_id: int) -> dict:
+        def f():
+            m = self.cfg.face_model_name
+            total, scanned = self.db.query(
+                "SELECT COUNT(*), COUNT(s.asset_id) FROM assets a "
+                "LEFT JOIN face_scans s ON s.asset_id = a.id AND s.model = %s "
+                "WHERE a.user_id = %s AND a.thumb_state = 'ready' AND a.trashed_at IS NULL "
+                "AND NOT (a.type = 'video' AND a.live_pair_id IS NOT NULL)", (m, user_id))[0]
+            faces = self.db.query("SELECT COUNT(*) FROM faces WHERE user_id = %s", (user_id,))[0][0]
+            people = self.db.query("SELECT COUNT(*) FROM people WHERE user_id = %s AND hidden = 0", (user_id,))[0][0]
+            return {"scanned": int(scanned or 0), "total": int(total or 0), "faces": int(faces or 0),
+                    "people": int(people or 0)}
+        return self._cached(f"faces:{user_id}", 3.0, f)
+
     # ---------- dizinleyici ----------
+    def face_source_path(self, aid: str) -> str | None:
+        """Yüz algılama kaynağı: en büyük türetilmiş görüntü (önizleme > video kapağı > küçük resim)."""
+        root = self.cfg.storage
+        for variant in ("preview", "poster", "thumb"):
+            for ext in EXTS:
+                p = f"{root}/derived/{variant}/{aid[:2]}/{aid}.{ext}"
+                if os.path.isfile(p):
+                    return p
+        return None
+
     def source_path(self, aid: str) -> str | None:
         root = self.cfg.storage
         found = None
@@ -332,10 +431,14 @@ class Engine:
                 return found
         return None
 
-    def _defer(self, aid: str) -> None:
-        _, n = self.skip.get(aid, (0, 0))
+    @staticmethod
+    def _defer_in(skip: dict, aid: str) -> None:
+        _, n = skip.get(aid, (0, 0))
         n += 1
-        self.skip[aid] = (time.time() + min(6 * 3600, 300 * 2 ** n), n)
+        skip[aid] = (time.time() + min(6 * 3600, 300 * 2 ** n), n)
+
+    def _defer(self, aid: str) -> None:
+        self._defer_in(self.skip, aid)
 
     def index_loop(self) -> None:
         try:
@@ -346,19 +449,30 @@ class Engine:
         try:
             self.load_visual()
         except Exception as e:  # noqa: BLE001
+            self.visual = None
             self.error = f"görsel model yüklenemedi: {e}"
-            log.exception("görsel model yüklenemedi; dizinleme kapalı")
+            log.exception("görsel model yüklenemedi; CLIP dizinlemesi kapalı")
+        self.load_faces()
+        if self.faces is not None:
+            from .clustering import Clusterer
+
+            self.clusterer = Clusterer(self.db, self.cfg.face_model_name, self.cfg.face_max_distance,
+                                       self.cfg.face_min_faces)
+        if self.visual is None and self.faces is None:
             return
         backoff = 5.0
-        cursor = ""
-        model = self.cfg.model_name
         while not self.stop.is_set():
             try:
-                rows = self.db.query(
-                    "SELECT a.id, a.user_id FROM assets a "
-                    "LEFT JOIN asset_embeddings e ON e.asset_id = a.id AND e.model = %s "
-                    "WHERE a.thumb_state = 'ready' AND e.asset_id IS NULL AND a.id > %s "
-                    "ORDER BY a.id LIMIT 512", (model, cursor))
+                did = False
+                clip_busy = False
+                if self.visual is not None:
+                    clip_busy = self._clip_step()
+                    did = clip_busy
+                if self.faces is not None and self.faces_tables_ok():
+                    # CLIP işi varken tur başına az görüntü (arama dizini önce dolsun), yoksa tam hız.
+                    n = self.cfg.face_batch if clip_busy else max(self.cfg.face_batch, self.cfg.batch)
+                    did = self._face_step(n) or did
+                    did = self._cluster_step() or did
                 backoff = 5.0
             except Exception as e:  # noqa: BLE001
                 log.warning("DB hatası (dizinleyici): %s; %.0f sn sonra yeniden", e, backoff)
@@ -366,17 +480,142 @@ class Engine:
                 self.stop.wait(backoff)
                 backoff = min(60.0, backoff * 2)
                 continue
+            if not did:
+                self.wake.wait(self.cfg.idle)
+                self.wake.clear()
+
+    def _clip_step(self) -> bool:
+        """Bir CLIP toplu işi; True: iş yapıldı (ya da kuyruk ilerledi)."""
+        if not self.clip_queue:
+            rows = self.db.query(
+                "SELECT a.id, a.user_id FROM assets a "
+                "LEFT JOIN asset_embeddings e ON e.asset_id = a.id AND e.model = %s "
+                "WHERE a.thumb_state = 'ready' AND e.asset_id IS NULL AND a.id > %s "
+                "ORDER BY a.id LIMIT 512", (self.cfg.model_name, self.clip_cursor))
             if not rows:
-                cursor = ""
-                self.stop.wait(self.cfg.idle)
-                continue
-            cursor = rows[-1][0]
+                self.clip_cursor = ""
+                return False
+            self.clip_cursor = rows[-1][0]
             now = time.time()
-            todo = [(a, u) for a, u in rows if self.skip.get(a, (0, 0))[0] <= now]
-            for i in range(0, len(todo), self.cfg.batch):
-                if self.stop.is_set():
-                    break
-                self._index_batch(todo[i:i + self.cfg.batch])
+            self.clip_queue = [(a, u) for a, u in rows if self.skip.get(a, (0, 0))[0] <= now]
+            if not self.clip_queue:
+                return True
+        batch, self.clip_queue = self.clip_queue[:self.cfg.batch], self.clip_queue[self.cfg.batch:]
+        self._index_batch(batch)
+        return True
+
+    def _face_step(self, n: int) -> bool:
+        """En çok n görüntüde yüz ara; True: iş yapıldı."""
+        if not self.face_queue:
+            rows = self.db.query(
+                "SELECT a.id, a.user_id FROM assets a "
+                "LEFT JOIN face_scans s ON s.asset_id = a.id AND s.model = %s "
+                "WHERE a.thumb_state = 'ready' AND a.trashed_at IS NULL AND s.asset_id IS NULL "
+                "AND NOT (a.type = 'video' AND a.live_pair_id IS NOT NULL) AND a.id > %s "
+                "ORDER BY a.id LIMIT 256", (self.cfg.face_model_name, self.face_cursor))
+            if not rows:
+                self.face_cursor = ""
+                return False
+            self.face_cursor = rows[-1][0]
+            now = time.time()
+            self.face_queue = [(a, u) for a, u in rows if self.face_skip.get(a, (0, 0))[0] <= now]
+            if not self.face_queue:
+                return True
+        batch, self.face_queue = self.face_queue[:n], self.face_queue[n:]
+        for aid, uid in batch:
+            if self.stop.is_set():
+                break
+            self._scan_faces(aid, int(uid))
+        return True
+
+    def _scan_faces(self, aid: str, uid: int) -> None:
+        p = self.face_source_path(aid)
+        if p is None:
+            self._defer_in(self.face_skip, aid)
+            return
+        try:
+            found, _size = self.faces.analyze_file(p)
+        except Exception as e:  # noqa: BLE001
+            log.info("yüz taraması: görüntü okunamadı %s: %s", aid, e)
+            self._defer_in(self.face_skip, aid)
+            return
+        model = self.cfg.face_model_name
+        now = utcnow()
+        conn = self.db.conn()
+        try:
+            conn.begin()
+            with conn.cursor() as cur:
+                # Önceki (yarım kalmış ya da başka modelle yapılmış) taramanın yüzleri yerine yenileri.
+                cur.execute("DELETE FROM faces WHERE asset_id = %s AND (model <> %s OR person_id IS NULL)",
+                            (aid, model))
+                cur.execute("SELECT COUNT(*) FROM faces WHERE asset_id = %s", (aid,))
+                kept = int(cur.fetchone()[0])
+                if kept == 0:
+                    for fc in found:
+                        x1, y1, x2, y2 = fc.norm
+                        cur.execute(
+                            "INSERT INTO faces (asset_id, user_id, person_id, rejected_person_id, x1, y1, x2, y2, "
+                            "score, embedding, model, assigned_by, created_at) "
+                            "SELECT id, user_id, NULL, NULL, %s, %s, %s, %s, %s, %s, %s, NULL, %s "
+                            "FROM assets WHERE id = %s",
+                            (x1, y1, x2, y2, fc.score, fc.embedding.astype("<f4").tobytes(), model, now, aid))
+                cur.execute(
+                    "INSERT INTO face_scans (asset_id, user_id, model, faces, scanned_at) "
+                    "SELECT id, user_id, %s, %s, %s FROM assets WHERE id = %s "
+                    "ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), model = VALUES(model), "
+                    "faces = VALUES(faces), scanned_at = VALUES(scanned_at)",
+                    (model, len(found) if kept == 0 else kept, now, aid))
+                cur.execute("SELECT id FROM faces WHERE asset_id = %s AND person_id IS NULL", (aid,))
+                new_ids = [int(r[0]) for r in cur.fetchall()]
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            raise
+        self.face_skip.pop(aid, None)
+        if new_ids:
+            self.face_new.setdefault(uid, []).extend(new_ids)
+            self.face_dirty.add(uid)
+        self.faces_session += 1
+        if self.faces_session % 500 == 0:
+            log.info("yüz taraması (bu oturum): %d görüntü", self.faces_session)
+
+    def _cluster_step(self) -> bool:
+        """Yeni yüzleri artımlı kümele; istenen ya da kuyruğu boşalmış kullanıcılar için tam geçiş."""
+        if self.clusterer is None:
+            return False
+        did = False
+        for uid in list(self.face_new):
+            ids = self.face_new.pop(uid)
+            self.clusterer.run(uid, ids)
+            did = True
+        now = time.time()
+        # Tam geçiş büyük kütüphanede saniyeler sürer (50 bin yüz / 20 bin atanmamış: ~5 sn): istekler
+        # kullanıcı başına en çok RECLUSTER_GAP saniyede bir, kuyruk boşalınca yapılan en çok DIRTY_GAP'te bir.
+        with self.recluster_lock:
+            requested = {u for u in self.recluster if now - self.last_full.get(u, 0.0) >= self.recluster_gap}
+            self.recluster -= requested
+        users = set(requested)
+        if not self.face_queue and not self.face_cursor:
+            # tarama kuyruğu boş: yeni yüzü olan kullanıcılar (artımlı geçişin ertelediği yüzler için) ve
+            # açılışta bir kez atanmamış yüzü olan herkes
+            due = {u for u in self.face_dirty if now - self.last_full.get(u, 0.0) >= self.dirty_gap}
+            self.face_dirty -= due
+            users |= due
+            if not self.face_initial_pass:
+                self.face_initial_pass = True
+                users |= {int(r[0]) for r in self.db.query(
+                    "SELECT DISTINCT user_id FROM faces WHERE person_id IS NULL")}
+        for uid in sorted(users):
+            if self.stop.is_set():
+                break
+            self.last_full[uid] = time.time()
+            self.clusterer.run(uid, None)
+            self.face_dirty.discard(uid)
+            did = True
+        return did
 
     def _index_batch(self, batch: list[tuple[str, int]]) -> None:
         arrays, meta = [], []
@@ -447,7 +686,8 @@ def make_handler(engine: Engine):
                         log.warning("DB hatası (/health): %s", e)
                         engine.db.drop()
                     out = {"ok": True, "model": engine.cfg.model_name, "dim": engine.dim, **st,
-                           "ready": engine.ready and db_ok, "indexer": engine.visual_ready.is_set()}
+                           "ready": engine.ready and db_ok, "indexer": engine.visual_ready.is_set(),
+                           "faces": engine.faces is not None}
                     if engine.error:
                         out["error"] = engine.error
                     if not db_ok:
@@ -466,6 +706,23 @@ def make_handler(engine: Engine):
                         "indexed": st["indexed"], "total": st["total"],
                         "pending": max(0, st["total"] - st["indexed"]), "model": engine.cfg.model_name,
                         "ready": engine.ready and st["indexed"] > 0})
+                if u.path == "/faces/status":
+                    qs = parse_qs(u.query)
+                    try:
+                        uid = int(qs.get("user_id", ["0"])[0])
+                    except ValueError:
+                        uid = 0
+                    if uid <= 0:
+                        return self._send(400, {"error": "user_id gerekli"})
+                    available = engine.faces is not None
+                    out = {"available": available, "model": engine.cfg.face_model_name, "ready": False,
+                           "scanned": 0, "total": 0, "faces": 0, "people": 0}
+                    if engine.faces_tables_ok():
+                        out.update(engine.face_user_stats(uid))
+                        out["ready"] = available
+                    if engine.face_error:
+                        out["error"] = engine.face_error
+                    return self._send(200, out)
                 return self._send(404, {"error": "bulunamadı"})
             except Exception as e:  # noqa: BLE001
                 log.exception("GET %s", u.path)
@@ -474,7 +731,7 @@ def make_handler(engine: Engine):
 
         def do_POST(self):
             u = urlparse(self.path)
-            if u.path != "/search":
+            if u.path not in ("/search", "/faces/recluster"):
                 return self._send(404, {"error": "bulunamadı"})
             try:
                 n = int(self.headers.get("Content-Length") or 0)
@@ -482,6 +739,18 @@ def make_handler(engine: Engine):
                 n = 0
             if n <= 0 or n > 65536:
                 return self._send(400, {"error": "geçersiz gövde"})
+            if u.path == "/faces/recluster":
+                try:
+                    req = json.loads(self.rfile.read(n).decode("utf-8"))
+                    uid = int(req.get("user_id") or 0)
+                except (ValueError, TypeError, AttributeError):
+                    return self._send(400, {"error": "geçersiz istek"})
+                if uid <= 0:
+                    return self._send(400, {"error": "user_id gerekli"})
+                if engine.clusterer is None:
+                    return self._send(200, {"queued": False, "available": False})
+                engine.request_recluster(uid)
+                return self._send(200, {"queued": True, "available": True})
             try:
                 req = json.loads(self.rfile.read(n).decode("utf-8"))
                 uid = int(req.get("user_id") or 0)
@@ -528,6 +797,7 @@ def serve(cfg: Config) -> int:
 
     def _stop(*_):
         engine.stop.set()
+        engine.wake.set()
         threading.Thread(target=httpd.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGTERM, _stop)

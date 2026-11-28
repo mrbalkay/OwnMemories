@@ -565,3 +565,83 @@
 :root[data-skin="galeri"] .map-thumb img { border-radius: var(--g-r1); border: 2px solid #fff; box-shadow: 0 6px 18px rgba(20, 24, 28, .28); }
 :root[data-skin="galeri"] .map-thumb.is-cluster::before { border-radius: var(--g-r1); }
 :root[data-skin="galeri"] .map-count { border-radius: 0; background: var(--g-muze, #2C4A5A); font-family: var(--serif); font-weight: 400; }
+
+/* ------------------------------------------------------------ kişiler (people.js)
+   Galeri: portreler kartela gibi kare, kılcal çerçeveli; künye sola hizalı, ad serif. */
+:root[data-skin="galeri"] .p-ava { border-radius: var(--g-r1); background: var(--g-tas); color: var(--g-grafit); }
+:root[data-skin="galeri"] .p-ava.is-empty { background: var(--g-tas); color: var(--g-murekkep); }
+:root[data-skin="galeri"] .p-ava .p-ini { font-family: var(--serif); font-weight: 400; }
+:root[data-skin="galeri"] .people-grid { --face: 150px; gap: 36px 24px; padding-top: 6px; }
+:root[data-skin="galeri"] .people-grid.is-unnamed { --face: 116px; gap: 28px 20px; }
+:root[data-skin="galeri"] .person-card { align-items: flex-start; text-align: left; }
+:root[data-skin="galeri"] .person-face { border-radius: var(--g-r1); }
+:root[data-skin="galeri"] .person-face .p-ava { box-shadow: none; outline: 1px solid var(--g-cizgi); outline-offset: 4px; transition: outline-color .3s var(--g-ease), filter .3s var(--g-ease); }
+:root[data-skin="galeri"] a.person-card:hover .p-ava, :root[data-skin="galeri"] .person-card a.person-face:hover .p-ava { transform: none; box-shadow: none; outline-color: var(--g-murekkep); }
+:root[data-skin="galeri"] .person-name { margin-top: 14px; font-family: var(--serif); font-weight: 400; font-size: 18px; line-height: 1.2; color: var(--g-murekkep); }
+:root[data-skin="galeri"] .person-count { font-size: 12px; letter-spacing: .04em; color: var(--g-grafit); }
+:root[data-skin="galeri"] .is-cluster .person-count { margin-top: 12px; }
+:root[data-skin="galeri"] .person-hidden-badge { border-radius: var(--g-r1); box-shadow: 0 0 0 1px var(--g-cizgi); width: 26px; height: 26px; }
+:root[data-skin="galeri"] .who-slot { justify-content: flex-start; }
+:root[data-skin="galeri"] .who-btn { padding: 2px 0; border-radius: 0; background: none; color: var(--g-murekkep); font-weight: 450; border-bottom: 1px solid var(--g-cizgi); }
+:root[data-skin="galeri"] .who-btn:hover { filter: none; border-bottom-color: var(--g-murekkep); }
+:root[data-skin="galeri"] .people-section-head { padding-top: 8px; border-top: 1px solid var(--g-cizgi); }
+:root[data-skin="galeri"] .people-section-head h2 { font-weight: 400; font-size: 30px; padding-top: 18px; }
+:root[data-skin="galeri"] .people-section-head p { color: var(--g-grafit); font-size: 13px; }
+:root[data-skin="galeri"] .people-section-count { font-size: 12px; letter-spacing: .06em; }
+:root[data-skin="galeri"] .people-status { border-radius: 0; background: none; padding: 0 0 14px; margin: -8px 0 4px; color: var(--g-grafit); font-size: 13px; }
+:root[data-skin="galeri"] .people-status-dot { background: var(--g-muze); }
+:root[data-skin="galeri"] .people-status-bar { height: 1px; border-radius: 0; background: var(--g-cizgi); }
+:root[data-skin="galeri"] .people-status-bar i { height: 1px; border-radius: 0; background: var(--g-murekkep); }
+:root[data-skin="galeri"] .people-empty h2 { font-weight: 400; font-size: 30px; }
+:root[data-skin="galeri"] .people-empty-art span { border-radius: var(--g-r1); border-color: var(--g-duvar); background: var(--g-tas); outline: 1px solid var(--g-cizgi); }
+/* Seçici */
+:root[data-skin="galeri"] .pp { border: 0; border-bottom: 1px solid var(--g-cizgi); border-radius: 0; background: transparent; padding: 0 2px; }
+:root[data-skin="galeri"] .pp:focus-within { border-bottom-color: var(--g-murekkep); box-shadow: none; }
+:root[data-skin="galeri"] .pp-list { border-radius: var(--g-r1); border-color: var(--g-cizgi); box-shadow: 0 18px 40px -16px rgba(27, 28, 30, .25); padding: 4px 0; }
+:root[data-skin="galeri"] .pp-opt { border-radius: 0; padding: 7px 14px 7px 10px; }
+:root[data-skin="galeri"] .pp-opt:hover, :root[data-skin="galeri"] .pp-opt[aria-selected="true"] { background: var(--g-tas); }
+:root[data-skin="galeri"] .pp-create .pp-name { color: var(--g-muze); font-weight: 450; }
+:root[data-skin="galeri"] .merge-from { border-radius: 0; background: none; padding: 0 0 14px; border-bottom: 1px solid var(--g-cizgi); }
+:root[data-skin="galeri"] .merge-from strong { font-family: var(--serif); font-weight: 400; font-size: 18px; }
+/* Kişi sayfası: katalog künyesi */
+:root[data-skin="galeri"] .person-head { gap: 10px 32px; padding: 0 0 28px; margin-bottom: 8px; border-bottom: 1px solid var(--g-cizgi); align-items: end; }
+:root[data-skin="galeri"] .person-back { margin: 0 0 14px; padding: 0; border-radius: 0; color: var(--g-grafit); font-size: 13px; }
+:root[data-skin="galeri"] .person-back:hover { background: none; color: var(--g-murekkep); }
+:root[data-skin="galeri"] .person-hero-face .p-ava { --ava: 148px; box-shadow: none; outline: 1px solid var(--g-cizgi); outline-offset: 5px; }
+:root[data-skin="galeri"] .person-title { font-weight: 400; font-size: 48px; letter-spacing: -.015em; }
+:root[data-skin="galeri"] .person-title-btn { border-radius: var(--g-r1); }
+:root[data-skin="galeri"] .person-title-btn:hover { background: var(--g-tas); }
+:root[data-skin="galeri"] .person-title-picker { border-bottom-color: var(--g-murekkep); }
+:root[data-skin="galeri"] .person-title-picker .pp-input { font-family: var(--serif); font-weight: 400; font-size: 28px; }
+:root[data-skin="galeri"] .person-meta { font-size: 13px; letter-spacing: .03em; color: var(--g-grafit); margin-bottom: 16px; }
+:root[data-skin="galeri"] .person-hidden-pill { border-radius: 0; background: none; border: 1px solid var(--g-cizgi); }
+:root[data-skin="galeri"] .person-actions { gap: 6px; }
+/* Bilgi paneli */
+:root[data-skin="galeri"] .i-people-head h3 { color: var(--g-grafit); font-size: 13px; }
+:root[data-skin="galeri"] .p-chip { border-radius: var(--g-r1); background: none; box-shadow: 0 0 0 1px var(--g-cizgi) inset; }
+:root[data-skin="galeri"] .p-chip:hover { box-shadow: 0 0 0 1px var(--g-murekkep) inset; }
+:root[data-skin="galeri"] .p-chip-main { border-radius: var(--g-r1); font-weight: 450; }
+:root[data-skin="galeri"] .p-chip-main .p-ava { --ava: 26px; }
+:root[data-skin="galeri"] .p-chip.is-unnamed .p-chip-name { color: var(--g-muze); }
+:root[data-skin="galeri"] .p-chip-x { border-radius: var(--g-r1); }
+:root[data-skin="galeri"] .p-add { border-radius: var(--g-r1); border-style: solid; border-color: var(--g-cizgi); color: var(--g-murekkep); font-weight: 450; }
+:root[data-skin="galeri"] .p-add:hover { border-color: var(--g-murekkep); color: var(--g-murekkep); }
+:root[data-skin="galeri"] .i-faces-toggle { border-radius: var(--g-r1); border-color: var(--g-cizgi); color: var(--g-grafit); }
+:root[data-skin="galeri"] .i-faces-toggle.on { background: var(--g-muze-acik); color: var(--g-muze); }
+:root[data-skin="galeri"] .f-item > .p-ava { box-shadow: none; outline: 1px solid var(--g-cizgi); outline-offset: 3px; }
+:root[data-skin="galeri"] .f-item:hover > .p-ava { box-shadow: none; outline-color: var(--g-murekkep); }
+:root[data-skin="galeri"] .f-name-btn { border-radius: 0; color: var(--g-muze); font-weight: 450; border-bottom: 1px solid transparent; }
+:root[data-skin="galeri"] .f-name-btn:hover { background: none; border-bottom-color: var(--g-muze); }
+:root[data-skin="galeri"] .f-item .pp { background: var(--g-duvar); padding: 0 8px; box-shadow: 0 0 0 1px var(--g-cizgi), 0 18px 40px -16px rgba(27, 28, 30, .25); }
+:root[data-skin="galeri"] .v-face { border-radius: var(--g-r1); border-width: 1px; }
+:root[data-skin="galeri"] .v-face-label { border-radius: var(--g-r1); background: rgba(255, 255, 255, .92); color: var(--g-murekkep); font-weight: 450; backdrop-filter: none; }
+@media (max-width: 860px) {
+  :root[data-skin="galeri"] .people-grid { --face: 100px; gap: 26px 14px; }
+  :root[data-skin="galeri"] .people-grid.is-unnamed { --face: 88px; }
+  :root[data-skin="galeri"] .person-name { font-size: 16px; }
+  :root[data-skin="galeri"] .person-head { align-items: center; }
+  :root[data-skin="galeri"] .person-hero-face .p-ava { --ava: 120px; }
+  :root[data-skin="galeri"] .person-title { font-size: 34px; }
+  :root[data-skin="galeri"] .people-head .people-sub { display: none; } /* sayı üst çubukta (#pageSub) */
+  :root[data-skin="galeri"] .people-head { justify-content: flex-end; min-height: 0; margin-bottom: 4px; padding-top: 0; }
+}

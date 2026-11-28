@@ -1,9 +1,11 @@
 """Model indirici: Hugging Face'teki Immich ONNX dışa aktarımını indirir.
 
     python -m ownmemories_ml download --model immich-app/ViT-B-16-SigLIP2__webli --dest /var/lib/ownmemories/models
+    python -m ownmemories_ml download --model immich-app/buffalo_l --dest /var/lib/ownmemories/models   (yüz modeli)
 
-- Yalnızca gereken dosyalar (config.json ve visual/, textual/ altındaki ONNX + harici ağırlık, tokenizer,
-  preprocess_cfg) indirilir; rknpu vb. donanıma özel alt klasörler atlanır.
+- Yalnızca gereken dosyalar (CLIP: config.json ve visual/, textual/ altındaki ONNX + harici ağırlık, tokenizer,
+  preprocess_cfg; yüz modeli: detection/model.onnx + recognition/model.onnx) indirilir; rknpu, fp16, armnn gibi
+  donanıma özel dosyalar atlanır.
 - Yarım kalan indirme ".part" dosyasından HTTP Range ile sürdürülür.
 - Boyut ve (LFS dosyalarında) SHA-256, Hugging Face API'sinin verdiği değerlerle doğrulanır.
 - Bitince <dest>/<model adı>/.complete yazılır; tekrar çalıştırmak doğrulanmış dosyaları atlar.
@@ -29,17 +31,30 @@ NEEDED = (
     "textual/tokenizer_config.json",
     "textual/special_tokens_map.json",
 )
+FACE_NEEDED = ("detection/model.onnx", "recognition/model.onnx")
 OPTIONAL = {"textual/special_tokens_map.json"}
 UA = "ownmemories-ml/1.0"
 
 
-def wanted(files: dict[str, dict]) -> list[str]:
-    """config.json + visual/ ve textual/ doğrudan altındaki dosyalar (harici ağırlık dosyaları dahil).
-    Donanıma özel alt klasörler (rknpu/…) atlanır."""
+def is_face_model(model: str) -> bool:
+    """Immich'in yüz tanıma paketleri (buffalo_l/buffalo_s/antelopev2…): detection/ + recognition/."""
+    n = model_dir_name(model).lower()
+    return n.startswith(("buffalo_", "antelope"))
+
+
+def needed(model: str) -> tuple[str, ...]:
+    return FACE_NEEDED if is_face_model(model) else NEEDED
+
+
+def wanted(files: dict[str, dict], face: bool = False) -> list[str]:
+    """CLIP: config.json + visual/ ve textual/ doğrudan altındaki dosyalar (harici ağırlık dosyaları dahil).
+    Yüz: detection/ ve recognition/ doğrudan altındaki dosyalar. Donanıma özel alt klasörler (rknpu/, fp16/…)
+    ve .rknn/.armnn dosyaları atlanır."""
+    dirs = ("detection", "recognition") if face else ("visual", "textual")
     out = []
     for name in sorted(files):
         parts = name.split("/")
-        if name == "config.json" or (len(parts) == 2 and parts[0] in ("visual", "textual")):
+        if (name == "config.json" and not face) or (len(parts) == 2 and parts[0] in dirs):
             if not name.endswith((".rknn", ".armnn")):
                 out.append(name)
     return out
@@ -140,11 +155,13 @@ def download(model: str, dest_root: str, revision: str = "main", log=print) -> s
     """Modeli indirir; model dizinini döner. Hata durumunda istisna fırlatır."""
     target = os.path.join(dest_root, model_dir_name(model))
     marker = os.path.join(target, ".complete")
+    face = is_face_model(model)
+    need = needed(model)
     try:
         files = list_files(model, revision)
     except (urllib.error.URLError, OSError, ValueError) as e:
         # Çevrimdışı güncelleme: daha önce tamamlanmış model varsa onu kullan.
-        if os.path.isfile(marker) and all(os.path.isfile(os.path.join(target, n)) for n in NEEDED if n not in OPTIONAL):
+        if os.path.isfile(marker) and all(os.path.isfile(os.path.join(target, n)) for n in need if n not in OPTIONAL):
             log(f"    Hugging Face'e ulaşılamadı ({e}); mevcut model kullanılıyor.")
             return target
         raise
@@ -156,10 +173,10 @@ def download(model: str, dest_root: str, revision: str = "main", log=print) -> s
                 manifest = json.load(f)
         except (OSError, ValueError):
             manifest = {}
-    for name in NEEDED:
+    for name in need:
         if name not in files and name not in OPTIONAL:
             raise RuntimeError(f"modelde dosya yok: {name}")
-    for name in wanted(files):
+    for name in wanted(files, face):
         meta = files[name]
         path = os.path.join(target, name)
         # Önceki tam doğrulamayla aynı boyut/sha ise yeniden hash hesaplama (hızlı tekrar çalıştırma).
@@ -171,7 +188,7 @@ def download(model: str, dest_root: str, revision: str = "main", log=print) -> s
         url = f"{HF}/{repo_id(model)}/resolve/{urllib.parse.quote(revision)}/{name}"
         _fetch(url, path, meta, log)
     with open(marker + ".tmp", "w") as f:
-        json.dump({n: files[n] for n in wanted(files)}, f)
+        json.dump({n: files[n] for n in wanted(files, face)}, f)
     os.replace(marker + ".tmp", marker)
     return target
 

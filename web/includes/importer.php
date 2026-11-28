@@ -464,7 +464,7 @@ function import_one(array $imp, ImportState $state, int $si, string $rawPath, in
                 }
                 if ($assetId !== null) {
                     foreach ($sidecar['people'] ?? [] as $person) {
-                        db_exec('INSERT IGNORE INTO asset_people (asset_id, name) VALUES (?, ?)', [$assetId, mb_substr($person, 0, 190)]);
+                        people_tag_takeout($userId, $assetId, (string) $person);
                     }
                     import_add_to_album($imp, $state, $dirKey, $assetId, $albums);
                 }

@@ -5,11 +5,14 @@
 #
 # Yapar: python3-venv kurar, /opt/ownmemories-ml sanal ortamına sabit sürümlü paketleri kurar, modeli
 # Hugging Face'ten /var/lib/ownmemories/models/<model> altına indirir (sürdürmeli, boyut + sha256 doğrulamalı),
-# metin modelinin int8 kopyasını üretir (~600 MB daha az RAM), /etc/ownmemories/ml.env yazar
-# (web/config/config.php'den) ve ownmemories-ml systemd servisini kurup başlatır.
+# metin modelinin int8 kopyasını üretir (~600 MB daha az RAM), yüz tanıma modelini (Kişiler; immich-app/buffalo_l,
+# ~190 MB) indirir, /etc/ownmemories/ml.env yazar (web/config/config.php'den) ve ownmemories-ml systemd servisini
+# kurup başlatır. Yüz modeli indirilemezse servis yine kurulur; akıllı arama çalışır, yüz tanıma kapalı kalır.
 #
 # Ayarlar (ortam değişkeni ya da mevcut /etc/ownmemories/ml.env içinde korunur):
 #   OM_ML_MODEL    (varsayılan immich-app/ViT-B-16-SigLIP2__webli)   OM_ML_THREADS (varsayılan min(4, CPU))
+#   OM_FACE_MODEL  (varsayılan immich-app/buffalo_l; "0" = yüz tanıma kapalı. ~2.6 GB'tan az RAM'de kendiliğinden kapalı)
+#                  Not: InsightFace buffalo_l ağırlıkları yalnızca ticari olmayan kullanım içindir.
 #   OM_ML=0 ya da /etc/ownmemories/ml.disabled dosyası  -> akıllı aramayı kurma / durdur
 # Çıkış kodu: 0 başarılı, 1 hata (update.sh bunu uyarıya çevirir, güncellemeyi durdurmaz).
 set -euo pipefail
@@ -40,6 +43,15 @@ CPUS="$(nproc 2>/dev/null || echo 2)"
 THREADS="${OM_ML_THREADS:-$(envval OM_ML_THREADS)}"; THREADS="${THREADS:-$(( CPUS < 4 ? CPUS : 4 ))}"
 MODEL_NAME="${MODEL##*/}"
 MEM_MB=$(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 1024 ))
+FACE_MODEL="${OM_FACE_MODEL-$(envval OM_FACE_MODEL)}"
+if [[ -z "$FACE_MODEL" ]]; then
+  if (( MEM_MB < 2600 )); then
+    FACE_MODEL="0"
+    warn "Bu sunucuda ${MEM_MB} MB RAM var; yüz tanıma (~400 MB daha) kapalı bırakıldı. Açmak için: OM_FACE_MODEL=immich-app/buffalo_l"
+  else
+    FACE_MODEL="immich-app/buffalo_l"
+  fi
+fi
 
 echo "==> Akıllı arama (ownmemories-ml): model $MODEL, $THREADS iş parçacığı"
 if (( MEM_MB < 1800 )); then
@@ -109,6 +121,13 @@ if (( MODEL_OK )); then
     warn "int8 dönüşümü için yeterli boş bellek yok (${AVAIL_MB} MB, ~${NEED_MB} MB gerekli); tam metin modeli kullanılacak."
   fi
 fi
+# Yüz tanıma modeli (isteğe bağlı): başarısızlık kurulumu durdurmaz.
+if [[ "$FACE_MODEL" != "0" ]]; then
+  echo "    Yüz tanıma modeli indiriliyor / doğrulanıyor: $MODELS/${FACE_MODEL##*/} (~190 MB)"
+  if ! ( cd "$APP" && "$VENV/bin/python" -m ownmemories_ml download --model "$FACE_MODEL" --dest "$MODELS" ); then
+    warn "Yüz tanıma modeli indirilemedi; Kişiler'de otomatik yüz tanıma kapalı (elle etiketleme çalışır). Sonra tekrar deneyin."
+  fi
+fi
 chown -R root:root "$MODELS"
 chmod -R u=rwX,go=rX "$MODELS"
 
@@ -137,9 +156,10 @@ TMP="$(mktemp)"
   echo "OM_ML_MODEL_DIR=\"$MODELS\""
   echo "OM_ML_PORT=\"8765\""
   echo "OM_ML_THREADS=\"$THREADS\""
-  # Kullanıcının elle eklediği diğer OM_ML_* ayarları (ör. OM_ML_MIN_SCORE, OM_ML_TEXT_QUANT) korunur.
+  echo "OM_FACE_MODEL=\"$FACE_MODEL\""
+  # Kullanıcının elle eklediği diğer OM_ML_* / OM_FACE_* ayarları (ör. OM_ML_MIN_SCORE, OM_FACE_MAX_DISTANCE) korunur.
   if [[ -f "$ENVF" ]]; then
-    grep -E '^OM_ML_[A-Z_]+=' "$ENVF" | grep -vE '^OM_ML_(MODEL|MODEL_DIR|PORT|THREADS)=' || true
+    grep -E '^OM_(ML|FACE)_[A-Z_]+=' "$ENVF" | grep -vE '^OM_ML_(MODEL|MODEL_DIR|PORT|THREADS)=|^OM_FACE_MODEL=' || true
   fi
 } > "$TMP"
 install -o root -g www-data -m 0640 "$TMP" "$ENVF"
@@ -151,7 +171,7 @@ cat > "$UNIT_NEW" <<UNIT
 # OwnMemories akıllı arama servisi (ownmemories-ml) — server/install-ml.sh yazdı, elle düzenlemeyin.
 # Yalnızca 127.0.0.1:8765 dinler. Günlük: journalctl -u ownmemories-ml
 [Unit]
-Description=OwnMemories smart search (ML)
+Description=OwnMemories smart search + face recognition (ML)
 After=network.target mysql.service mariadb.service
 
 [Service]
@@ -169,8 +189,8 @@ Nice=10
 CPUWeight=50
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
-# SigLIP2 görsel + int8 metin modeli ~1.3 GB; tam metin modeliyle ~2.4 GB tepe
-MemoryHigh=2500M
+# SigLIP2 görsel + int8 metin modeli ~1.3 GB (+ yüz tanıma ~0.4 GB); tam metin modeliyle ~2.8 GB tepe
+MemoryHigh=3000M
 MemoryMax=4G
 # Servis diske yazmaz; depolamayı ve modelleri yalnızca okur
 NoNewPrivileges=true
