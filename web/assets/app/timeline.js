@@ -3,6 +3,7 @@ import { api, qs, thumbUrl } from './api.js';
 import { h, t, icon, dayKey, dayParts, monthParts, formatMonth, formatDuration } from './util.js';
 import { setAmbientFrom } from './theme.js';
 import { store } from './store.js';
+import { openCalendar, closeCalendar, clearCalendarCache } from './calendar.js';
 
 const PAGE = 240;
 
@@ -93,6 +94,11 @@ export class Timeline {
     if (!this.scrub || !this.curMonth) return;
     const { name, year } = monthParts(this.curMonth);
     this.scrubNow.replaceChildren(h('span', { class: 'scrub-month' }, name), h('span', { class: 'scrub-year' }, year));
+    this.scrubNow.setAttribute('aria-label', `${t('open_calendar')}: ${formatMonth(this.curMonth)}`);
+    if (this.calFab) {
+      this.calFabText.textContent = formatMonth(this.curMonth);
+      this.calFab.setAttribute('aria-label', `${t('open_calendar')}: ${formatMonth(this.curMonth)}`);
+    }
     for (const b of this.scrub.querySelectorAll('button[data-year]')) b.classList.toggle('on', b.dataset.year === year);
   }
 
@@ -105,10 +111,17 @@ export class Timeline {
     this.unsub?.();
     this.scroller?.removeEventListener('scroll', this.onScroll);
     cancelAnimationFrame(this._sr);
+    clearTimeout(this._flash);
+    closeCalendar(false);
     this.scrub?.remove();
+    this.calFab?.remove();
   }
 
+  /** Yeniden yükler; extra.before verilirse o andan geriye. Yüklemenin bittiği Promise'i döner. */
   reset(extra = {}) {
+    // Uçuştaki eski sayfa yanıtı yeni listeye karışmasın.
+    this.gen = (this.gen || 0) + 1;
+    this.loading = false;
     this.query = { ...this.opts.query, ...extra };
     this.next = extra.before ? { before: extra.before } : null;
     this.done = false;
@@ -123,19 +136,21 @@ export class Timeline {
     this.root.scrollTop = 0;
     document.getElementById('view').scrollTop = 0;
     // Tam yenileme (ör. yükleme sonrası): ay sayılarını, toplamı ve yıl rayını da tazele.
-    if (!extra.before) this.buildScrubber();
-    this.load();
+    if (!extra.before) { clearCalendarCache(); this.buildScrubber(); }
+    return this.load();
   }
 
   async load() {
     if (this.loading || this.done) return;
     this.loading = true;
+    const gen = this.gen || 0;
     let failed = false;
     this.status.replaceChildren(h('span', { class: 'spinner' }), t('loading'));
     try {
       const params = { ...this.query, limit: PAGE };
       if (this.next) { params.before = this.next.before; params.before_id = this.next.before_id; }
       const r = await api('GET', 'assets' + qs(params));
+      if (gen !== (this.gen || 0) || this.destroyed) return;
       this.next = r.next;
       this.done = r.next === null;
       this.append(r.assets);
@@ -150,11 +165,13 @@ export class Timeline {
         this.status.append(h('div', { class: 'empty' }, h('p', {}, this.opts.empty || t('empty_photos'))));
       }
     } catch (e) {
+      if (gen !== (this.gen || 0) || this.destroyed) return;
       failed = true;
       this.status.replaceChildren(h('div', { class: 'empty' }, h('p', {}, t('load_failed')), h('button', { class: 'btn', onclick: () => { this.paused = false; this.load(); } }, t('retry'))));
     } finally {
-      this.loading = false;
+      if (gen === (this.gen || 0)) this.loading = false;
     }
+    if (gen !== (this.gen || 0) || this.destroyed) return;
     // Hata olduysa kullanıcı "Tekrar dene" diyene kadar otomatik yükleme durur.
     this.paused = failed;
     // Ekran dolmadıysa devam et
@@ -345,28 +362,121 @@ export class Timeline {
       }
       this.total = total;
       this.renderTotal();
-      // Yeniden çağrılabilir (reset sonrası): eski rayı kaldır.
-      this.scrub?.remove();
-      this.scrub = null;
-      if (this.opts.scrubber === false || r.months.length < 3) return;
+      this.months = r.months.map((m) => m.month);
       const years = new Map();
       for (const m of r.months) {
         const y = m.month.slice(0, 4);
         if (!years.has(y)) years.set(y, m.month);
       }
-      this.scrubNow = h('div', { class: 'scrub-now', 'aria-hidden': 'true' });
+      const show = this.opts.scrubber !== false && r.months.length >= 3;
+      // Yeniden çağrılabilir (reset sonrası). Yıllar aynıysa ray yerinde kalır (odak ve açık takvim bozulmasın).
+      const sig = JSON.stringify([...years]);
+      if (show && this.scrub?.isConnected && this.scrubSig === sig) { this.updateScrubNow(); return; }
+      this.scrub?.remove();
+      this.scrub = null;
+      this.calFab?.remove();
+      this.calFab = null;
+      this.scrubSig = sig;
+      if (!show) return;
+      // Ay etiketi ve yıllar takvimi açar (yıl: o yılın en yeni fotoğraflı ayında). Takvimdeki
+      // "Bu ayın başına git" eski atlama davranışını korur.
+      this.scrubNow = h('button', {
+        class: 'scrub-now', type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', title: t('open_calendar'),
+        onclick: (e) => this.openCalendar(this.curMonth || this.months[0], e.currentTarget),
+      });
       this.scrub = h('nav', { class: 'scrubber', 'aria-label': t('jump_to_year') }, this.scrubNow,
         ...[...years.entries()].map(([y, month]) => h('button', {
-          title: formatMonth(month), dataset: { year: y },
-          onclick: () => {
-            // Ayın sonundan önceki her şey: o yılın ilk (en yeni) ayına atla.
-            const [yy, mm] = month.split('-').map(Number);
-            const end = new Date(Date.UTC(yy, mm, 1)).toISOString().replace('.000', '');
-            this.reset({ before: end });
-          },
+          type: 'button', title: formatMonth(month), dataset: { year: y }, 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
+          'aria-label': `${y} — ${t('open_calendar')}`,
+          onclick: (e) => this.openCalendar(this.curMonth?.startsWith(y) ? this.curMonth : month, e.currentTarget),
         }, y)));
+      // Mobil (≤ 860px): ray gizli; takvimi açan yüzen ay düğmesi.
+      this.calFabText = h('span', { class: 'cal-fab-text' });
+      this.calFab = h('button', {
+        class: 'cal-fab', type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
+        onclick: (e) => this.openCalendar(this.curMonth || this.months[0], e.currentTarget),
+      }, h('span', { class: 'cal-fab-ic', 'aria-hidden': 'true', html: CAL_ICON }), this.calFabText);
+      this.root.append(this.calFab);
       this.root.append(this.scrub);
       this.updateScrubNow();
     } catch { /* kaydırıcı isteğe bağlı */ }
   }
+
+  /** Takvimi verilen ayda açar (fotoğraflı ay değilse en yakın fotoğraflı aya). */
+  openCalendar(month, anchor) {
+    if (!this.months?.length) return;
+    if (!this.months.includes(month)) month = this.months.find((m) => m <= month) || this.months[this.months.length - 1];
+    openCalendar({
+      anchor, rail: this.scrub && this.scrub.offsetParent !== null ? this.scrub : anchor,
+      query: this.opts.query || {}, months: this.months, counts: this.monthCounts, month,
+      day: this.visibleDay(),
+      onPick: (d) => this.goToDay(d),
+      onMonth: (m) => {
+        const [yy, mm] = m.split('-').map(Number);
+        // Ayın sonu (+14 sa: yerel gün dengelemesi payı) öncesi: o ayın en yeni öğeleri en üstte.
+        const end = new Date(Date.UTC(yy, mm, 1) + 14 * 3600e3).toISOString().replace('.000', '');
+        this.reset({ before: end }).then(() => {
+          const sec = this.wrap.querySelector(`.month-group[data-month="${m}"]`);
+          if (sec) this.scrollToEl(sec, false);
+        });
+      },
+    });
+  }
+
+  /** Ekranın üstündeki gün (takvimde odak için). */
+  visibleDay() {
+    const top = this.scroller.getBoundingClientRect().top + 120;
+    for (const g of this.groups.values()) if (g.section.getBoundingClientRect().bottom > top) return g.section.dataset.day;
+    return null;
+  }
+
+  /** Takvimden seçilen güne gider: yüklüyse kaydırır, değilse o günün sonundan yeniden yükler. */
+  async goToDay(d) {
+    let g = this.groups.get(d.day);
+    const loaded = !!g;
+    if (!g) {
+      await this.reset({ before: d.before });
+      g = this.groups.get(d.day);
+    }
+    if (!g || this.destroyed) return;
+    // Günün altında ekranı dolduracak kadar içerik yoksa kaydırma kısılır (gün üste gelmez): önce yükle.
+    const gen = this.gen;
+    for (let i = 0; i < 20 && !this.done && !this.destroyed && gen === this.gen; i++) {
+      const below = this.sentinel.getBoundingClientRect().top - g.section.getBoundingClientRect().top;
+      if (below > this.scroller.clientHeight) break;
+      if (this.loading) await new Promise((r) => setTimeout(r, 60));
+      else await this.load();
+    }
+    if (this.destroyed || gen !== this.gen || !g.section.isConnected) return;
+    this.scrollToEl(g.section, loaded);
+    g.section.classList.remove('day-flash');
+    void g.section.offsetWidth; // animasyonu yeniden başlat
+    g.section.classList.add('day-flash');
+    clearTimeout(this._flash);
+    this._flash = setTimeout(() => g.section.classList.remove('day-flash'), 2200);
+    const first = g.grid.querySelector('.tile');
+    first?.focus({ preventScroll: true });
+  }
+
+  /** Öğeyi cam üst çubuğun ve yapışkan ay başlığının altına kaydırır. */
+  scrollToEl(el, smooth) {
+    const sc = this.scroller;
+    const scTop = sc.getBoundingClientRect().top;
+    const bar = document.querySelector('.topbar');
+    let off = bar ? Math.max(0, bar.getBoundingClientRect().bottom - scTop) : 0;
+    const mh = el.classList.contains('day-group') ? el.closest('.month-group')?.querySelector('.month') : null;
+    if (mh) {
+      const cs = getComputedStyle(mh);
+      // Yapışkan başlık, kaydırma kabının iç boşluğu (padding-top) kadar aşağıda durur.
+      const pad = parseFloat(getComputedStyle(sc).paddingTop) || 0;
+      if (cs.position === 'sticky') off = Math.max(off, pad + (parseFloat(cs.top) || 0) + mh.offsetHeight);
+    }
+    const top = el.getBoundingClientRect().top - scTop + sc.scrollTop - off - 8;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Uzak hedeflere anında git (uzun yumuşak kaydırma, yol üstündeki tüm görselleri yükletir).
+    const near = Math.abs(top - sc.scrollTop) < sc.clientHeight * 1.5;
+    sc.scrollTo({ top: Math.max(0, top), behavior: smooth && near && !reduce ? 'smooth' : 'auto' });
+  }
 }
+
+const CAL_ICON = '<svg viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>';

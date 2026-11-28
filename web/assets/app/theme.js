@@ -54,8 +54,20 @@
  *         button.day-sel > .day-sel-check (.ic onay) + .day-sel-text ("Seç") — günü topluca seçer/bırakır.
  *         S: daire (.day-sel-check), G/Y: "Seç" metni.
  *       .grid > .tile (genişlik/yükseklik JS ile; boşluk .grid column-gap'ten okunur) > img + .tile-badges > .badge(.fav) + .tile-check
- *   nav.scrubber (yıl rayı, ≥3 ay varsa, sağda sabit) > .scrub-now (gizli; .scrub-month + .scrub-year, görünür ay)   S
- *                                                     + button[data-year] (.on: görünür ayın yılı)
+ *   nav.scrubber (yıl rayı, ≥3 ay varsa, sağda sabit) > button.scrub-now (.scrub-month + .scrub-year, görünür ay; takvimi açar)   S G Y
+ *                                                     + button[data-year] (.on: görünür ayın yılı; o yılın takvimini açar)
+ *     Yıl düğmelerini `.scrubber button[data-year]` ile seçin (.scrub-now da bir düğmedir).
+ *   button.cal-fab (mobil ≤ 860px yüzen ay düğmesi; .cal-fab-ic + .cal-fab-text) — takvimi alt sayfa olarak açar
+ *   section.day-group.day-flash   takvimden gidilen gün (~2 sn vurgu animasyonu)
+ *
+ * Takvim (calendar.js) — body'ye eklenir: .cal-layer(.in|.out|.is-sheet) > .cal-backdrop + section.cal[role=dialog](.is-loading)
+ *   > .cal-grabber (mobil tutamak) + header.cal-head > button.cal-nav.cal-prev + .cal-title > .cal-title-main (.cal-month + .cal-year)
+ *       + .cal-sub ("34 öğe · 5 gün") + button.cal-nav.cal-next + button.cal-close
+ *   > .cal-week > .cal-wd(.is-weekend)×7 (Pzt…Paz)
+ *   > .cal-grid[role=grid] > .cal-row > .cal-pad | .cal-cell > button.cal-day[data-day](.has .is-today .is-weekend)[data-level=1–4]
+ *       > img.cal-cover(.in; günün kapağı, yalnızca .has) + .cal-num + .cal-count (yalnızca .has; sayı rozeti)
+ *       Fotoğrafsız günler aria-disabled="true".
+ *   > .cal-foot > .cal-hint + button.cal-jump ("Bu ayın başına git")
  *   Ortam rengi: afiş yoksa ilk karo; kaydırınca görünür ayın ilk karosu ile setAmbientFrom() çağrılır.
  *
  * Anı gösterisi (.story, memories.js openStory)

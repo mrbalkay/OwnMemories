@@ -7,7 +7,8 @@ final class BackgroundUploader: NSObject, URLSessionDataDelegate {
     static let shared = BackgroundUploader()
     static let identifier = "net.balkay.ownmemories.upload"
 
-    var backgroundCompletion: (() -> Void)?
+    /// Sistemin verdiği tamamlanma kapanışları (her uyandırmada bir tane; üst üste gelirse biri ezilmesin).
+    private var backgroundCompletions: [() -> Void] = []
     /// Uygulama beklemeden teslim edilen (taskDescription = sourceRef) görevler bitince çağrılır.
     var onDetachedComplete: ((_ sourceRef: String, _ data: Data, _ response: URLResponse?, _ error: Error?) -> Void)?
     /// Arka plan olayları bitince (uygulama uyandırıldığında) çağrılır; işi bitince verilen kapanışı çağırmalı.
@@ -27,13 +28,40 @@ final class BackgroundUploader: NSObject, URLSessionDataDelegate {
     /// Oturumu yeniden bağlar (uygulama arka planda uyandırıldığında).
     func reconnect() { _ = session }
 
+    /// Uygulama uyandırıldığında sistemin verdiği tamamlanma kapanışını saklar.
+    func addBackgroundCompletion(_ handler: @escaping () -> Void) {
+        lock.lock()
+        backgroundCompletions.append(handler)
+        lock.unlock()
+    }
+
+    private func takeBackgroundCompletions() -> [() -> Void] {
+        lock.lock(); defer { lock.unlock() }
+        let list = backgroundCompletions
+        backgroundCompletions = []
+        return list
+    }
+
+    /// Dosyayı yükler ve sonucu bekler. Görev iptal edilirse yükleme de iptal edilir (sonuç, iptal hatasıyla
+    /// tek bir kez temsilci üzerinden döner); böylece arka plana geçişte durdurulan geçiş gerçekten durur.
     func upload(_ request: URLRequest, fromFile file: URL) async throws -> (Data, URLResponse) {
-        try await withCheckedThrowingContinuation { cont in
-            let task = session.uploadTask(with: request, fromFile: file)
+        try Task.checkCancellation()
+        let task = session.uploadTask(with: request, fromFile: file)
+        let id = task.taskIdentifier
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { cont in
+                lock.lock()
+                continuations[id] = cont
+                lock.unlock()
+                task.resume()
+                // İptal, devamlılık kaydedilmeden önce geldiyse onCancel görevi iptal etmemiş olabilir.
+                if Task.isCancelled { task.cancel() }
+            }
+        } onCancel: {
             lock.lock()
-            continuations[task.taskIdentifier] = cont
+            let registered = continuations[id] != nil
             lock.unlock()
-            task.resume()
+            if registered { task.cancel() }
         }
     }
 
@@ -76,10 +104,9 @@ final class BackgroundUploader: NSObject, URLSessionDataDelegate {
 
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
         DispatchQueue.main.async {
-            let finish = {
-                self.backgroundCompletion?()
-                self.backgroundCompletion = nil
-            }
+            // Bu uyanışa ait kapanışlar şimdi alınır; sonra gelen bir uyanışınki kendi olay bitişinde çağrılır.
+            let handlers = self.takeBackgroundCompletions()
+            let finish = { handlers.forEach { $0() } }
             if let hook = self.onEventsFinished { hook(finish) } else { finish() }
         }
     }

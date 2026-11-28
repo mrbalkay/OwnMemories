@@ -161,7 +161,11 @@ private struct AssetPageView: View {
             let item = AVPlayerItem(asset: AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers]))
             player = AVPlayer(playerItem: item)
         }
-        .onDisappear { player?.pause() }
+        .onDisappear {
+            // Görünmeyen sayfanın oynatıcısı bırakılır (bellek); sayfaya dönülünce yeniden oluşturulur.
+            player?.pause()
+            player = nil
+        }
     }
 }
 

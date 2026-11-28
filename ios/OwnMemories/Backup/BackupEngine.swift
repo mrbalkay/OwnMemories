@@ -7,14 +7,23 @@ import UIKit
 /// UIApplication arka plan görev kimliği için kutu (kapanışlarda güvenle değiştirilebilsin).
 final class BackgroundTaskBox {
     var id: UIBackgroundTaskIdentifier = .invalid
+    /// Süre dolunca iptal edilecek iş.
+    var work: Task<Void, Never>?
     private let lock = NSLock()
 
+    /// Görevi bitirir. Süre dolum kapanışından (ana iş parçacığı) çağrıldığında **hemen** bitirmelidir:
+    /// iOS, kapanış dönene kadar görev bitmezse uygulamayı sonlandırır (kilit ekranında "çökme").
     func end() {
-        lock.lock(); defer { lock.unlock() }
-        guard id != .invalid else { return }
+        lock.lock()
         let current = id
         id = .invalid
-        DispatchQueue.main.async { UIApplication.shared.endBackgroundTask(current) }
+        lock.unlock()
+        guard current != .invalid else { return }
+        if Thread.isMainThread {
+            UIApplication.shared.endBackgroundTask(current)
+        } else {
+            DispatchQueue.main.async { UIApplication.shared.endBackgroundTask(current) }
+        }
     }
 }
 
@@ -57,9 +66,13 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
     }
 
     let container: ModelContainer
+    /// false: yedek veritabanı bu açılışta açılamadı (geçici bellek deposu kullanılıyor); yedekleme yapılmaz.
+    private let storeAvailable: Bool
     private var context: ModelContext { container.mainContext }
     private var runTask: Task<Void, Never>?
     private var pumping = false
+    /// Sahne etkin mi (uygulamadan bildirilir). Ön plan geçişi yalnız etkinken başlatılır.
+    private var sceneActive = false
     private var observing = false
     private var debounce: Task<Void, Never>?
     private let maxAttempts = 5
@@ -68,7 +81,9 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
     private var chunkSize: Int64 = 50 * 1024 * 1024
 
     private override init() {
-        container = try! ModelContainer(for: BackupRecord.self)
+        let opened = BackupEngine.openStore()   // (super.init öncesi: `Self` yerine tür adı)
+        container = opened.container
+        storeAvailable = opened.available
         if let data = UserDefaults.standard.data(forKey: "backupSettings"), let s = try? JSONDecoder().decode(BackupSettings.self, from: data) {
             settings = s
         } else {
@@ -84,12 +99,89 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
         }
         BackgroundUploader.shared.onEventsFinished = { [weak self] done in
             Task { @MainActor in
-                DiagLog.add("Arka plan yüklemeleri uygulamayı uyandırdı")
-                await self?.backgroundHandOff(budget: 20, reason: "uyanış")
-                done()
+                guard let self else { done(); return }
+                self.wakeHandOff(done)
             }
         }
         refreshCounts()
+    }
+
+    // MARK: - Veritabanı
+
+    /// Yedek kayıtlarının deposu uygulamanın kendi Application Support klasöründe durur. Varsayılan
+    /// yapılandırma, App Group yetkisi olduğu için depoyu paylaşılan kapsayıcıya koyuyordu; iOS, paylaşılan
+    /// kapsayıcıda SQLite kilidi tutarken askıya alınan uygulamayı sonlandırır (0xdead10cc, kilit ekranında
+    /// "çökme"). Widget bu depoyu okumaz.
+    private static var storeURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("backup.store")
+    }
+
+    /// Eski konumdaki depoyu (önce App Group, yoksa uygulamanın varsayılan `default.store`'u) yeni adına taşır.
+    /// Taşınamazsa eski konum döner; kayıtlar kaybolmasın.
+    private static func migrateStore(to target: URL) -> URL {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: target.path) { return target }
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        var candidates: [URL] = []
+        if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.net.balkay.ownmemories") {
+            candidates.append(group.appendingPathComponent("Library/Application Support/default.store"))
+        }
+        candidates.append(appSupport.appendingPathComponent("default.store"))
+        guard let old = candidates.first(where: { fm.fileExists(atPath: $0.path) }) else { return target }
+        do {
+            for suffix in ["", "-wal", "-shm"] {
+                let src = URL(fileURLWithPath: old.path + suffix)
+                guard fm.fileExists(atPath: src.path) else { continue }
+                try fm.moveItem(at: src, to: URL(fileURLWithPath: target.path + suffix))
+            }
+            DiagLog.add("Yedek veritabanı uygulama klasörüne taşındı")
+            return target
+        } catch {
+            // Yarım taşınmayı geri al ve eski konumu kullan.
+            for suffix in ["", "-wal", "-shm"] {
+                let moved = URL(fileURLWithPath: target.path + suffix)
+                let src = URL(fileURLWithPath: old.path + suffix)
+                if fm.fileExists(atPath: moved.path) && !fm.fileExists(atPath: src.path) { try? fm.moveItem(at: moved, to: src) }
+            }
+            DiagLog.add("Yedek veritabanı taşınamadı: \(error.localizedDescription)")
+            return old
+        }
+    }
+
+    /// Depoyu açar; açılamazsa çökmek yerine günlüğe yazar ve geçici bir bellek deposuyla devam eder.
+    private static func openStore() -> (container: ModelContainer, available: Bool) {
+        let url = migrateStore(to: storeURL)
+        do {
+            let c = try ModelContainer(for: BackupRecord.self, configurations: ModelConfiguration(url: url))
+            c.mainContext.autosaveEnabled = false   // kayıtlar açıkça kaydediliyor
+            return (c, true)
+        } catch {
+            DiagLog.add("Yedek veritabanı açılamadı: \(error.localizedDescription)")
+        }
+        // Kilit açılmadan önceki arka plan açılışında dosyalar okunamaz: depoya dokunmadan bu açılışı atla.
+        if UIApplication.shared.isProtectedDataAvailable {
+            // Bozuk depo: kenara al (silme) ve yenisini oluştur; kayıtlar tarama ve sunucu kontrolüyle yeniden kurulur.
+            let fm = FileManager.default
+            let stamp = Int(Date().timeIntervalSince1970)
+            for suffix in ["", "-wal", "-shm"] {
+                let src = URL(fileURLWithPath: url.path + suffix)
+                if fm.fileExists(atPath: src.path) { try? fm.moveItem(at: src, to: URL(fileURLWithPath: url.path + ".broken-\(stamp)" + suffix)) }
+            }
+            if let c = try? ModelContainer(for: BackupRecord.self, configurations: ModelConfiguration(url: url)) {
+                c.mainContext.autosaveEnabled = false
+                DiagLog.add("Yedek veritabanı yeniden oluşturuldu")
+                return (c, true)
+            }
+        }
+        // Son çare: bellek deposu (bu açılışta yedekleme yapılmaz).
+        let memory = ModelConfiguration(isStoredInMemoryOnly: true)
+        if let c = try? ModelContainer(for: BackupRecord.self, configurations: memory) {
+            c.mainContext.autosaveEnabled = false
+            return (c, false)
+        }
+        fatalError("SwiftData bellek deposu oluşturulamadı")
     }
 
     private func saveSettings() {
@@ -113,6 +205,9 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
 
     nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
         Task { @MainActor in
+            // Arka planda kütüphane değişikliği yeni bir geçiş başlatmaz (arka plan görevi güvencesi olmadan
+            // çalışırdı); değişiklikler sonraki taramada alınır.
+            guard self.canRunForeground else { return }
             self.debounce?.cancel()
             self.debounce = Task {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -123,9 +218,21 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
 
     // MARK: - Çalıştırma
 
-    /// Ön planda yedeklemeyi başlatır (zaten çalışıyorsa bir şey yapmaz).
+    /// Uygulama sahne durumunu bildirir (etkin / etkin değil).
+    func setSceneActive(_ active: Bool) {
+        sceneActive = active
+        if !active { debounce?.cancel() }
+    }
+
+    /// Ön plan geçişi yalnız uygulama gerçekten etkinken başlar: arka planda, arka plan görevi güvencesi
+    /// olmadan çalışan bir geçiş iOS tarafından askıya alınır ya da sonlandırılır.
+    private var canRunForeground: Bool {
+        sceneActive || UIApplication.shared.applicationState == .active
+    }
+
+    /// Ön planda yedeklemeyi başlatır (zaten çalışıyorsa ya da uygulama etkin değilse bir şey yapmaz).
     func start(reason: String) {
-        guard runTask == nil else { return }
+        guard runTask == nil, canRunForeground else { return }
         runTask = Task { [weak self] in
             await self?.runOnce(deadline: nil)
             self?.runTask = nil
@@ -138,15 +245,71 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
 
     /// Uygulama arka plana geçerken: ön plan işini durdur, büyük bir grubu arka plan oturumuna teslim et.
     func enterBackground() {
+        setSceneActive(false)
         stop()
         let app = UIApplication.shared
         let box = BackgroundTaskBox()
         box.id = app.beginBackgroundTask(withName: "om-handoff") {
+            // Süre doldu: işi durdur ve görevi bu kapanış içinde bitir.
+            box.work?.cancel()
+            DiagLog.add("Arka plana geçiş süresi doldu; teslim yarıda bırakıldı")
             box.end()
         }
-        Task { @MainActor in
-            await backgroundHandOff(budget: 22, reason: "arka plana geçiş")
+        guard box.id != .invalid else { return }
+        // iOS'un verdiği süreden pay bırak (genelde ~30 sn; kalan süre daha azsa ona göre).
+        let remaining = app.backgroundTimeRemaining
+        let budget = remaining.isFinite ? max(3, min(20, remaining - 8)) : 20
+        let started = Date()
+        box.work = Task { @MainActor in
+            // Durdurulan ön plan geçişinin bitmesini kısa süre bekle; yoksa `pumping` dolu kalır ve hiçbir
+            // dosya arka plan oturumuna teslim edilmez.
+            await self.waitForForegroundRun(upTo: 5)
+            let left = budget - Date().timeIntervalSince(started)
+            await backgroundHandOff(budget: max(2, left), reason: "arka plana geçiş")
             box.end()
+        }
+    }
+
+    /// İptal edilen ön plan geçişinin (runOnce) bitmesini en fazla `seconds` saniye bekler.
+    private func waitForForegroundRun(upTo seconds: TimeInterval) async {
+        let until = Date().addingTimeInterval(seconds)
+        while (isRunning || pumping) && Date() < until && !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+    }
+
+    /// Arka plan yüklemeleri uygulamayı uyandırdı: kendi arka plan görevi güvencesiyle kısa bir teslim yapar.
+    /// Sistemin tamamlanma kapanışı (`done`) iş bitince ya da en geç sabit bir süre sonunda **mutlaka** çağrılır;
+    /// geç çağrılırsa iOS uygulamayı sonlandırır ve sonraki uyandırmaları seyrekleştirir.
+    private func wakeHandOff(_ done: @escaping () -> Void) {
+        DiagLog.add("Arka plan yüklemeleri uygulamayı uyandırdı")
+        let app = UIApplication.shared
+        let box = BackgroundTaskBox()
+        let state = WakeState()
+        let finish: () -> Void = {
+            state.timeout?.cancel()
+            if state.claim() { done() }
+            box.end()
+        }
+        box.id = app.beginBackgroundTask(withName: "om-wake") {
+            box.work?.cancel()
+            DiagLog.add("Uyanış süresi doldu; teslim yarıda bırakıldı")
+            finish()
+        }
+        let remaining = app.backgroundTimeRemaining
+        let hardCap = remaining.isFinite ? max(2, min(22, remaining - 4)) : 22
+        let budget = max(2, min(12, hardCap - 8))
+        let work = Task { @MainActor in
+            await self.backgroundHandOff(budget: budget, reason: "uyanış")
+            finish()
+        }
+        box.work = work
+        state.timeout = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(hardCap * 1_000_000_000))
+            if Task.isCancelled { return }
+            work.cancel()
+            DiagLog.add("Uyanış teslimi süre sınırında kesildi")
+            finish()
         }
     }
 
@@ -162,6 +325,7 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
     }
 
     private func ready() -> APIClient? {
+        guard storeAvailable else { status = "Yedek veritabanı açılamadı"; return nil }
         guard let client = Session.storedClient() else { status = "Giriş yapılmadı"; return nil }
         authorization = PhotoScanner.authorization
         guard authorization == .authorized || authorization == .limited else { status = "Fotoğraf erişimi gerekli"; return nil }
@@ -171,17 +335,26 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
     /// Arka plan grubu: tara, arka planda süren görevleri eşleştir, `budget` saniye içinde en fazla
     /// `backgroundBatch` küçük dosyayı teslim et.
     func backgroundHandOff(budget: TimeInterval, reason: String) async {
+        guard !pumping else {
+            DiagLog.add("Arka plan teslimi atlandı (\(reason)): başka bir geçiş sürüyor")
+            return
+        }
         guard let client = ready(), policyAllows() else {
             DiagLog.add("Arka plan teslimi atlandı (\(reason)): \(status)")
             return
         }
         let deadline = Date().addingTimeInterval(budget)
         observeLibrary()
-        scanLibrary()
+        // Tam tarama ana iş parçacığında sürer; ön plan geçişi yakın zamanda taradıysa arka planda tekrarlanmaz.
+        let lastScan = UserDefaults.standard.object(forKey: "lastScanAt") as? Date
+        if lastScan.map({ Date().timeIntervalSince($0) > 300 }) ?? true { scanLibrary() }
+        if Task.isCancelled || Date() > deadline { refreshCounts(); return }
         await reconcile(client: client)
         let n = await pump(client: client, target: backgroundBatch, deadline: deadline, allowLarge: false)
         refreshCounts()
         DiagLog.add("Arka plan teslimi (\(reason)): \(n) yeni dosya, sürmekte \(counts.inFlight), bekleyen \(counts.pending)")
+        // Süre bittiyse cihaz raporunu atla (sonraki geçişte gönderilir).
+        if Task.isCancelled || Date() > deadline { return }
         await reportDevice(client: client)
     }
 
@@ -228,10 +401,13 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
         while !Task.isCancelled {
             if let deadline, Date() > deadline { break }
             let inFlight = countState("queued")
-            guard inFlight < target, let record = nextPending() else { break }
+            guard inFlight < target, let record = nextPending(includeUploading: allowLarge) else { break }
             do {
                 let result = try await prepareAndSend(record, client: client, allowLarge: allowLarge)
                 if result { handed += 1 }
+            } catch let error where Task.isCancelled || Self.isCancellation(error) {
+                // Geçiş durduruldu (arka plana geçiş, süre dolumu): öğe hatalı sayılmaz, sessizce dur.
+                break
             } catch let e as APIError where e.stopsBackup {
                 lastError = e.localizedDescription
                 record.lastError = lastError
@@ -242,8 +418,19 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
             }
             try? context.save()
             refreshCounts()
+            // Askıya almadan dönen öğeler (ör. ertelenen büyük dosya) ana iş parçacığını kilitlemesin.
+            await Task.yield()
         }
+        // Döngüden `break` ile çıkıldıysa son değişiklikler (ör. lastError) de kaydedilsin.
+        try? context.save()
         return handed
+    }
+
+    /// İptalden kaynaklanan hata mı (görev iptali, URLSession iptali; APIClient bunu "ulaşılamıyor" diye sarar).
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if (error as NSError).domain == NSURLErrorDomain && (error as NSError).code == NSURLErrorCancelled { return true }
+        return false
     }
 
     /// Bir kaydı hazırlar. Sunucuda varsa tamamlar; küçükse teslim eder (true); büyükse ve izin varsa
@@ -442,14 +629,23 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
     }
 
     /// Sıradaki kayıt: önce yarım kalan büyük yüklemeler, sonra yeni çekilenler; aynı varlıkta orijinal önce.
-    private func nextPending() -> BackupRecord? {
-        let now = Date()
-        let items = fetch(state: "pending").filter { $0.updatedAt <= now } + fetch(state: "uploading")
-        return items.min {
-            if ($0.state == "uploading") != ($1.state == "uploading") { return $0.state == "uploading" }
+    /// Tüm bekleyen kayıtları (binlerce) her öğede belleğe almamak için yalnız en yeni küçük bir grup çekilir.
+    /// `includeUploading` false ise (büyük dosyaya izin olmayan arka plan teslimi) yarım kalan büyük yüklemeler
+    /// atlanır; yoksa aynı kayıt her turda yeniden seçilir ve döngü süre bitene kadar boşa döner.
+    private func nextPending(includeUploading: Bool) -> BackupRecord? {
+        let order: (BackupRecord, BackupRecord) -> Bool = {
             if $0.localId == $1.localId { return $0.kindOrder < $1.kindOrder }
             return $0.assetDate > $1.assetDate
         }
+        if includeUploading, let uploading = fetch(state: "uploading").min(by: order) { return uploading }
+        let now = Date()
+        let pending = "pending"
+        var d = FetchDescriptor<BackupRecord>(
+            predicate: #Predicate { $0.state == pending && $0.updatedAt <= now },
+            sortBy: [SortDescriptor(\.assetDate, order: .reverse)]
+        )
+        d.fetchLimit = 24
+        return ((try? context.fetch(d)) ?? []).min(by: order)
     }
 
     private func markFailed(_ record: BackupRecord, _ message: String) {
@@ -462,17 +658,33 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
 
     private func scanLibrary() {
         let known: Set<String> = {
-            let d = FetchDescriptor<BackupRecord>(predicate: #Predicate { $0.kindRaw == "original" })
+            var d = FetchDescriptor<BackupRecord>(predicate: #Predicate { $0.kindRaw == "original" })
+            d.propertiesToFetch = [\.localId]
             return Set(((try? context.fetch(d)) ?? []).map(\.localId))
         }()
         let since = UserDefaults.standard.object(forKey: "lastScanAt") as? Date
         let scanStart = Date()
         let result = PhotoScanner.scan(known: known, modifiedSince: since, settings: settings)
         let existing: [String: BackupRecord] = {
-            let refs = Set(result.specs.map(\.sourceRef))
+            let refs = Array(Set(result.specs.map(\.sourceRef)))
             guard !refs.isEmpty else { return [:] }
-            let all = (try? context.fetch(FetchDescriptor<BackupRecord>())) ?? []
-            return Dictionary(all.filter { refs.contains($0.sourceRef) }.map { ($0.sourceRef, $0) }, uniquingKeysWith: { a, _ in a })
+            // SQLite değişken sınırına takılmamak için gruplar hâlinde sorgulanır; bir sorgu hata verirse tüm
+            // tablo okunur (boş sonuç dönerse mevcut kayıtlar yeniden eklenip durumları sıfırlanırdı).
+            var matching: [BackupRecord] = []
+            var offset = 0
+            while offset < refs.count {
+                let part = Array(refs[offset..<min(offset + 500, refs.count)])
+                offset += 500
+                do {
+                    matching += try context.fetch(FetchDescriptor<BackupRecord>(predicate: #Predicate { part.contains($0.sourceRef) }))
+                } catch {
+                    let all = (try? context.fetch(FetchDescriptor<BackupRecord>())) ?? []
+                    let wanted = Set(refs)
+                    matching = all.filter { wanted.contains($0.sourceRef) }
+                    break
+                }
+            }
+            return Dictionary(matching.map { ($0.sourceRef, $0) }, uniquingKeysWith: { a, _ in a })
         }()
         for spec in result.specs {
             if let rec = existing[spec.sourceRef] {
@@ -560,5 +772,17 @@ final class BackupEngine: NSObject, ObservableObject, PHPhotoLibraryChangeObserv
             lastBackupAt: lastBackupAt.map(ServerDate.format), lastError: lastError
         )
         _ = try? await client.send("POST", "devices/report", body: report, as: OkResponse.self)
+    }
+}
+
+/// Uyanış durumu: tamamlanma kapanışı yalnız bir kez çağrılsın; süre sınırı görevi iptal edilebilsin
+/// (yalnız ana iş parçacığında kullanılır).
+private final class WakeState {
+    var timeout: Task<Void, Never>?
+    private var used = false
+    func claim() -> Bool {
+        if used { return false }
+        used = true
+        return true
     }
 }

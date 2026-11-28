@@ -166,12 +166,13 @@ struct LibraryView: View {
                 await memories.refresh()
             }
             .onChange(of: engine.counts.done) { old, new in
-                guard new > old else { return }
+                // Arka planda biten yüklemeler listeyi yeniden çekmesin; uygulamaya dönünce yenilenir.
+                guard new > old, scenePhase == .active else { return }
                 scheduleRefresh()
             }
             .onChange(of: engine.isRunning) { was, now in
                 // Yedekleme bitti: son yüklenenlerin de listede olduğundan emin ol.
-                if was, !now { scheduleRefresh(delay: 1) }
+                if was, !now, scenePhase == .active { scheduleRefresh(delay: 1) }
             }
             .onChange(of: scenePhase) { _, phase in
                 // Arka planda yüklenenler: uygulamaya dönünce listeyi güncelle.

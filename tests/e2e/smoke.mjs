@@ -105,6 +105,30 @@ try {
     await page.waitForSelector('.story', { state: 'detached', timeout: 3000 });
     step('anı gösterisi: fotoğrafı aç, geri tuşu, zaman çizelgesi gezinmesi');
   }
+  // Takvim: raydaki yıl düğmesi takvimi açar; fotoğraflı güne tıklayınca o güne gidilir.
+  await page.goto(base + '/app/#/photos');
+  await page.waitForSelector('.tile img');
+  if (await page.waitForSelector('.scrubber button[data-year]', { timeout: 5000 }).catch(() => null)) {
+    // Yükleme paneli sağ alt köşede rayın üstünü örter: kapat.
+    if (await page.isVisible('#uploads .up-head button')) await page.click('#uploads .up-head button');
+    await page.click('.scrub-now');
+    await page.waitForSelector('.cal[role=dialog] .cal-day.has');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.cal', { state: 'detached' });
+    if (!(await page.evaluate(() => document.activeElement?.classList.contains('scrub-now')))) throw new Error('takvim kapanınca odak geri dönmedi: ' + await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 200) + ' url=' + location.hash + ' n=' + document.querySelectorAll('.scrub-now').length));
+    await page.click('.scrubber button[data-year]:last-of-type');
+    await page.waitForSelector('.cal .cal-day.has');
+    const day = await page.getAttribute('.cal .cal-day.has', 'data-day');
+    await page.click(`.cal .cal-day[data-day="${day}"]`);
+    await page.waitForSelector('.cal', { state: 'detached' });
+    const sec = await page.waitForSelector(`.day-group[data-day="${day}"]`, { timeout: 8000 });
+    await page.waitForTimeout(400);
+    const box = await sec.boundingBox();
+    if (!box || box.y < 0 || box.y > 820 * 0.6) throw new Error(`takvim günü görünür değil: ${day} y=${box?.y}`);
+    step(`takvim: ${day} gününe gidildi`);
+  } else {
+    step('takvim atlandı (yıl rayı için en az 3 ay gerekir)');
+  }
   await page.goto(base + '/app/#/albums');
   await page.waitForSelector('.album-card, .empty');
   await page.screenshot({ path: `${out}desktop-albums.png` });
@@ -121,6 +145,15 @@ try {
   await errPage.close();
   step('API hatasında "Tekrar dene"');
   const mobile = await run(390, 844, 'mobile');
+  if (await mobile.waitForSelector('.cal-fab', { state: 'visible', timeout: 5000 }).catch(() => null)) {
+    await mobile.click('.cal-fab');
+    await mobile.waitForSelector('.cal .cal-day.has');
+    await mobile.waitForTimeout(400);
+    await mobile.screenshot({ path: `${out}mobile-calendar.png` });
+    await mobile.click('.cal-close');
+    await mobile.waitForSelector('.cal', { state: 'detached' });
+    step('mobil takvim');
+  }
   await mobile.click('#menuBtn');
   await mobile.screenshot({ path: `${out}mobile-menu.png` });
   step('mobil görünüm');

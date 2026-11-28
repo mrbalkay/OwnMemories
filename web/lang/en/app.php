@@ -43,4 +43,7 @@ return [
     'nav_library' => 'Library', 'nav_albums' => 'Albums', 'nav_other' => 'Other', 'memories_prev' => 'Previous memories', 'memories_next' => 'Next memories',
     'in_this_memory' => 'In this memory', 'when' => 'Date', 'photo_n_of' => '{i} / {n}',
     'from_library' => 'From your library',
+    'calendar' => 'Calendar', 'open_calendar' => 'Open calendar', 'cal_prev_month' => 'Previous month', 'cal_next_month' => 'Next month',
+    'cal_weekdays' => 'Mon,Tue,Wed,Thu,Fri,Sat,Sun', 'cal_no_photos' => 'no photos', 'cal_days' => '{n} days',
+    'cal_go_month' => 'Go to start of month', 'cal_hint' => 'Pick a day with photos',
 ];

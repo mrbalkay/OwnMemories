@@ -333,9 +333,9 @@
 
 /* yıl rayı: sessiz, sistem hissi */
 :root[data-skin="yerel"] .scrubber { top: 124px; right: 6px; gap: 1px; }
-:root[data-skin="yerel"] .scrubber button { color: var(--y-ink-3); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px; }
-:root[data-skin="yerel"] .scrubber button:hover { color: var(--y-accent-text); background: var(--y-fill-2); }
-:root[data-skin="yerel"] .scrubber button.on { color: var(--y-accent-text); }
+:root[data-skin="yerel"] .scrubber button[data-year] { color: var(--y-ink-3); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px; }
+:root[data-skin="yerel"] .scrubber button[data-year]:hover { color: var(--y-accent-text); background: var(--y-fill-2); }
+:root[data-skin="yerel"] .scrubber button[data-year].on { color: var(--y-accent-text); }
 
 /* ------------------------------------------------------------ seçim çubuğu */
 :root[data-skin="yerel"] .selbar {
@@ -645,4 +645,71 @@
 @media (max-width: 860px) {
   :root[data-skin="yerel"] .mem-card, :root[data-skin="yerel"] .mem-card.is-first { width: 250px; height: 300px; }
   :root[data-skin="yerel"] .mem-text strong { font-size: 23px; }
+}
+
+/* ------------------------------------------------------------ takvim (calendar.js) — iOS Takvim gibi */
+:root[data-skin="yerel"] .scrub-now { margin: 0 0 6px; padding: 5px 7px; border-radius: 9px; background: var(--y-fill-2); color: var(--ink); font-size: 11px; font-weight: 700; letter-spacing: -.01em; }
+:root[data-skin="yerel"] .scrub-now .scrub-year { color: var(--y-accent-text); font-weight: 600; }
+:root[data-skin="yerel"] .scrub-now:hover, :root[data-skin="yerel"] .scrub-now[aria-expanded="true"] { background: var(--y-accent-tint); color: var(--y-accent-text); }
+:root[data-skin="yerel"] .cal {
+  width: 352px; padding: 14px 14px 12px; border-radius: var(--r-card); color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 95%, transparent); border: 0; box-shadow: var(--y-shadow-3), inset 0 0 0 .5px var(--y-hair);
+  backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
+  transform: scale(.94); transform-origin: 100% 0; transition: opacity .2s ease, transform .32s cubic-bezier(.32, 1.25, .5, 1);
+}
+:root[data-skin="yerel"] .cal-layer.out .cal { transform: scale(.96); }
+:root[data-skin="yerel"] .cal-head { grid-template-columns: 1fr auto auto auto; gap: 0; margin: 2px 2px 12px 6px; }
+:root[data-skin="yerel"] .cal-title { order: -1; align-items: flex-start; text-align: left; }
+:root[data-skin="yerel"] .cal-title-main { font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: -.02em; color: var(--ink); }
+:root[data-skin="yerel"] .cal-year { color: var(--y-accent-text); }
+:root[data-skin="yerel"] .cal-sub { font-size: 12.5px; color: var(--y-ink-2); }
+:root[data-skin="yerel"] .cal-nav { width: 34px; height: 34px; color: var(--y-accent-text); }
+:root[data-skin="yerel"] .cal-nav .ic svg { width: 21px; height: 21px; stroke-width: 2.4; }
+:root[data-skin="yerel"] .cal-nav:hover:not(:disabled) { background: var(--y-fill-2); color: var(--y-accent-text); }
+:root[data-skin="yerel"] .cal-nav:disabled { opacity: .3; color: var(--y-ink-3); }
+:root[data-skin="yerel"] .cal-close { width: 28px; height: 28px; margin-left: 6px; background: var(--y-fill); color: var(--y-ink-2); }
+:root[data-skin="yerel"] .cal-close .ic svg { width: 14px; height: 14px; stroke-width: 2.6; }
+:root[data-skin="yerel"] .cal-close:hover { background: var(--y-fill); color: var(--ink); }
+:root[data-skin="yerel"] .cal-week { padding-bottom: 6px; margin-bottom: 6px; border-bottom: .5px solid var(--y-hair); }
+:root[data-skin="yerel"] .cal-wd { font-size: 10.5px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--y-ink-2); }
+:root[data-skin="yerel"] .cal-wd.is-weekend { color: var(--y-ink-3); }
+:root[data-skin="yerel"] .cal-week, :root[data-skin="yerel"] .cal-grid { gap: 3px; }
+:root[data-skin="yerel"] .cal-day { border-radius: 12px; font-family: var(--font-display); font-size: 16px; font-weight: 400; color: var(--y-ink-3); }
+:root[data-skin="yerel"] .cal-day[aria-disabled="true"] { opacity: 1; }
+:root[data-skin="yerel"] .cal-num { width: 30px; height: 30px; }
+:root[data-skin="yerel"] .cal-day.has { background: none; color: var(--ink); font-weight: 600; }
+:root[data-skin="yerel"] .cal-day.has:hover { transform: none; background: var(--y-fill-2); }
+:root[data-skin="yerel"] .cal-day.has:active { transform: scale(.94); }
+:root[data-skin="yerel"] .cal-cover { inset: auto; left: 50%; bottom: 2px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; }
+:root[data-skin="yerel"] .cal-cover.in { opacity: 0; }
+/* Yoğunluk: çok fotoğraflı günler hafif mavi zeminle öne çıkar. */
+:root[data-skin="yerel"] .cal-day.has[data-level="3"], :root[data-skin="yerel"] .cal-day.has[data-level="4"] { background: var(--y-accent-tint); }
+:root[data-skin="yerel"] .cal-count { top: -4px; right: -3px; min-width: 18px; height: 17px; padding: 0 5px; border-radius: 9px; background: #0A7CFF; color: #fff; font: 600 10.5px/17px var(--sans); box-shadow: 0 0 0 2px var(--surface), 0 1px 3px rgba(10, 124, 255, .35); }
+:root[data-skin="yerel"] .cal-day.is-today .cal-num { background: #FF3B30; color: #fff; box-shadow: none; font-weight: 600; }
+:root[data-skin="yerel"] .cal-day:focus-visible { outline: 2.5px solid #0A7CFF; outline-offset: 0; border-radius: 12px; }
+:root[data-skin="yerel"] .cal-foot { margin-top: 10px; padding-top: 10px; border-top: .5px solid var(--y-hair); }
+:root[data-skin="yerel"] .cal-hint { color: var(--y-ink-2); font-size: 12.5px; }
+:root[data-skin="yerel"] .cal-jump { padding: 6px 12px; border-radius: 999px; background: var(--y-accent-tint); color: var(--y-accent-text); font-size: 13px; }
+:root[data-skin="yerel"] .cal-jump:hover { text-decoration: none; filter: brightness(.97); }
+:root[data-skin="yerel"] .day-group.day-flash { animation-name: om-yerel-day-flash; border-radius: var(--r-tile); }
+@keyframes om-yerel-day-flash {
+  0%, 25% { background: var(--y-accent-tint); box-shadow: 0 0 0 8px var(--y-accent-tint); }
+  100% { background: transparent; box-shadow: 0 0 0 8px transparent; }
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="yerel"] .cal { background: rgba(36, 36, 40, .9); }
+  :root[data-skin="yerel"] .cal-count { box-shadow: 0 0 0 2px #2a2a2e, 0 1px 3px rgba(0, 0, 0, .5); }
+}
+@media (max-width: 860px) {
+  :root[data-skin="yerel"] .cal { width: auto; padding: 6px 16px calc(16px + env(safe-area-inset-bottom)); border-radius: 28px 28px 0 0; transform: translateY(100%); transition: opacity .2s ease, transform .34s cubic-bezier(.32, .72, 0, 1); }
+  :root[data-skin="yerel"] .cal-layer.in .cal { transform: none; }
+  :root[data-skin="yerel"] .cal-layer.out .cal { transform: translateY(100%); }
+  :root[data-skin="yerel"] .cal-grabber { width: 36px; height: 5px; background: var(--y-ink-3); opacity: 1; margin-bottom: 12px; }
+  :root[data-skin="yerel"] .cal-head { margin-left: 4px; }
+  :root[data-skin="yerel"] .cal-title-main { font-size: 26px; }
+  :root[data-skin="yerel"] .cal-day { font-size: 19px; }
+  :root[data-skin="yerel"] .cal-num { width: 36px; height: 36px; }
+  :root[data-skin="yerel"] .cal-count { min-width: 20px; height: 18px; line-height: 18px; font-size: 11px; }
+  :root[data-skin="yerel"] .cal-fab { border: 0; background: var(--y-material); color: var(--ink); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .35), inset 0 0 0 .5px var(--y-hair); font-family: var(--font-display); font-weight: 600; }
+  :root[data-skin="yerel"] .cal-fab-ic { color: #0A7CFF; }
 }

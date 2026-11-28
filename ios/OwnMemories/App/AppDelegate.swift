@@ -14,13 +14,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     /// Arka planda biten yüklemeler uygulamayı uyandırır; tamamlanınca sisteme haber verilir.
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
         guard identifier == BackgroundUploader.identifier else { completionHandler(); return }
-        BackgroundUploader.shared.backgroundCompletion = completionHandler
+        BackgroundUploader.shared.addBackgroundCompletion(completionHandler)
         // Motoru (ve tamamlanma kancalarını) hazırla, sonra oturuma yeniden bağlan; olaylar bitince
         // BackupEngine sıradaki grubu teslim edip sistemi bilgilendirir.
         Task { @MainActor in
             _ = BackupEngine.shared
             BackgroundUploader.shared.reconnect()
         }
+    }
+
+    func applicationDidReceiveMemoryWarning(_ application: UIApplication) {
+        DiagLog.add("Bellek uyarısı")
+        Task { await ImageLoader.shared.purge() }
     }
 
     /// Anı bildirimine dokunulunca anıyı aç.

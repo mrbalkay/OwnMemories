@@ -20,7 +20,22 @@ actor ImageLoader {
         return URLSession(configuration: c)
     }()
 
-    init() { cache.countLimit = 600 }
+    init() {
+        cache.countLimit = 600
+        // Çözülmüş bit eşlem boyutuyla sınırlanır (önizlemeler tek başına onlarca MB olabilir).
+        cache.totalCostLimit = 120 << 20
+    }
+
+    /// Bellek önbelleğini boşaltır (arka plana geçişte ve bellek uyarısında; arka planda büyük bellek
+    /// kullanan uygulamayı iOS ilk sonlandırır).
+    func purge() {
+        cache.removeAllObjects()
+    }
+
+    private static func cost(of image: UIImage) -> Int {
+        let w = image.size.width * image.scale, h = image.size.height * image.scale
+        return max(1, Int(w * h * 4))
+    }
 
     func image(for url: URL, client: APIClient) async -> UIImage? {
         if case .image(let img) = await load(url, client: client) { return img }
@@ -42,7 +57,7 @@ actor ImageLoader {
         inflight[url] = task
         let result = await task.value
         inflight[url] = nil
-        if case .image(let img) = result { cache.setObject(img, forKey: url as NSURL) }
+        if case .image(let img) = result { cache.setObject(img, forKey: url as NSURL, cost: Self.cost(of: img)) }
         return result
     }
 }
