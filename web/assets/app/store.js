@@ -13,6 +13,11 @@ export const store = {
     if (this.selection.has(id)) this.selection.delete(id); else this.selection.add(id);
     this.emit();
   },
+  /** Birden çok öğeyi birlikte seçer ya da bırakır (gün başlığındaki "Seç"). */
+  setMany(ids, on) {
+    for (const id of ids) { if (on) this.selection.add(id); else this.selection.delete(id); }
+    this.emit();
+  },
   clear() { this.selection.clear(); this.emit(); },
   byId(id) { return this.list.find((a) => a.id === id); },
   update(asset) {

@@ -9,9 +9,11 @@ struct ServerUser: Codable, Equatable {
     let isAdmin: Bool
     let usedBytes: Int64?
     let quotaBytes: Int64?
+    /// Görünüm teması: "sinema" | "galeri" | "yerel" (eski sunucularda yok → varsayılan Sinema).
+    let theme: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, email, name
+        case id, email, name, theme
         case isAdmin = "is_admin"
         case usedBytes = "used_bytes"
         case quotaBytes = "quota_bytes"

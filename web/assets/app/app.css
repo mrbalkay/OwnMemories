@@ -93,8 +93,8 @@ svg.fill { fill: currentColor; stroke: none; }
 .upload-btn { cursor: pointer; }
 
 /* ------------------------------------------------------------ sayfa başlıkları */
-.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px 0 8px; }
-.page-head h1 { font-family: var(--serif); font-weight: 500; font-size: 34px; line-height: 1.1; margin: 0; letter-spacing: -.015em; color: var(--ink); }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px 0 8px; min-width: 0; }
+.page-head h1 { font-family: var(--serif); font-weight: 500; font-size: 34px; line-height: 1.1; margin: 0; letter-spacing: -.015em; color: var(--ink); overflow-wrap: anywhere; }
 .page-head p { margin: 6px 0 0; }
 .page-tools { display: flex; gap: 6px; flex-wrap: wrap; }
 .members { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; margin-top: 8px; }
@@ -180,7 +180,6 @@ svg.fill { fill: currentColor; stroke: none; }
 @keyframes fade { from { opacity: 0; } }
 .viewer.with-info { grid-template-columns: 1fr 380px; }
 .v-bar { grid-column: 1 / 2; display: flex; align-items: center; gap: 8px; padding: 10px 12px; z-index: 2; background: linear-gradient(rgba(0, 0, 0, .6), transparent); position: absolute; left: 0; right: 0; }
-.viewer.with-info .v-bar { right: 380px; }
 .v-title { flex: 1; font-size: 14px; opacity: .88; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v-tools { display: flex; gap: 2px; }
 .viewer .icon-btn:hover { background: rgba(255, 255, 255, .12); }
@@ -281,10 +280,58 @@ dialog.modal h3 { font-size: 14px; margin: 18px 0 6px; }
   .viewer.with-info .v-next { right: 16px; }
   .v-nav { display: none; }
   .selbar { left: 8px; right: 8px; top: 8px; }
-  .sel-actions .btn span { display: none; }
+  .sel-actions .btn span:not(.ic) { display: none; }
   .story-media img, .story-media video { border-radius: 0; max-height: 100dvh; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
   .sb.now i { width: 50%; }
 }
+
+/* ------------------------------------------------------------ settings */
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.nav-settings { margin-top: 10px; }
+.settings { max-width: 980px; padding: 0 24px 48px; }
+.settings-section { margin-top: 28px; }
+.settings-section h2 { font-size: 18px; margin: 0 0 6px; }
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 16px; }
+.theme-card { display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); cursor: pointer; }
+.theme-card:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.theme-card:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 3px; }
+.theme-preview { display: flex; flex-direction: column; gap: 6px; padding: 10px; aspect-ratio: 16 / 10; border-radius: 10px; background: var(--p-bg); border: 1px solid rgba(127, 127, 127, .2); }
+.tp-hero { flex: 1; border-radius: 6px; background: linear-gradient(135deg, var(--p-accent), var(--p-surface)); }
+.tp-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; height: 28%; }
+.tp-row span { border-radius: 4px; background: var(--p-surface); border: 1px solid rgba(127, 127, 127, .18); }
+.theme-text { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.theme-text strong { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.theme-text .badge { position: static; background: var(--accent); backdrop-filter: none; }
+.settings-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.settings-row label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.settings-row input { min-width: 260px; }
+
+/* ------------------------------------------------------------------ tema kancaları
+   Aşağıdaki öğeler temalar için işaretlemede hep vardır (sözleşme: theme.js başı).
+   Varsayılan görünümde gizli ya da nötrdür; theme-*.css dosyaları açar ve biçimler. */
+.ambient { display: none; position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.page-title, .top-spacer, .top-avatar, .search-kbd, .me-avatar, .me-bar { display: none; }
+.me-bar i { display: block; height: 100%; width: calc(var(--used, 0) * 100%); }
+.nav-h, .nav-sep { display: none; }
+.nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.mem-hero { display: none; }
+.mem-hero-media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.mem-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mem-nav, .mem-fade, .mem-play, .mem-date, .mem-mosaic { display: none; }
+.mem-row-wrap { position: relative; }
+.mem-text .mem-eyebrow { font-size: 11px; letter-spacing: .02em; }
+
+.month-count { display: none; }
+.day-sub { font-weight: 500; opacity: .8; }
+.day-sel { display: none; }
+.scrub-now { display: none; }
+.scrubber button.on { color: var(--accent); }
+
+.story-heading, .story-side, .story-bottom { display: none; }
+.story-film { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.story-thumb { flex: none; border: 0; padding: 0; background: none; cursor: pointer; }
+.story-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }

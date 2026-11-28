@@ -1,9 +1,17 @@
 // OwnMemories — zaman çizelgesi: güne göre gruplu ızgara, kaydırdıkça yükleme, ay/yıl kaydırıcısı.
 import { api, qs, thumbUrl } from './api.js';
-import { h, t, icon, dayKey, formatDay, formatMonth, formatDuration } from './util.js';
+import { h, t, icon, dayKey, dayParts, monthParts, formatMonth, formatDuration } from './util.js';
+import { setAmbientFrom } from './theme.js';
 import { store } from './store.js';
 
 const PAGE = 240;
+
+/** Ortam rengini temanın varsayılanına döndürür (zaman çizelgesi olmayan ya da boş görünümler için). */
+export function clearAmbient() {
+  const s = document.documentElement.style;
+  s.removeProperty('--ambient');
+  s.removeProperty('--ambient-rgb');
+}
 
 export class Timeline {
   /**
@@ -19,6 +27,9 @@ export class Timeline {
     this.done = false;
     this.groups = new Map(); // dayKey → {section, grid, assets, tiles}
     this.lastMonth = null;
+    this.monthCounts = new Map(); // 'YYYY-MM' → öğe sayısı (assets/summary)
+    this.curMonth = null;
+    this.ambientSet = false;
     store.list = [];
     this.onResize = () => { clearTimeout(this._rt); this._rt = setTimeout(() => this.layoutAll(), 120); };
     window.addEventListener('resize', this.onResize);
@@ -41,17 +52,59 @@ export class Timeline {
       if (w && Math.abs(w - this.lastWidth) > 1) { this.lastWidth = w; this.onResize(); }
     });
     this.ro.observe(this.wrap);
+    // Tema değişince boşluk/kenar değerleri değişir: satırları yeniden diz.
+    this.onTheme = () => requestAnimationFrame(() => { this.lastWidth = this.wrap.clientWidth; this.onResize(); });
+    document.addEventListener('om:theme', this.onTheme);
     this.io = new IntersectionObserver((es) => { if (!this.paused && es.some((e) => e.isIntersecting)) this.load(); }, { rootMargin: '1200px' });
     this.io.observe(this.sentinel);
-    if (this.opts.scrubber !== false) this.buildScrubber();
+    this.buildScrubber();
+    this.scroller = document.getElementById('view');
+    this.onScroll = () => {
+      if (this._sr) return;
+      this._sr = requestAnimationFrame(() => { this._sr = 0; this.trackMonth(); });
+    };
+    this.scroller.addEventListener('scroll', this.onScroll, { passive: true });
     this.load();
   }
 
+  /** Görünür ayı izler: yıl rayının .scrub-now etiketi, düğmelerin .on durumu, .month-group.is-current ve ortam rengi. */
+  trackMonth() {
+    const top = this.scroller.getBoundingClientRect().top + 90;
+    let cur = null;
+    for (const sec of this.wrap.children) {
+      if (!sec.classList.contains('month-group')) continue;
+      if (sec.getBoundingClientRect().bottom > top) { cur = sec; break; }
+    }
+    if (!cur || cur.dataset.month === this.curMonth) return;
+    const first = this.curMonth === null;
+    this.curMonth = cur.dataset.month;
+    for (const sec of this.wrap.querySelectorAll('.month-group.is-current')) sec.classList.remove('is-current');
+    cur.classList.add('is-current');
+    this.updateScrubNow();
+    const hero = document.querySelector('.mem-hero img');
+    if (hero && this.scroller.scrollTop < 240) { if (!first) setAmbientFrom(hero); }
+    else {
+      const img = cur.querySelector('.tile img');
+      if (img) { setAmbientFrom(img); this.ambientSet = true; }
+    }
+  }
+
+  updateScrubNow() {
+    if (!this.scrub || !this.curMonth) return;
+    const { name, year } = monthParts(this.curMonth);
+    this.scrubNow.replaceChildren(h('span', { class: 'scrub-month' }, name), h('span', { class: 'scrub-year' }, year));
+    for (const b of this.scrub.querySelectorAll('button[data-year]')) b.classList.toggle('on', b.dataset.year === year);
+  }
+
   destroy() {
+    this.destroyed = true;
+    document.removeEventListener('om:theme', this.onTheme);
     window.removeEventListener('resize', this.onResize);
     this.ro?.disconnect();
     this.io?.disconnect();
     this.unsub?.();
+    this.scroller?.removeEventListener('scroll', this.onScroll);
+    cancelAnimationFrame(this._sr);
     this.scrub?.remove();
   }
 
@@ -63,11 +116,14 @@ export class Timeline {
     this.groups.clear();
     this.lastMonth = null;
     this.monthEl = null;
+    this.curMonth = null;
     store.list = [];
     this.wrap.replaceChildren();
     this.jumpBack.hidden = !extra.before;
     this.root.scrollTop = 0;
     document.getElementById('view').scrollTop = 0;
+    // Tam yenileme (ör. yükleme sonrası): ay sayılarını, toplamı ve yıl rayını da tazele.
+    if (!extra.before) this.buildScrubber();
     this.load();
   }
 
@@ -84,7 +140,13 @@ export class Timeline {
       this.done = r.next === null;
       this.append(r.assets);
       this.status.replaceChildren();
+      this.trackMonth();
+      if (!this.ambientSet && !document.querySelector('.mem-hero img')) {
+        const img = this.wrap.querySelector('.tile img');
+        if (img) { setAmbientFrom(img); this.ambientSet = true; }
+      }
       if (this.done && store.list.length === 0) {
+        if (!document.querySelector('.mem-hero img')) clearAmbient();
         this.status.append(h('div', { class: 'empty' }, h('p', {}, this.opts.empty || t('empty_photos'))));
       }
     } catch (e) {
@@ -109,13 +171,20 @@ export class Timeline {
         const month = key.slice(0, 7);
         if (month !== this.lastMonth || !this.monthEl) {
           this.lastMonth = month;
-          this.monthEl = h('section', { class: 'month-group', dataset: { month } }, h('h2', { class: 'month' }, formatMonth(month)));
+          this.monthEl = h('section', { class: 'month-group', dataset: { month, year: month.slice(0, 4) } }, this.monthHead(month));
           this.wrap.append(this.monthEl);
         }
         const grid = h('div', { class: 'grid', role: 'list' });
-        const head = h('h3', { class: 'day' }, formatDay(key));
+        const dp = dayParts(key);
+        const g2 = { assets: [] };
+        const selBtn = h('button', {
+          class: 'day-sel', type: 'button', 'aria-label': `${t('select')}: ${dp.label}`,
+          onclick: () => { const ids = g2.assets.map((x) => x.id); store.setMany(ids, !ids.every((id) => store.selection.has(id))); },
+        }, h('span', { class: 'day-sel-check' }, icon('check')), h('span', { class: 'day-sel-text' }, t('select_day')));
+        const head = h('h3', { class: 'day' },
+          h('span', { class: 'day-label' }, dp.label), ' ', h('span', { class: 'day-sub' }, dp.weekday), selBtn);
         const section = h('section', { class: 'day-group', dataset: { day: key } }, head, grid);
-        g = { section, grid, assets: [] };
+        g = Object.assign(g2, { section, grid });
         this.groups.set(key, g);
         this.monthEl.append(section);
       }
@@ -124,6 +193,17 @@ export class Timeline {
       touched.add(g);
     }
     for (const g of touched) this.layout(g);
+    // Seçim sürerken yeni sayfa bir günün devamını getirdiyse o günün .all-selected durumu değişir.
+    if (store.selection.size) this.syncSelection();
+  }
+
+  /** Ay başlığı: h2.month > .month-name + .month-year + .month-count (sayı özet gelince dolar). */
+  monthHead(month) {
+    const { name, year } = monthParts(month);
+    const n = this.monthCounts.get(month);
+    return h('h2', { class: 'month', 'aria-label': formatMonth(month) },
+      h('span', { class: 'month-name' }, name), ' ', h('span', { class: 'month-year' }, year),
+      h('span', { class: 'month-count' }, n ? t('items', { n }) : ''));
   }
 
   /** Oranları koruyan satır yerleşimi (justified): her satır grid genişliğini tam doldurur. */
@@ -189,6 +269,7 @@ export class Timeline {
   syncSelection() {
     this.wrap.classList.toggle('selecting', store.selection.size > 0);
     for (const el of this.wrap.querySelectorAll('.tile')) el.classList.toggle('selected', store.selection.has(el.dataset.id));
+    for (const g of this.groups.values()) g.section.classList.toggle('all-selected', g.assets.length > 0 && g.assets.every((a) => store.selection.has(a.id)));
   }
 
   /** Bir asset'i listeden kaldırır (çöp, arşiv sonrası). */
@@ -202,6 +283,7 @@ export class Timeline {
       const g = sec ? this.groups.get(sec.dataset.day) : null;
       if (g) {
         g.assets = g.assets.filter((x) => x.id !== id);
+        this.countRemoved(sec.dataset.day.slice(0, 7));
         if (!grid.children.length) {
           this.groups.delete(sec.dataset.day);
           const monthSec = sec.parentElement;
@@ -215,7 +297,26 @@ export class Timeline {
         }
       }
     }
-    if (store.list.length === 0 && this.done) this.status.replaceChildren(h('div', { class: 'empty' }, h('p', {}, this.opts.empty || t('empty_photos'))));
+    if (store.list.length === 0 && this.done) {
+      if (!document.querySelector('.mem-hero img')) clearAmbient();
+      this.status.replaceChildren(h('div', { class: 'empty' }, h('p', {}, this.opts.empty || t('empty_photos'))));
+    }
+  }
+
+  /** Kaldırılan bir öğeyi ay sayısından ve toplamdan düşer (.month-count, #pageSub). */
+  countRemoved(month) {
+    const n = this.monthCounts.get(month);
+    if (!n) return;
+    this.monthCounts.set(month, n - 1);
+    this.total = Math.max(0, (this.total || 0) - 1);
+    const el = this.wrap.querySelector(`.month-group[data-month="${month}"] .month-count`);
+    if (el) el.textContent = n - 1 ? t('items', { n: n - 1 }) : '';
+    this.renderTotal();
+  }
+
+  renderTotal() {
+    const sub = document.getElementById('pageSub');
+    if (sub) sub.textContent = this.total ? t('items', { n: this.total }) : '';
   }
 
   refreshTile(a) {
@@ -229,18 +330,34 @@ export class Timeline {
     if (g) g.assets = g.assets.map((x) => (x.id === a.id ? a : x));
   }
 
+  /** assets/summary: ay sayıları (.month-count), toplam (#pageSub) ve yıl rayı (.scrubber). */
   async buildScrubber() {
     try {
-      const r = await api('GET', 'assets/summary' + qs(this.query));
-      if (r.months.length < 3) return;
+      const r = await api('GET', 'assets/summary' + qs(this.opts.query || {}));
+      if (this.destroyed || !this.wrap.isConnected) return;
+      let total = 0;
+      this.monthCounts.clear();
+      for (const m of r.months) { this.monthCounts.set(m.month, m.count); total += m.count; }
+      for (const sec of this.wrap.querySelectorAll('.month-group')) {
+        const n = this.monthCounts.get(sec.dataset.month);
+        const el = sec.querySelector('.month-count');
+        if (el) el.textContent = n ? t('items', { n }) : '';
+      }
+      this.total = total;
+      this.renderTotal();
+      // Yeniden çağrılabilir (reset sonrası): eski rayı kaldır.
+      this.scrub?.remove();
+      this.scrub = null;
+      if (this.opts.scrubber === false || r.months.length < 3) return;
       const years = new Map();
       for (const m of r.months) {
         const y = m.month.slice(0, 4);
         if (!years.has(y)) years.set(y, m.month);
       }
-      this.scrub = h('nav', { class: 'scrubber', 'aria-label': 'Yıllar' },
+      this.scrubNow = h('div', { class: 'scrub-now', 'aria-hidden': 'true' });
+      this.scrub = h('nav', { class: 'scrubber', 'aria-label': t('jump_to_year') }, this.scrubNow,
         ...[...years.entries()].map(([y, month]) => h('button', {
-          title: formatMonth(month),
+          title: formatMonth(month), dataset: { year: y },
           onclick: () => {
             // Ayın sonundan önceki her şey: o yılın ilk (en yeni) ayına atla.
             const [yy, mm] = month.split('-').map(Number);
@@ -249,6 +366,7 @@ export class Timeline {
           },
         }, y)));
       this.root.append(this.scrub);
+      this.updateScrubNow();
     } catch { /* kaydırıcı isteğe bağlı */ }
   }
 }

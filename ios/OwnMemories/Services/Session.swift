@@ -49,13 +49,20 @@ final class Session: ObservableObject {
         serverURL = url
         token = r.token
         user = r.user
+        ThemeStore.shared.sync(from: r.user)
+    }
+
+    /// Sunucudan dönen güncel kullanıcıyı kaydeder (ör. PATCH /me sonrası).
+    func updateUser(_ u: ServerUser) {
+        user = u
+        UserDefaults.standard.set(try? JSONEncoder().encode(u), forKey: "user")
     }
 
     func refreshUser() async {
         guard let client else { return }
         if let me: MeResponse = try? await client.send("GET", "me") {
-            user = me.user
-            UserDefaults.standard.set(try? JSONEncoder().encode(me.user), forKey: "user")
+            updateUser(me.user)
+            ThemeStore.shared.sync(from: me.user)
         }
     }
 

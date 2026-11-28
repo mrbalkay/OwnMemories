@@ -2,7 +2,7 @@
 import { api, qs } from './api.js';
 import { h, t, icon, toast, confirmDialog, formatBytes, OM } from './util.js';
 import { store } from './store.js';
-import { Timeline } from './timeline.js';
+import { Timeline, clearAmbient } from './timeline.js';
 import { openViewer, closeViewer } from './viewer.js';
 import { enqueue, setUploadHandler } from './upload.js';
 
@@ -11,6 +11,7 @@ const nav = document.getElementById('nav');
 const selbar = document.getElementById('selbar');
 let timeline = null;
 let route = { name: 'photos' };
+let renderSeq = 0; // her render() için artar; geç biten eşzamansız işler eski rotaya yazmasın
 
 const NAV = [
   ['photos', 'photos', '#/photos'],
@@ -22,15 +23,36 @@ const NAV = [
   ['trash', 'trash', '#/trash'],
 ];
 
+// Menü grupları: temalar başlıkları (.nav-h) gösterebilir ve öğeleri CSS `order` ile yeniden dizebilir.
+const NAV_GROUP = { photos: 'library', favorites: 'library', map: 'library', albums: 'albums', shared: 'albums', archive: 'other', trash: 'other' };
+
 function renderNav() {
-  nav.replaceChildren(...NAV.map(([key, ic, href]) => h('a', {
-    href, class: 'nav-item' + (route.name === key || (key === 'albums' && route.name === 'album' && !route.shared) ? ' active' : ''),
-    'aria-current': route.name === key ? 'page' : null,
-  }, icon(ic), h('span', {}, t(key)))));
+  document.getElementById('navSettings')?.classList.toggle('active', route.name === 'settings');
+  const heading = (g) => h('div', { class: 'nav-h', role: 'presentation', dataset: { group: g } }, t('nav_' + g));
+  const items = [];
+  for (const [key, ic, href] of NAV) {
+    if (key === 'photos') items.push(heading('library'));
+    if (key === 'albums') items.push(heading('albums'));
+    if (key === 'archive') items.push(h('div', { class: 'nav-sep', role: 'presentation' }), heading('other'));
+    items.push(h('a', {
+      href, class: 'nav-item' + (route.name === key || (key === 'albums' && route.name === 'album' && !route.shared) ? ' active' : ''),
+      'aria-current': route.name === key ? 'page' : null, dataset: { nav: key, group: NAV_GROUP[key] },
+    }, icon(ic), h('span', { class: 'nav-label' }, t(key))));
+  }
+  nav.replaceChildren(...items);
+}
+
+/** Üst çubuktaki büyük sayfa başlığı (#pageTitle; yalnızca bazı temalar gösterir). */
+function setPageTitle(text, sub = '') {
+  document.getElementById('pageTitleText').textContent = text;
+  document.getElementById('pageSub').textContent = sub;
 }
 
 function renderUsage() {
   const u = OM.user;
+  const bar = document.getElementById('usageBar');
+  bar.dataset.quota = u.quota_bytes ? '1' : '0';
+  bar.style.setProperty('--used', u.quota_bytes ? String(Math.min(1, u.used_bytes / u.quota_bytes)) : '0');
   document.getElementById('usage').textContent = u.quota_bytes
     ? t('used_quota', { used: formatBytes(u.used_bytes), quota: formatBytes(u.quota_bytes) })
     : t('used', { used: formatBytes(u.used_bytes) });
@@ -123,15 +145,25 @@ function showTimeline(query, empty, header) {
 }
 
 async function render() {
+  const seq = ++renderSeq;
+  const current = () => seq === renderSeq;
   closeViewer();
   timeline?.destroy();
   timeline = null;
   store.clear();
   route = parseRoute();
+  document.getElementById('app').dataset.route = route.name;
+  const TITLES = { favorites: 'favorites', archive: 'archive', trash: 'trash', search: 'search_results', albums: 'albums', shared: 'shared', settings: 'settings', map: 'map', album: 'albums' };
+  setPageTitle(t(TITLES[route.name] || 'photos'));
   renderNav();
   document.getElementById('app').classList.remove('nav-open');
   view.scrollTop = 0;
   const title = (s) => h('div', { class: 'page-head' }, h('h1', {}, s));
+  // Zaman çizelgesi olmayan görünümler: önceki rotadan kalan ortam rengini sıfırla.
+  if (['albums', 'shared', 'settings', 'map'].includes(route.name)) clearAmbient();
+  // Kendi içinde eşzamansız yazan görünümler (albüm listesi, harita) ayrı bir kutuya çizilir:
+  // daha yeni bir rota #view'i değiştirirse kutu DOM'dan kopar ve geç gelen yazımlar görünmez kalır.
+  const box = () => { const b = h('div', { class: 'view-box' }); view.replaceChildren(b); return b; };
   switch (route.name) {
     case 'favorites':
       showTimeline({ favorite: 1 }, t('empty_favorites'), title(t('favorites')));
@@ -154,26 +186,33 @@ async function render() {
       break;
     }
     case 'albums':
-      import('./albums.js').then((m) => m.renderAlbums(view));
+      import('./albums.js').then((m) => { if (current()) m.renderAlbums(box()); });
       break;
     case 'shared':
-      import('./albums.js').then((m) => m.renderAlbums(view, { sharedOnly: true }));
+      import('./albums.js').then((m) => { if (current()) m.renderAlbums(box(), { sharedOnly: true }); });
       break;
     case 'album': {
       const m = await import('./albums.js');
       try {
         const album = (await api('GET', `albums/${route.id}`)).album;
+        if (!current()) return; // bu arada başka bir rotaya geçildi
         route.album = album;
+        setPageTitle(album.title || t('albums'));
         route.shared = album.role !== 'owner';
         renderNav();
         showTimeline({ album: album.id }, t('empty_album'), m.albumHeader(album, { onChanged: render }));
       } catch {
+        if (!current()) return;
+        clearAmbient();
         view.replaceChildren(h('div', { class: 'empty' }, h('p', {}, t('load_failed'))));
       }
       break;
     }
+    case 'settings':
+      import('./settings.js').then((m) => { if (current()) m.renderSettings(view); });
+      break;
     case 'map':
-      import('./map.js').then((m) => m.renderMap(view, (id, points) => {
+      import('./map.js').then((m) => current() && m.renderMap(box(), (id, points) => {
         store.list = points.map((p) => ({ id: p.id, type: 'photo' }));
         store.loadMore = null;
         openViewer(id, {});
@@ -181,6 +220,7 @@ async function render() {
       break;
     default: {
       route.name = 'photos';
+      document.getElementById('app').dataset.route = 'photos';
       renderNav();
       const head = h('div', { class: 'mem-slot' });
       showTimeline({}, t('empty_photos'), head);
@@ -224,7 +264,13 @@ window.addEventListener('drop', (e) => {
   if (e.dataTransfer?.files?.length) enqueue([...e.dataTransfer.files]);
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && store.selection.size && !document.querySelector('.viewer, dialog[open]')) store.clear();
+  // "/" arama kutusuna odaklanır (.search-kbd ipucu)
+  if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.closest?.('input, textarea, select, [contenteditable]') && !document.querySelector('.viewer, .story, dialog[open]')) {
+    e.preventDefault();
+    document.getElementById('searchInput').focus();
+    return;
+  }
+  if (e.key === 'Escape' && store.selection.size && !document.querySelector('.viewer, .story, dialog[open]')) store.clear();
 });
 
 renderUsage();
