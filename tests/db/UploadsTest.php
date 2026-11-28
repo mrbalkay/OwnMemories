@@ -91,3 +91,18 @@ dbtest('test_upload_duplicate_returns_existing', function () {
     assert_true($r['asset'] !== null);
     assert_eq(1, (int) db_val('SELECT COUNT(*) FROM assets'));
 });
+
+dbtest('test_upload_autocomplete_on_last_chunk', function () {
+    $u = user_find(user_create('ali@example.com', 'parola12345', 'Ali'));
+    $data = up_bytes();
+    $id = api_route('POST', '/v1/uploads', $u, ['filename' => 'bg.jpg', 'size' => strlen($data), 'sha1' => sha1($data), 'meta' => ['source_ref' => 'BG-1']])['json']['id'];
+    $half = intdiv(strlen($data), 2);
+    $r1 = api_route('PUT', "/v1/uploads/$id", $u, [], ['offset' => '0', 'complete' => '1'], up_stream(substr($data, 0, $half)))['json'];
+    assert_eq($half, $r1['received']);
+    assert_true(!isset($r1['complete']), 'eksikken tamamlanmaz');
+    $r2 = api_route('PUT', "/v1/uploads/$id", $u, [], ['offset' => (string) $half, 'complete' => '1'], up_stream(substr($data, $half)))['json'];
+    assert_eq(strlen($data), $r2['received']);
+    assert_eq('created', $r2['complete']['status']);
+    assert_eq('BG-1', db_val('SELECT source_ref FROM assets'));
+    assert_eq(0, (int) db_val('SELECT COUNT(*) FROM uploads'));
+});
