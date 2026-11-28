@@ -190,6 +190,29 @@ try {
   } else {
     step('yerler atlandı (API yok)');
   }
+  // Geziler ve etkinlikler: kartlar → gezi sayfası (başlık, rota, süzülmüş zaman çizelgesi); yalnız okur
+  const tripsApi = await page.evaluate(async () => { const r = await fetch('/api/v1/trips'); return r.ok ? r.json() : { trips: null }; });
+  if (Array.isArray(tripsApi.trips)) {
+    await page.goto(base + '/app/#/trips');
+    await page.waitForSelector('.trip-card:not(.is-ghost), .trips-empty');
+    if (tripsApi.trips.length) {
+      const tr = tripsApi.trips[0];
+      await page.screenshot({ path: `${out}desktop-trips.png` });
+      await page.click(`.trip-card[data-id="${tr.id}"]`);
+      await page.waitForSelector('.trip-head .trip-title');
+      await page.waitForSelector('.timeline .tile');
+      const n = await page.evaluate(async (id) => (await (await fetch(`/api/v1/assets?trip=${id}&limit=500`)).json()).assets.length, tr.id);
+      if (n !== tr.count) throw new Error(`gezi öğe sayısı beklenmedik: ${n} / ${tr.count}`);
+      if (!(await page.$('.trip-actions .trip-album-make, .trip-actions .trip-album-open'))) throw new Error('Albüme dönüştür düğmesi yok');
+      await page.click('.trip-back');
+      await page.waitForURL('**/#/trips');
+      step(`geziler: ${tripsApi.trips.length} gezi/etkinlik, "${tr.title}" sayfası (${n} öğe)`);
+    } else {
+      step('geziler: boş durum');
+    }
+  } else {
+    step('geziler atlandı (API yok)');
+  }
   // Arama: öneri yongaları, sonuç ızgarası (akıllı ya da metin modu) ve sonuç listesinde görüntüleyici gezinmesi
   await page.goto(base + '/app/#/search');
   await page.waitForSelector('.search-start .search-chip');

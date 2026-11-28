@@ -10,7 +10,7 @@ struct MapPointsResponse: Decodable {
 /// POST /v1/assets/lookup → kimliklerle öğeler (istenen sırada).
 private struct LookupResponse: Decodable { let assets: [Asset] }
 
-/// Harita sekmesi: Harita | Yerler bölümlü denetimi.
+/// Harita sekmesi: Harita | Yerler | Geziler bölümlü denetimi (Geziler: TripsView.swift).
 /// Harita: fotoğraflar Apple Haritalar üzerinde, Apple Fotoğraflar gibi küçük resimli kümeler. Kümeye dokununca
 /// yakınlaşır; yeterince yakındaysa kümedeki fotoğraflar görüntüleyicide açılır.
 /// Yerler: şehir kartları (ülkelere göre) → o yerin fotoğrafları (PlacesView.swift).
@@ -19,13 +19,14 @@ struct MapScreen: View {
     @Environment(\.theme) private var theme
     @AppStorage("om.map.mode") private var mode: Mode = .map
     @StateObject private var places = PlacesModel()
+    @StateObject private var trips = TripsModel()
     @State private var points: [MapPointsResponse.Point] = []
     @State private var state: LoadState = .loading
     @State private var viewing: ViewerTarget?
     @State private var opening = false
 
     enum LoadState { case loading, ready, empty, failed }
-    enum Mode: String { case map, places }
+    enum Mode: String { case map, places, trips }
     /// Cam başlığın yüksekliği (başlık + bölümlü denetim): Yerler listesi bunun altından başlar.
     private let headerHeight: CGFloat = 118
 
@@ -41,6 +42,8 @@ struct MapScreen: View {
                 theme.canvas.ignoresSafeArea()
                 if mode == .places {
                     PlacesListView(model: places, topInset: headerHeight)
+                } else if mode == .trips {
+                    TripsListView(model: trips, topInset: headerHeight)
                 } else {
                     switch state {
                     case .ready:
@@ -72,6 +75,11 @@ struct MapScreen: View {
                     .environmentObject(session)
                     .environment(\.theme, theme)
             }
+            .navigationDestination(for: TripSummary.self) { t in
+                TripView(trip: t, onChanged: { trips.invalidate() })
+                    .environmentObject(session)
+                    .environment(\.theme, theme)
+            }
             .task { if points.isEmpty { await load() } }
             .fullScreenCover(item: $viewing) { t in
                 AssetViewer(assets: t.assets, startId: t.startId, onChange: { _ in })
@@ -85,7 +93,7 @@ struct MapScreen: View {
     private var header: some View {
         VStack(spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text(mode == .places ? "Yerler" : "Harita")
+                Text(mode == .places ? "Yerler" : mode == .trips ? "Geziler" : "Harita")
                     .font(theme.largeTitle)
                     .foregroundStyle(theme.ink)
                 Spacer()
@@ -99,14 +107,20 @@ struct MapScreen: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(theme.muted)
                         .monospacedDigit()
+                } else if mode == .trips && trips.state == .ready {
+                    Text("\(trips.tripCount) gezi · \(trips.eventCount) etkinlik")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(theme.muted)
+                        .monospacedDigit()
                 }
             }
             Picker("Görünüm", selection: $mode) {
                 Text("Harita").tag(Mode.map)
                 Text("Yerler").tag(Mode.places)
+                Text("Geziler").tag(Mode.trips)
             }
             .pickerStyle(.segmented)
-            .accessibilityLabel("Görünüm: Harita ya da Yerler")
+            .accessibilityLabel("Görünüm: Harita, Yerler ya da Geziler")
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)

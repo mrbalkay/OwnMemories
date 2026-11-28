@@ -445,6 +445,22 @@ Durum: **Yönetim → Sistem → Yer adları** (kaç yer yüklü, kaç fotoğraf
 Kapatmak için `OM_GEO=0 sudo bash server/update.sh` (veri indirilmez; Yerler sayfası boş kalır).
 
 Yer verisi: [GeoNames](https://www.geonames.org), Creative Commons Attribution 4.0 (CC BY 4.0).
+
+### Geziler ve etkinlikler
+
+Yer verisi kurulduktan sonra web'de menüde **Kitaplık → Geziler** (ya da Harita/Yerler sayfasındaki **Geziler** düğmesi),
+iPhone'da **Harita sekmesi → Geziler**: evden uzakta geçen günler kendiliğinden gezi albümü olur ("Bozcaada gezisi,
+12–15 Temmuz 2024", "İtalya: Roma, Floransa ve Venedik"), kısa sürede çok fotoğraf çektiğiniz anlar ve günübirlik
+çıkışlar etkinlik olur. Ek kurulum gerekmez: tablo (migration 009) ilk istekte eklenir, işçi gezileri arka planda
+hesaplar (yükleme/içe aktarmadan ~10 dk sonra ve her gece). Elle tetiklemek için:
+
+```bash
+cd /var/www/ownmemories && sudo -u www-data php -r 'define("OM_CLI",1); require "web/includes/bootstrap.php"; trips_enqueue_all();'
+```
+
+Gezi sayfasında **Albüme dönüştür** normal bir albüm oluşturur (paylaşılabilir), **Yeniden adlandır** verdiğiniz adı
+kalıcı yapar, **Gizle** öneriyi kaldırır (fotoğraflar silinmez; "Gizlenenler"den geri getirilir).
+
 ## H. Temizlik (benzer ve gereksiz fotoğraflar)
 
 Web'de menüdeki **Diğer → Temizlik** (ya da Ayarlar → Temizliği aç), iPhone'da **Ayarlar → Kütüphane → Temizlik**:

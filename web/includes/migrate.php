@@ -8,7 +8,7 @@
 declare(strict_types=1);
 
 /** Bu kodla gelen en yüksek migrasyon numarası. Yeni migrations/NNN_*.sql ile birlikte artırılır. */
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 /** SQL dosyasını ifadelere böler (satır sonundaki ";" ile biten; "--" yorumları atılır). */
 function sql_statements(string $sql): array

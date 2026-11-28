@@ -37,7 +37,41 @@ function memoryYears(m) {
 const kindAttr = (m) => ({ kind: m.kind, years: m.years_ago ?? '' });
 
 /** Üst satır ve başlık: gezilerde "3 yıl önce" + "Bozcaada'da bir hafta"; diğerlerinde anı adı + ay. */
-const memEyebrow = (m) => (m.kind === 'trip' ? t('trip_years_ago', { n: m.years_ago }) : m.title);
+const memEyebrow = (m) => (m.kind === 'trip' ? t(m.trip_id ? 'trip_years_ago_week' : 'trip_years_ago', { n: m.years_ago }) : m.title);
+
+/**
+ * Geziler: saklı geziden gelen anıda "Albüme dönüştür" (albüm varsa "Albümü aç"). Dönüştürünce düğme albüme bağlanır.
+ * cls: tema kancası (.mem-hero-album | .story-album). compact: yalnız simge (gösterinin üst çubuğu).
+ */
+function tripAlbumButton(m, cls, compact = false) {
+  if (!m.trip_id) return null;
+  const label = () => t(m.album_id ? 'trip_open_album' : 'trip_to_album');
+  const btn = h('button', { class: (compact ? 'icon-btn ' : 'btn btn-soft ') + cls, type: 'button', 'aria-label': label(), title: label() },
+    icon('album'), compact ? null : h('span', {}, label()));
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (m.album_id) {
+      const story = document.querySelector('.story');
+      if (story) story.dispatchEvent(new CustomEvent('om:story-close', { detail: { href: `#/album/${m.album_id}` } }));
+      else location.hash = `#/album/${m.album_id}`;
+      return;
+    }
+    btn.disabled = true;
+    const { convertToAlbum } = await import('./trips.js');
+    const album = await convertToAlbum({ id: m.trip_id }, { open: false });
+    btn.disabled = false;
+    if (!album) return;
+    m.album_id = album.id;
+    for (const b of document.querySelectorAll(`[data-trip-album="${m.trip_id}"]`)) {
+      b.setAttribute('aria-label', label());
+      b.title = label();
+      const span = b.querySelector('span:not(.ic)');
+      if (span) span.textContent = label();
+    }
+  });
+  btn.dataset.tripAlbum = m.trip_id;
+  return btn;
+}
 const memHeading = (m) => (m.kind === 'trip' ? m.title : (m.kind === 'favorites' ? memoryYears(m) : memoryMonth(m)));
 
 /** Günün anısı için büyük afiş (.mem-hero). Varsayılan CSS'te gizli; temalar açar. */
@@ -56,7 +90,8 @@ function memoryHero(m, viewerCtx) {
         h('span', { class: 'mem-hero-date' }, memoryRange(m)), ' · ',
         h('span', { class: 'mem-hero-count' }, t('items', { n: m.count }))),
       h('div', { class: 'mem-hero-actions' },
-        h('button', { class: 'btn mem-hero-play', type: 'button', onclick: play }, icon('play'), h('span', {}, t('play_memory'))))));
+        h('button', { class: 'btn mem-hero-play', type: 'button', onclick: play }, icon('play'), h('span', {}, t('play_memory'))),
+        tripAlbumButton(m, 'mem-hero-album'))));
 }
 
 /**
@@ -74,7 +109,7 @@ export async function memoriesStrip(viewerCtx = () => ({})) {
   const row = h('div', { class: 'mem-row' }, ...data.memories.map((m, idx) => h('button', {
     class: 'mem-card' + (idx === 0 ? ' is-first' : ''), dataset: { ...kindAttr(m), index: idx },
     onclick: () => openStory(m, viewerCtx),
-    'aria-label': `${m.title}, ${t('items', { n: m.count })}`,
+    'aria-label': `${m.label || m.title}, ${t('items', { n: m.count })}`,
   },
     h('img', { src: previewUrl(m.cover_asset_id), alt: '', loading: 'lazy' }),
     m.kind === 'favorites' && m.assets.length >= 3
@@ -172,15 +207,17 @@ export function openStory(memory, viewerCtx = () => ({})) {
     bg,
     h('div', { class: 'story-top' },
       h('div', { class: 'story-bars' }, ...bars),
-      h('div', { class: 'story-title' }, h('strong', { class: 'story-name' }, memory.title), h('span', { class: 'story-heading' }, heading), caption),
+      h('div', { class: 'story-title' }, h('strong', { class: 'story-name' }, memory.label || memory.title), h('span', { class: 'story-heading' }, heading), caption),
       h('div', { class: 'story-actions' },
         h('button', { class: 'icon-btn', 'aria-label': t('open_photo'), title: t('open_photo'), onclick: () => openCurrent() }, icon('photos')),
+        tripAlbumButton(memory, 'story-album', true),
         h('button', { class: 'icon-btn', 'aria-label': t('close'), title: t('close'), onclick: () => close() }, icon('close')))),
     h('aside', { class: 'story-side' },
       h('span', { class: 'story-kicker' }, t('memories')),
       h('h2', { class: 'story-side-title' }, memory.title),
       h('div', { class: 'story-fact', dataset: { fact: 'when' } }, h('b', {}, t('when')), h('span', {}, memoryRange(memory))),
-      h('div', { class: 'story-fact', dataset: { fact: 'count' } }, h('b', {}, t('in_this_memory')), h('span', {}, t('items', { n: memory.count })))),
+      h('div', { class: 'story-fact', dataset: { fact: 'count' } }, h('b', {}, t('in_this_memory')), h('span', {}, t('items', { n: memory.count }))),
+      tripAlbumButton(memory, 'story-side-album')),
     media,
     h('button', { class: 'story-tap prev', 'aria-label': t('prev'), onclick: () => go(i - 1) }),
     h('button', { class: 'story-tap next', 'aria-label': t('next'), onclick: () => go(i + 1) }),
@@ -192,6 +229,12 @@ export function openStory(memory, viewerCtx = () => ({})) {
         h('button', { class: 'icon-btn story-prev', type: 'button', 'aria-label': t('prev'), onclick: () => go(i - 1) }, icon('left')),
         pauseBtn,
         h('button', { class: 'icon-btn story-next', type: 'button', 'aria-label': t('next'), onclick: () => go(i + 1) }, icon('right')))));
+  // Gösteriden başka sayfaya geçiş (ör. "Albümü aç"): geçmiş girdisi geri alınmadan kapatılır.
+  el.addEventListener('om:story-close', (e) => {
+    close(true);
+    if (history.state?.story) history.replaceState(null, '', location.hash);
+    if (e.detail?.href) location.hash = e.detail.href;
+  });
   document.body.append(el);
   document.body.classList.add('no-scroll');
   el.focus();
