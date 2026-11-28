@@ -525,6 +525,9 @@ function job_geocode_backfill(array $p): string
         $ids = places_pending_ids($after, GEO_BACKFILL_BATCH);
         if (!$ids) {
             site_setting_set('geo_backfill_done_at', (string) time());
+            if (function_exists('trips_enqueue_all')) {
+                trips_enqueue_all(30); // yerler bulundu: geziler yeniden hesaplanır
+            }
             return 'done';
         }
         foreach ($ids as $id) {

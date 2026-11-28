@@ -132,6 +132,12 @@ function api_dispatch(string $method, string $path, ?array $user, array $body, a
         ['POST', '#^/v1/cleanup/dismiss$#', fn() => api_cleanup_dismiss(api_need_user($user), $body)],
         ['POST', '#^/v1/cleanup/reset$#', fn() => api_cleanup_reset(api_need_user($user))],
         ['POST', '#^/v1/devices/report$#', fn() => api_ok(device_report((int) api_need_user($user)['id'], $body))],
+        // Geziler ve etkinlikler (trips.php)
+        ['GET', '#^/v1/trips$#', fn() => api_trips_list(api_need_user($user), $query)],
+        ['GET', '#^/v1/trips/(\d+)$#', fn($m) => api_trip_get(api_need_user($user), $m[1])],
+        ['PATCH', '#^/v1/trips/(\d+)$#', fn($m) => api_trip_patch(api_need_user($user), $m[1], $body)],
+        ['DELETE', '#^/v1/trips/(\d+)$#', fn($m) => api_trip_dismiss(api_need_user($user), $m[1])],
+        ['POST', '#^/v1/trips/(\d+)/album$#', fn($m) => api_trip_album(api_need_user($user), $m[1])],
     ];
     $methodMismatch = false;
     foreach ($routes as [$verb, $re, $fn]) {
@@ -230,6 +236,15 @@ function api_asset_filters(array $user, array $q): array
         }
         $where[] = 'EXISTS (SELECT 1 FROM asset_places pl WHERE pl.asset_id = a.id AND pl.city_id = ?)';
         $args[] = (int) $placeId;
+    }
+    // Geziler ve etkinlikler: ?trip={id} yalnız kullanıcının kendi gezisi
+    $tripId = is_string($q['trip'] ?? null) ? $q['trip'] : (isset($q['trip']) ? 'x' : '');
+    if ($tripId !== '') {
+        if (!ctype_digit($tripId) || db_val('SELECT 1 FROM trips WHERE id = ? AND user_id = ?', [(int) $tripId, $uid]) === null) {
+            api_not_found();
+        }
+        $where[] = 'a.id IN (SELECT asset_id FROM trip_assets WHERE trip_id = ?)';
+        $args[] = (int) $tripId;
     }
     if (api_bool($q['favorite'] ?? null)) {
         $where[] = 'a.is_favorite = 1';
@@ -415,6 +430,9 @@ function api_assets_bulk(array $user, string $action, array $b): array
         'restore' => asset_restore($uid, $ids),
         'purge' => asset_purge($uid, $ids),
     };
+    if ($n > 0 && function_exists('trips_schedule')) {
+        trips_schedule($uid, 120);
+    }
     return api_ok(['count' => $n]);
 }
 
@@ -516,6 +534,9 @@ function api_asset_patch(array $user, string $id, array $b): array
             } else {
                 places_enqueue_asset($id);
             }
+        }
+        if (function_exists('trips_schedule') && array_intersect(array_keys($b), ['latitude', 'longitude', 'taken_at', 'is_archived', 'is_favorite'])) {
+            trips_schedule($uid, 300);
         }
     }
     return api_asset_get($user, $id);

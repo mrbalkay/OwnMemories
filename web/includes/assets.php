@@ -122,6 +122,9 @@ function asset_ingest(int $userId, string $srcPath, array $in): array
     if ($lat !== null && $lng !== null && function_exists('places_enqueue_asset')) {
         places_enqueue_asset($id);
     }
+    if (function_exists('trips_schedule')) {
+        trips_schedule($userId); // gecikmeli: toplu yükleme/içe aktarma bitince bir kez
+    }
     return ['status' => 'created', 'asset_id' => $id];
 }
 
@@ -182,6 +185,9 @@ function asset_purge(int $userId, array $ids): int
         asset_embedding_delete($id);
         asset_place_delete($id);
         cleanup_purge_asset($id);
+        if (function_exists('trips_purge_asset')) {
+            trips_purge_asset($id); // Geziler ve etkinlikler
+        }
         db_exec('UPDATE assets SET live_pair_id = NULL WHERE live_pair_id = ?', [$id]);
         db_exec('UPDATE assets SET edited_of_id = NULL WHERE edited_of_id = ?', [$id]);
         db_exec('UPDATE albums SET cover_asset_id = NULL WHERE cover_asset_id = ?', [$id]);

@@ -266,6 +266,10 @@ struct MemoryStoryView: View {
     let memory: Memory
     @Environment(\.dismiss) private var dismiss
     @Environment(\.theme) private var theme
+    @EnvironmentObject private var session: Session
+    /// Geziler: anıdaki gezi albüme dönüştürüldüyse albüm kimliği (sunucudan ya da bu oturumda).
+    @State private var tripAlbumId: String?
+    @State private var tripBusy = false
     @State private var index = 0
     @State private var progress: Double = 0
     @State private var paused = false
@@ -436,6 +440,7 @@ struct MemoryStoryView: View {
                     .allowsHitTesting(false)
                 HStack(spacing: 10) {
                     Spacer()
+                    tripAlbumGlass
                     glassButton("photo", label: "Fotoğrafı aç") { openViewer() }
                 }
                 .padding(.top, 22)
@@ -460,6 +465,14 @@ struct MemoryStoryView: View {
                     Button { openViewer() } label: {
                         Label("Fotoğrafı aç", systemImage: "photo").font(.system(size: 13))
                     }
+                    if memory.tripId != nil {
+                        Button { Task { await convertTrip() } } label: {
+                            Label(albumMade ? "Albüm oluşturuldu" : "Albüme dönüştür", systemImage: albumMade ? "checkmark" : "rectangle.stack.badge.plus")
+                                .font(.system(size: 13))
+                        }
+                        .disabled(albumMade || tripBusy)
+                        .padding(.leading, 14)
+                    }
                     Spacer()
                     Text(verbatim: "\(index + 1) / \(memory.assets.count)")
                         .font(.system(size: 13, design: .serif))
@@ -478,6 +491,7 @@ struct MemoryStoryView: View {
                 }
                 .allowsHitTesting(false)
                 Spacer(minLength: 8)
+                tripAlbumGlass
                 glassButton("photo", label: "Fotoğrafı aç") { openViewer() }
             }
             .foregroundStyle(.white)
@@ -509,6 +523,30 @@ struct MemoryStoryView: View {
     private func openViewer() {
         showViewer = true
         paused = true
+    }
+
+    // MARK: Geziler — "Albüme dönüştür"
+
+    private var albumMade: Bool { (tripAlbumId ?? memory.albumId) != nil }
+
+    @ViewBuilder
+    private var tripAlbumGlass: some View {
+        if memory.tripId != nil {
+            glassButton(albumMade ? "checkmark" : "rectangle.stack.badge.plus", label: albumMade ? "Albüm oluşturuldu" : "Albüme dönüştür") {
+                Task { await convertTrip() }
+            }
+            .disabled(albumMade || tripBusy)
+        }
+    }
+
+    private func convertTrip() async {
+        guard let id = memory.tripId, !albumMade, let client = session.client else { return }
+        tripBusy = true
+        paused = true
+        defer { tripBusy = false }
+        if let r = try? await client.send("POST", "trips/\(id)/album", body: EmptyBody(), as: TripAlbumResponse.self) {
+            tripAlbumId = r.album.id
+        }
     }
 
     private func fill(_ i: Int) -> Double { i < index ? 1 : (i == index ? progress : 0) }

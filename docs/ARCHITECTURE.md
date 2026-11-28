@@ -77,6 +77,8 @@ tests/                php tests/run.php
 - `asset_embeddings` — asset_id PK, user_id, model (ör. `ViT-B-16-SigLIP2__webli`), vec (MEDIUMBLOB, float32 little-endian, L2-normalize, 768 boyut = 3072 bayt), created_at. ownmemories-ml yazar; asset kalıcı silinince PHP siler (§7)
 - `asset_quality` (009) — asset_id PK, user_id, phash (BIGINT UNSIGNED, 64 bit DCT algısal özet), sharpness (Laplace varyansı), brightness (0..255), color (VARBINARY(48), 4×4 ortalama RGB), is_screenshot, algo, computed_at. ownmemories-ml yazar; asset kalıcı silinince PHP siler (§8)
 - `cleanup_dismissed` (009) — (user_id, kind, item_key) PK, asset_ids, created_at: Temizlik'te "Bunlar farklı" / "Bu iyi" ile gizlenen öneriler (§8)
+- `trips` (009_trips) — id, user_id, kind (`trip`\|`event`), label (`day_trip`, `birthday`, `wedding`, `concert`, `beach`, `snow` ya da NULL), label_checked, title, title_auto (0: kullanıcı adlandırdı, korunur), start_at/end_at (UTC), start_day/end_day (yerel), days, place_summary (JSON `{places:[{name,country,country_code,city_id,count,lat,lng}], countries:[{cc,name,count}], home_cc}`), cover_asset_id, cover_auto, asset_count/photo_count/video_count, distance_km (evden en uzak), dismissed, album_id ("Albüme dönüştür" ile oluşan albüm), fingerprint (tür + sıralı öğe kimliklerinin SHA-1'i), created_at, updated_at (§9)
+- `trip_assets` — (trip_id, asset_id) PK (§9)
 
 ### Yineleme kuralları
 1. Aynı kullanıcıda aynı SHA-1 → yinelenen.
@@ -152,9 +154,14 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | DELETE | `albums/{id}/members/{userId}` | – | `{ok}` (sahip çıkarır veya üye ayrılır) |
 | GET | `users/lookup?email=` | – | `{exists,name}` |
 | GET | `assets/random?count=12` | – | `{assets:[…]}` — son 30 gün dışındaki rastgele fotoğraflar (widget) |
-| GET | `memories?date=YYYY-MM-DD` | (varsayılan: kullanıcının bugünü) | `{date, memories:[{id,kind,title,place,years_ago,date,count,cover_asset_id,asset_ids,assets}]}` — `kind`: `on_this_day` / `this_week` (bugün yoksa ±3 gün) / `trip` (yıldönümü bugünün ±3 gününe düşen gezi; aynı yılın günlük anısının yerini alır, `end_date`, `days`) / `favorites`. Başlıklar yer adlarıyla Türkçe ekli kurulur (§8) |
+| GET | `memories?date=YYYY-MM-DD` | (varsayılan: kullanıcının bugünü) | `{date, memories:[{id,kind,title,place,years_ago,date,count,cover_asset_id,asset_ids,assets}]}` — `kind`: `on_this_day` / `this_week` (bugün yoksa ±3 gün) / `trip` (yıldönümü bugünün ±3 gününe düşen gezi; aynı yılın günlük anısının yerini alır, `end_date`, `days`) / `favorites`. Başlıklar yer adlarıyla Türkçe ekli kurulur (§8). Geziler hesaplandıysa (§9) `trip` anıları saklı gezilerden gelir: `title` "Bozcaada gezisi" (ya da kullanıcının verdiği ad), ek alanlar `trip_id`, `album_id`, `label` ("1 yıl önce bu hafta: Bozcaada gezisi"); gizlenen gezi anı olmaz |
 | GET | `places` | `favorite=1`, `type` | `{places:[{id,name,admin1,country,country_code,region,count,cover_asset_id,lat,lng}], ready, pending}` — şehir düzeyinde yerler (zaman çizelgesi görünürlük kuralları), sayıya göre azalan; kapak: fotoğraf > favori > en yeni. `ready`: yer verisi kurulu mu; `pending`: yeri bekleyen konumlu öğe |
 | GET | `places/{id}` | – | `{place:{…, first_at, last_at}}`; kullanıcının o yerde öğesi yoksa 404 |
+| GET | `trips` | `kind=trip\|event`, `dismissed=1` (yalnız gizlenenler) | `{trips:[Trip], hidden, status:{computed_at, pending, places_ready, places_pending}}` — en yeni önce. Hiç hesaplanmamışsa istek içinde hesaplanır (ML etiketi sonra işle). Trip: `{id,kind,label,label_text,title,short_title,title_auto,start_at,end_at,start_day,end_day,days,range_text,places,countries,cover_asset_id,count,photo_count,video_count,distance_km,dismissed,album_id,updated_at}` (§9) |
+| GET | `trips/{id}` | – | `{trip:{…, route:[{lat,lng}]}}` (rota: çekim sırasıyla en çok 240 nokta); başkasının gezisi 404 |
+| PATCH | `trips/{id}` | `{title?, dismissed?, cover_asset_id?}` | `{trip}` — ad ≤ 120 karakter; boş/null ad otomatik ada döner; kapak gezide olmalı |
+| DELETE | `trips/{id}` | – | `{ok}` — gizler (öğeler silinmez, yeniden önerilmez; `PATCH {dismissed:false}` geri getirir) |
+| POST | `trips/{id}/album` | – | 201 `{album, trip}` — gezinin öğeleriyle normal albüm (ad = gezi adı, kapak = gezi kapağı, açıklama = tarih · yerler); albüm zaten varsa 200 aynı albüm |
 | POST | `devices/report` | `{device_id,name,model,os_version,app_version,pending,uploaded_total,last_backup_at,last_error}` | `{ok,server_time}` — iOS yedekleme durumu (Yönetim → Genel bakış) |
 | GET | `search` | `q` (≤ 200 karakter), `from`, `to` (ISO), `favorite=1`, `sort=relevance\|date` (varsayılan relevance), `limit≤200 (60)`, `offset` | `{mode:"smart"\|"text", assets:[…], next_offset:int\|null, total, status:{indexed,total,pending,model,ready}\|null}` — akıllı mod: ML hizmetinden (config `ml.url`, varsayılan `http://127.0.0.1:8765`, zaman aşımı `ml.timeout` 3 sn, isteğe bağlı `ml.min_score`) en fazla 500 sıralı kimlik alınır; zaman çizelgesi görünürlük kurallarıyla (yalnız kendi kütüphanesi, çöp/arşiv hariç, tek kare kuralı) süzülür, sıra korunur. Dosya adı/açıklama/kamera/kişi eşleşmeleri öne alınır (hibrit). Sorguda adlandırılmış (gizli olmayan) bir kişinin adı tam sözcük olarak geçerse (`Ali plajda`; büyük/küçük harf ve i/ı duyarsız, en uzun ad) o kişinin fotoğrafları en başa gelir, kendi aralarında kalan sözcüklerle (`plajda`) akıllı sırada; diğer sonuçlar ardından korunur (ör. `Deniz` adlı kişi varken `deniz kenarı` aramasında manzaralar kaybolmaz). Hizmet yok, hata ya da sonuç yoksa `assets?q=` ile aynı metin araması (`mode:"text"`, tarihe göre); hizmet yanıt verip ilgi eşiğini geçen olmadığında metin araması da boşsa `mode:"smart"`, boş liste. Boş `q` → boş liste. `status` yalnız ilk sayfada (offset=0) |
 | GET | `search/status` | – | ML `/status` vekili: `{available:true,indexed,total,pending,model,ready}` ya da `{available:false}` |
@@ -475,4 +482,32 @@ iskele ×2, masa ×2 — ayrı kaldı; LFW'de aynı kişinin farklı fotoğrafla
 çiftlerinin %92'si doğru grupta (kaçanlar: %10 kırpılıp renkleri değiştirilmiş düzenleme, 3.5× aşırı pozlanmış ya
 da %7'ye karartılmış kopya — ikisi "karanlık/parlak" listesine düşer). Bulanık kopyalar (σ ≥ 2 Gauss) netliği
 1–25, net fotoğraflar ≥ 80.
+
+## 9. Geziler ve etkinlikler (otomatik albümler)
+
+`web/includes/trips.php`; arayüz `web/assets/app/trips.js` + `trips.css` (#/trips, #/trip/{id}), iOS `Views/TripsView.swift`
+(Harita sekmesinde Harita | Yerler | Geziler).
+
+- **Ev (dönemlik, taşınmalar)**: her ay için ±6 aylık pencerede şehir puanı = Σ min(o aydaki farklı gün, 4) (uzun bir gezi
+  evi geçemez); en az 2 ay ve 3 puan. Boş aylar önceki evi alır. Ev noktası: o şehirdeki çekimlerin ortancası (İstanbul gibi
+  geniş şehirlerde merkez değil, kullanıcının semti).
+- **Gezi**: kareleri evden ≥ 50 km olan günler (günün konumlu karelerinin en az yarısı) ardışık birleşir; 1 boş gün
+  geziyi bölmez, evde geçen bir gün böler. En az 4 öğe ve (≥ 2 gün ya da ≥ 150 km uzak). Üyeler: uzak kareler + aradaki
+  konumsuz kareler (evdeki kareler değil).
+- **Etkinlik**: (a) 50–150 km'lik tek günlük çıkış, ≥ 5 öğe (`label=day_trip`: "Şile, 3 Ağustos 2024"); (b) gezi dışı,
+  dosya tarihi olmayan (EXIF/Takeout) ve ekran görüntüsü olmayan karelerde ≤ 2 saat aralıklı, ≤ 16 saatlik patlama:
+  ≥ max(12, 3 × günlük ortanca) öğe (karelerin %40'ında yüz varsa ≥ max(8, 2 × ortanca)); aynı anda damgalanmış
+  toplu kopyalar sayılmaz. ML çalışıyorsa "doğum günü", "düğün", "konser", "plaj", "kar" sorgularıyla etiket: en iyi
+  ortalama puan ötekilerden ≥ %15 yüksek ve karelerin yarısı sonuçlardaysa ("Doğum günü, 14 Şubat 2025").
+- **Başlık**: tek yer "Bozcaada gezisi, 12–15 Temmuz 2024"; 2–3 günlük hafta sonu "Kapadokya'da hafta sonu, 8–9 Mart 2025";
+  yurt dışı 2–3 şehir "İtalya: Roma, Floransa ve Venedik"; yurt dışı ≥ 4 şehir ya da ≥ 14 gün "Tayland, Kasım 2025";
+  birden çok ülke "Fransa ve İtalya, Mayıs 2024"; yurt içi çok şehir "İzmir, Çeşme ve Bodrum gezisi, …". Bölge
+  (Kapadokya) şehirden önce gelir; tek ülkeli gezide başlıkta yalnız o ülkenin yerleri (Vatikan uğrağı İtalya'yı bozmaz).
+- **Kapak**: favori +4, yüz (en çok 3) ×0,8, netlik (asset_quality) ≤ +2, video −3, ekran görüntüsü −6, 64 px altı −8.
+- **Kararlı kimlik**: yeni adaylar saklı gezilerle ortak öğe sayısına göre (≥ %30) açgözlü eşleşir. Parmak izi aynıysa
+  yazılmaz. Eşleşmeyen eski gezi: kullanıcı dokunmadıysa silinir; adlandırıldı/kapak seçildi/gizlendi/albüme dönüştü ise
+  görünür öğeleriyle kalır (hiç öğesi kalmazsa silinir). Kullanıcı adı, kapak, gizleme ve albüm bağı korunur.
+- **İş**: `trips` (payload `user_id`), kütüphane parmak izi değişmediyse hemen biter. Kuyruğa girer: öğe eklenince
+  (10 dk gecikmeli, kullanıcı başına tek iş), çöp/geri al (2 dk), konum/tarih/favori değişikliği (5 dk), yer bulma
+  bitince (herkes), gece bakımı (herkes). `GET /v1/trips` ilk kez çağrılırsa istek içinde hesaplar.
 

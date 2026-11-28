@@ -22,13 +22,14 @@ const NAV = [
   ['shared', 'people', '#/shared'],
   ['map', 'map', '#/map'],
   ['places', 'pin', '#/places'],
+  ['trips', 'suitcase', '#/trips'],
   ['archive', 'archive', '#/archive'],
   ['cleanup', 'broom', '#/cleanup'],
   ['trash', 'trash', '#/trash'],
 ];
 
 // Menü grupları: temalar başlıkları (.nav-h) gösterebilir ve öğeleri CSS `order` ile yeniden dizebilir.
-const NAV_GROUP = { photos: 'library', favorites: 'library', people: 'library', map: 'library', places: 'library', albums: 'albums', shared: 'albums', archive: 'other', trash: 'other', cleanup: 'other' };
+const NAV_GROUP = { photos: 'library', favorites: 'library', people: 'library', map: 'library', places: 'library', trips: 'library', albums: 'albums', shared: 'albums', archive: 'other', trash: 'other', cleanup: 'other' };
 
 function renderNav() {
   document.getElementById('navSettings')?.classList.toggle('active', route.name === 'settings');
@@ -39,7 +40,7 @@ function renderNav() {
     if (key === 'albums') items.push(heading('albums'));
     if (key === 'archive') items.push(h('div', { class: 'nav-sep', role: 'presentation' }), heading('other'));
     items.push(h('a', {
-      href, class: 'nav-item' + (route.name === key || (key === 'albums' && route.name === 'album' && !route.shared) || (key === 'people' && route.name === 'person') || (key === 'places' && route.name === 'place') ? ' active' : ''),
+      href, class: 'nav-item' + (route.name === key || (key === 'albums' && route.name === 'album' && !route.shared) || (key === 'people' && route.name === 'person') || (key === 'places' && route.name === 'place') || (key === 'trips' && route.name === 'trip') ? ' active' : ''),
       'aria-current': route.name === key ? 'page' : null, dataset: { nav: key, group: NAV_GROUP[key] },
     }, icon(ic), h('span', { class: 'nav-label' }, t(key))));
   }
@@ -87,6 +88,7 @@ function parseRoute() {
   if (parts[0] === 'album' && parts[1]) return { name: 'album', id: parts[1] };
   if (parts[0] === 'person' && /^\d+$/.test(parts[1] || '')) return { name: 'person', id: Number(parts[1]) };
   if (parts[0] === 'place' && /^\d+$/.test(parts[1] || '')) return { name: 'place', id: Number(parts[1]) };
+  if (parts[0] === 'trip' && /^\d+$/.test(parts[1] || '')) return { name: 'trip', id: Number(parts[1]) };
   return { name: parts[0] || 'photos', params };
 }
 
@@ -198,14 +200,14 @@ async function render() {
   store.clear();
   route = parseRoute();
   document.getElementById('app').dataset.route = route.name;
-  const TITLES = { people: 'people', person: 'people', favorites: 'favorites', archive: 'archive', trash: 'trash', search: 'search_results', albums: 'albums', shared: 'shared', settings: 'settings', map: 'map', album: 'albums', places: 'places', place: 'places', cleanup: 'cleanup' };
+  const TITLES = { people: 'people', person: 'people', favorites: 'favorites', archive: 'archive', trash: 'trash', search: 'search_results', albums: 'albums', shared: 'shared', settings: 'settings', map: 'map', album: 'albums', places: 'places', place: 'places', cleanup: 'cleanup', trips: 'trips', trip: 'trips' };
   setPageTitle(t(TITLES[route.name] || 'photos'));
   renderNav();
   document.getElementById('app').classList.remove('nav-open');
   view.scrollTop = 0;
   const title = (s) => h('div', { class: 'page-head' }, h('h1', {}, s));
   // Zaman çizelgesi olmayan görünümler: önceki rotadan kalan ortam rengini sıfırla.
-  if (['albums', 'shared', 'settings', 'map', 'people', 'person', 'places', 'cleanup'].includes(route.name)) clearAmbient();
+  if (['albums', 'shared', 'settings', 'map', 'people', 'person', 'places', 'cleanup', 'trips'].includes(route.name)) clearAmbient();
   // Kendi içinde eşzamansız yazan görünümler (albüm listesi, harita) ayrı bir kutuya çizilir:
   // daha yeni bir rota #view'i değiştirirse kutu DOM'dan kopar ve geç gelen yazımlar görünmez kalır.
   const box = () => { const b = h('div', { class: 'view-box' }); view.replaceChildren(b); return b; };
@@ -284,6 +286,26 @@ async function render() {
         if (!current()) return;
         clearAmbient();
         view.replaceChildren(h('div', { class: 'empty' }, h('p', {}, t('place_not_found')), h('a', { class: 'btn', href: '#/places' }, t('places'))));
+      }
+      break;
+    }
+    case 'trips':
+      import('./trips.js').then((m) => {
+        if (current()) m.renderTrips(box(), { showHidden: route.params?.hidden === '1', setSub: (s) => { if (current()) document.getElementById('pageSub').textContent = s; } });
+      });
+      break;
+    case 'trip': {
+      const m = await import('./trips.js');
+      try {
+        const trip = (await api('GET', `trips/${route.id}`)).trip;
+        if (!current()) return;
+        route.trip = trip;
+        setPageTitle(trip.title_auto ? (trip.short_title || trip.title) : trip.title, trip.range_text);
+        showTimeline({ trip: trip.id }, t('empty_photos'), m.tripHeader(trip, { onChanged: render }));
+      } catch {
+        if (!current()) return;
+        clearAmbient();
+        view.replaceChildren(h('div', { class: 'empty' }, h('p', {}, t('trip_not_found')), h('a', { class: 'btn', href: '#/trips' }, t('trips'))));
       }
       break;
     }

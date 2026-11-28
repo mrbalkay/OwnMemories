@@ -19,8 +19,8 @@ async function loadPlaces() {
 export function viewSwitch(active) {
   const item = (key, href, ic) => h('a', {
     class: 'seg-item' + (active === key ? ' on' : ''), href, 'aria-current': active === key ? 'page' : null,
-  }, icon(ic), h('span', {}, t(key === 'map' ? 'map_view' : 'places_view')));
-  return h('nav', { class: 'view-seg', 'aria-label': t('view_switch') }, item('map', '#/map', 'map'), item('places', '#/places', 'pin'));
+  }, icon(ic), h('span', {}, t(key === 'map' ? 'map_view' : key === 'trips' ? 'trips_view' : 'places_view')));
+  return h('nav', { class: 'view-seg', 'aria-label': t('view_switch') }, item('map', '#/map', 'map'), item('places', '#/places', 'pin'), item('trips', '#/trips', 'suitcase'));
 }
 
 /** Ülkelere göre grupla: en çok öğeli ülke önce, ülke içinde yerler öğe sayısına göre. */

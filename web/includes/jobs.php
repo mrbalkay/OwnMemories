@@ -83,6 +83,9 @@ function job_handlers(): array
     if (function_exists('import_job_step')) {
         $h['import_step'] = 'import_job_step';
     }
+    if (function_exists('job_trips')) {
+        $h['trips'] = 'job_trips';
+    }
     return array_merge($h, $GLOBALS['__om_job_handlers_extra'] ?? []);
 }
 
@@ -210,6 +213,9 @@ function maintenance_daily(): void
     }
     db_exec("DELETE FROM jobs WHERE status IN ('done','skipped') AND updated_at < ?", [gmdate('Y-m-d H:i:s', time() - 7 * 86400)]);
     db_exec('DELETE FROM rate_limits WHERE window_start < ?', [time() - 86400]);
+    if (function_exists('trips_enqueue_all')) {
+        trips_enqueue_all(); // geziler: gece yeniden hesaplama (değişmeyen kütüphane hemen atlanır)
+    }
     app_log('cron', "günlük bakım: $n asset çöpten silindi");
 }
 
