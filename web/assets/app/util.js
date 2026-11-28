@@ -57,6 +57,12 @@ export const icons = {
   merge: '<svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19a5 5 0 0 1 9-3 5 5 0 0 1 9 3"/></svg>',
   faceScan: '<svg viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="10.5" r="2.5"/><path d="M8 16.5a4.5 4.5 0 0 1 8 0"/></svg>',
   map: '<svg viewBox="0 0 24 24"><path d="M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11Z"/><circle cx="12" cy="10" r="2.2"/></svg>',
+  broom: '<svg viewBox="0 0 24 24"><path d="M14.5 3.5 11 10M7.6 10.2l6.2 3.1-1.6 6.7a1 1 0 0 1-1.2.7C7.6 19.9 5.3 18.7 4 16.6l3.6-6.4ZM6.2 16.9l2-2.3M9.4 19.2l1.1-2.6"/><path d="M17.5 14.5h3M19 13v3M16.5 4.5h2M17.5 3.5v2"/></svg>',
+  layers: '<svg viewBox="0 0 24 24"><rect x="7.5" y="3.5" width="13" height="13" rx="2.5"/><path d="M16.5 20.5H6a2.5 2.5 0 0 1-2.5-2.5V7.5"/></svg>',
+  blur: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" stroke-dasharray="2.4 2.6"/><circle cx="12" cy="12" r="4.2"/></svg>',
+  sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></svg>',
+  phone: '<svg viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 5.5h3M9.5 9.5h5M9.5 12.5h5M9.5 15.5h3"/></svg>',
+  video: '<svg viewBox="0 0 24 24"><rect x="3.5" y="6" width="12.5" height="12" rx="2.5"/><path d="m16 10.5 4.5-2.5v8L16 13.5"/></svg>',
 };
 
 export function icon(name) {

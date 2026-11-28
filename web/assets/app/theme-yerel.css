@@ -121,7 +121,8 @@
 :root[data-skin="yerel"] #nav > .nav-sep { order: 8; }
 :root[data-skin="yerel"] #nav > .nav-h[data-group="other"] { order: 9; }
 :root[data-skin="yerel"] #nav > [data-nav="archive"] { order: 10; }
-:root[data-skin="yerel"] #nav > [data-nav="trash"] { order: 11; }
+:root[data-skin="yerel"] #nav > [data-nav="cleanup"] { order: 11; }
+:root[data-skin="yerel"] #nav > [data-nav="trash"] { order: 12; }
 :root[data-skin="yerel"] .nav-item {
   gap: 10px; padding: 6px 10px; border-radius: 8px;
   color: var(--ink); font-size: 14px; font-weight: 500; transition: background .15s;
@@ -792,3 +793,35 @@
 }
 :root[data-skin="yerel"] .people-head { padding: 0; min-height: 0; }
 :root[data-skin="yerel"] .people-head .people-hidden-toggle { margin-top: -4px; }
+
+/* ------------------------------------------------------------ Temizlik (cleanup.js)
+   iOS Fotoğraflar düzeni: gruplanmış beyaz kartlar, yumuşak köşeler, sistem mavisi, düz rozetler. */
+:root[data-skin="yerel"] .cleanup, :root[data-skin="yerel"] .cl-cmp-layer { --cl-ok: var(--ok); --cl-del: var(--danger); }
+:root[data-skin="yerel"] .cl-head h1 { font-family: var(--sans); font-weight: 700; letter-spacing: -.02em; }
+:root[data-skin="yerel"] .cl-hero, :root[data-skin="yerel"] .cl-card, :root[data-skin="yerel"] .cl-group,
+:root[data-skin="yerel"] .cl-progress, :root[data-skin="yerel"] .cl-note { background: var(--y-fill-2, var(--sunken)); }
+:root[data-skin="yerel"] .cl-hero { border-radius: 18px; box-shadow: none; }
+:root[data-skin="yerel"] .cl-hero-art img { border-color: var(--surface); }
+:root[data-skin="yerel"] .cl-hero-bytes { font-family: var(--sans); font-weight: 700; letter-spacing: -.03em; }
+:root[data-skin="yerel"] .cl-hero-title { font-family: var(--sans); font-weight: 700; }
+:root[data-skin="yerel"] .cl-apply-all { border-radius: 999px; }
+:root[data-skin="yerel"] .cl-card { border: 0; border-radius: 16px; box-shadow: none; }
+:root[data-skin="yerel"] .cl-card:hover { box-shadow: none; background: var(--sunken); }
+:root[data-skin="yerel"] .cl-card[aria-selected="true"] { box-shadow: 0 0 0 2px var(--accent); }
+:root[data-skin="yerel"] .cl-card-ic { border-radius: 9px; background: var(--accent); color: #fff; }
+:root[data-skin="yerel"] .cl-card[data-tab="blurry"] .cl-card-ic { background: #8E8E93; }
+:root[data-skin="yerel"] .cl-card[data-tab="dark"] .cl-card-ic { background: #FF9F0A; }
+:root[data-skin="yerel"] .cl-card[data-tab="screenshots"] .cl-card-ic { background: #5856D6; }
+:root[data-skin="yerel"] .cl-card[data-tab="videos"] .cl-card-ic { background: #FF375F; }
+:root[data-skin="yerel"] .cl-card.is-zero .cl-card-ic { background: var(--sunken); color: var(--faint); }
+:root[data-skin="yerel"] .cl-group { border-radius: 16px; box-shadow: none; }
+:root[data-skin="yerel"] .cl-chip { background: var(--accent-soft); color: var(--accent); }
+:root[data-skin="yerel"] .cl-shot { border-radius: 10px; }
+:root[data-skin="yerel"] .cl-group-actions .btn-soft { border-radius: 999px; }
+:root[data-skin="yerel"] .cl-toolbar { border-radius: 14px; }
+:root[data-skin="yerel"] .cl-tile { border-radius: 4px; }
+:root[data-skin="yerel"] .cl-cmp { border-radius: 20px; }
+:root[data-skin="yerel"] .cl-cmp-head h2 { font-family: var(--sans); font-weight: 700; font-size: 19px; }
+@media (max-width: 860px) {
+  :root[data-skin="yerel"] .cl-tile { border-radius: 2px; }
+}

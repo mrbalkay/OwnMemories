@@ -72,6 +72,8 @@ tests/                php tests/run.php
 - `imports`, `import_items` — her içe aktarma ve her medya dosyasının sonucu (`imported`/`duplicate`/`no_metadata`/`skipped_trashed`/`failed`)
 - `uploads`, `site_settings`, `rate_limits`, `audit_log`
 - `asset_embeddings` — asset_id PK, user_id, model (ör. `ViT-B-16-SigLIP2__webli`), vec (MEDIUMBLOB, float32 little-endian, L2-normalize, 768 boyut = 3072 bayt), created_at. ownmemories-ml yazar; asset kalıcı silinince PHP siler (§7)
+- `asset_quality` (009) — asset_id PK, user_id, phash (BIGINT UNSIGNED, 64 bit DCT algısal özet), sharpness (Laplace varyansı), brightness (0..255), color (VARBINARY(48), 4×4 ortalama RGB), is_screenshot, algo, computed_at. ownmemories-ml yazar; asset kalıcı silinince PHP siler (§8)
+- `cleanup_dismissed` (009) — (user_id, kind, item_key) PK, asset_ids, created_at: Temizlik'te "Bunlar farklı" / "Bu iyi" ile gizlenen öneriler (§8)
 
 ### Yineleme kuralları
 1. Aynı kullanıcıda aynı SHA-1 → yinelenen.
@@ -159,6 +161,10 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | DELETE | `assets/{id}/people/{personId}` | – | aynı yük — etiket silinir; kişinin bu fotoğraftaki yüzleri ayrılır ve reddedilir |
 | POST | `assets/people` | `{ids:[…≤500], person_id? \| name?}` | `{count, person}` — toplu elle etiket (yalnız kendi asset'leri sayılır; hiçbiri kendisinin değilse 404 ve kişi oluşturulmaz) |
 | PATCH | `faces/{id}` | `{person_id:int}` · `{name:string}` · `{person_id:null}` | asset'in kişi yükü — atama `assigned_by='user'` (o kişiye ret varsa kalkar); `null` ayırır ve `rejected_person_id` yapar |
+| GET | `cleanup` | – | `{ml:{available,indexed}, analysis:{analyzed,total}, groups:[{id,reason:"duplicate"\|"similar",keep_id,keep_reasons:[favorite\|resolution\|sharpest\|location\|original],bytes,taken_at,assets:[Asset+quality]}], blurry:[…], dark:[…+why:"dark"\|"bright"], screenshots:[…], short_videos:[…], stats:{potential_bytes,groups,group_assets,blurry,blurry_bytes,dark,dark_bytes,screenshots,screenshots_bytes,short_videos,short_videos_bytes}}` — Temizlik (§8). Listeler en çok 300 öğe (sayılar `stats`'ta tam); ML yoksa `groups` boş, listeler yine dolu |
+| POST | `cleanup/resolve` | `{keep:[…], trash:[…]}` ya da `{groups:[{keep,trash},…]}` (toplam ≤ 1000) | `{trashed, freed_bytes, skipped}` — yalnız **çöpe taşır** (asla kalıcı silmez); Live Photo fotoğrafı giderse videosu da; ≥ 2 tutulan küme "farklı" olarak hatırlanır; aynı kimlik (bir grupta ya da gruplar arasında) hem keep hem trash ise 422; `keep` dolu ama hiçbiri artık yerinde değilse (eski sayfa / başka cihazda silinmiş) o parça atlanır (`skipped`), grubun son kopyaları çöpe gitmez |
+| POST | `cleanup/dismiss` | `{kind:"group"\|"blurry"\|"dark"\|"screenshot"\|"video", ids:[…]}` | `{dismissed}` — "Bunlar farklı" (grup: üyeleri bu kümenin alt kümesi olan grup bir daha gelmez; yeni bir üye katılırsa yeniden görünür) / "Bu iyi" (tek öğe) |
+| POST | `cleanup/reset` | – | `{restored}` — gizlenen tüm öneriler geri gelir |
 | GET | `faces/{id}/thumb` | – | 256×256 JPEG yüz kırpması (kutunun uzun kenarı + her yana %35 dolgu, görüntü içinde kalır), `private, max-age=31536000, immutable`; önizleme yoksa 404 |
 
 **Person nesnesi:** `{"id":12,"name":"Ayşe"|null,"count":42,"cover_face_id":881|null,"cover_asset_id":"uuid"|null,"hidden":false}` —
@@ -266,9 +272,10 @@ birebir aynı ön işleme korundu.
 | POST | `/search` | `{user_id, text, limit≤500 (100), min_score:float\|null}` | `{results:[{id, score}], model, took_ms}` — skora göre azalan. Model yüklenmeden 503, hatalı istek 400 |
 | GET | `/status?user_id=N` | – | `{indexed, total, pending, model, ready}` — `total`: kullanıcının `thumb_state='ready'` asset sayısı; `ready`: model hazır ve en az bir vektör var |
 | GET | `/faces/status?user_id=N` | – | `{available, model, ready, scanned, total, faces, people[, error]}` — `total`: `thumb_state='ready'`, çöpte olmayan, canlı fotoğrafın video yarısı olmayan asset; `scanned`: bunlardan `face_scans` satırı olan (bu yüz modeliyle); `people`: gizli olmayan kişiler; `available`/`ready`: yüz modeli yüklü (ve tablolar var). 3 sn önbellek |
+| POST | `/cleanup/groups` | `{user_id}` | `{groups:[{assets:[id…],reason:"duplicate"\|"similar",min_sim,max_hamming}], analyzed, total, indexed, took_ms, cached}` — benzer gruplar (§8); kütüphane değişmedikçe bellekten. `asset_quality` yoksa 503 |
 | POST | `/faces/recluster` | `{user_id}` | `{queued:true, available:true}` — kullanıcı için tam kümeleme geçişini kuyruğa alır (dizinleyici iş parçacığında, birkaç saniye içinde). Yüz modeli yoksa `{queued:false, available:false}` |
 
-`/health` ayrıca `faces: bool` (yüz modeli yüklü mü) döndürür.
+`/health` ayrıca `faces: bool` (yüz modeli yüklü mü) ve `cleanup: bool` (`asset_quality` tablosu var mı) döndürür.
 
 ### Yüz tanıma (Kişiler)
 
@@ -346,10 +353,67 @@ verilirse PHP gibi MySQL Unix soketi kullanılır.
 ### Dosyalar
 
 `ml/ownmemories_ml/`: `service.py` (HTTP + dizinleyici + bellek içi dizin), `model.py` (ön işleme, ONNX),
-`faces.py` (yüz algılama/hizalama/tanıma), `clustering.py` (yüz kümeleme),
+`faces.py` (yüz algılama/hizalama/tanıma), `clustering.py` (yüz kümeleme), `cleanup.py` (Temizlik: kalite ölçümleri, benzer gruplar),
 `download.py` (HF indirici: sürdürme, boyut + sha256), `quantize.py`, `config.py`, `__main__.py`
 (`serve` / `download` / `quantize` / `embed-text`). Testler: `ml/tests/eval_samples.py` (kalite, gecikme, RAM),
 `ml/tests/test_service.py` (geçici DB ile uçtan uca), `ml/tests/test_cutoff.py` (ilgi eşiği, DB/model gerekmez),
 `ml/tests/xm3600_bench.py` (Türkçe kalite karşılaştırması, yukarıda), `ml/tests/test_faces.py` (yüz tanıma,
 geçici DB + LFW ile uçtan uca), `ml/tests/face_eval.py` (LFW uzaklık/kümeleme/gecikme/RAM ölçümü),
-`ml/tests/test_face_ops.py` (NMS, Umeyama, hizalama, kümeleme birim testleri; model/DB gerekmez).
+`ml/tests/test_face_ops.py` (NMS, Umeyama, hizalama, kümeleme birim testleri; model/DB gerekmez),
+`ml/tests/test_cleanup.py` (Temizlik: pHash/netlik/renk imzası/ekran görüntüsü kuralı/gruplama; model/DB gerekmez).
+
+## 8. Temizlik (benzer ve gereksiz fotoğraflar)
+
+Birebir aynı dosyalar yüklemede SHA-1 ile zaten engellenir (blob tekilleştirme). Temizlik **yakın kopyaları**
+(seri çekimler, yeniden kaydedilmiş/küçültülmüş/WhatsApp'tan geçmiş kopyalar, düzenlenmiş kopyalar) ve gereksiz
+kareleri (bulanık, çok karanlık/aşırı parlak, ekran görüntüsü, 1 sn'den kısa video, cepte kalmış simsiyah video)
+bulur. Web: `#/cleanup` (menü → Diğer → Temizlik; Ayarlar'dan da). iOS: Ayarlar → Kütüphane → Temizlik.
+**Hiçbir şey kalıcı silinmez**: uygulama seçilenleri Çöp kutusuna taşır (30 gün sonra cron siler).
+
+**Ölçümler** (`ml/ownmemories_ml/cleanup.py`, dizinleyicinin her turunda, türetilmiş önizlemeden —
+yoksa video kapağı/küçük resim; 2048 px WebP önizlemede ~100 ms, JPEG ~50 ms; CLIP işi sürerken de tur başına 32 görüntü):
+`phash` (32×32 gri → DCT → sol üst 8×8, ortancaya göre 64 bit), `sharpness` (gri görüntü ≤ 1024 px uzun kenar,
+Laplace, 4×4 karoların en netlerinden ikincisinin varyansı — arka planı bulanık portre "bulanık" sayılmaz),
+`brightness` (ortalama), `color` (4×4 RGB), `is_screenshot` (dosya adı `Screenshot`/`Ekran Resmi`/`Ekran
+görüntüsü`…, kamera bilgisi olmayan PNG ya da bilinen iPhone/iPad/Android ekran boyutu; PHP `cleanup_is_screenshot`
+aynı kural). Yöntem değişirse `ALGO` artırılır ve eski satırlar yeniden hesaplanır.
+
+**Gruplama** (`group_assets`, ML `POST /cleanup/groups`, numpy; kullanıcının çöpte/arşivde olmayan, tek kare
+kuralına uyan, ≥ 64 px fotoğrafları; CLIP vektörleri aramanın bellek içi dizininden):
+1. *Seri çekim*: çekim zamanı **güvenilir** (date_source exif/takeout/filename/user; `file` toplu kopyalamada hepsi
+   aynı olabilir) iki fotoğraf ≤ 10 sn arayla ve kosinüs ≥ 0.93, ya da ≤ 120 sn arayla ve ≥ 0.955.
+2. *Görsel kopya* (zamandan bağımsız): pHash Hamming ≤ 8 ve kosinüs ≥ 0.86 (aday çiftler 4×16 bitlik bantlarla).
+3. *Küresel*: kosinüs ≥ 0.98, yalnızca çekim zamanı güvenilmez fotoğraflardan (EXIF'i silinmiş kopyalar) tüm
+   kütüphaneye (bloklu matris çarpımı; m·n > 40 bin² ise atlanır).
+2 ve 3'te renk imzası farkı ≤ 16 ve en-boy oranı farkı ≤ 1.25 kat olmalı (aynı düzende ama farklı renkteki kareler,
+düşük dokulu gökyüzü/deniz fotoğrafları birleşmesin). **Yazı ağırlıklı kareler** (belge sayfası, slayt, fiş,
+ekran görüntüsü) için üç yolda da yalnız neredeyse birebir kopya kenarı kurulur (Hamming ≤ 6 ve kosinüs ≥ 0.975):
+farklı belge sayfaları CLIP'te 0.89–0.96 benzer ve saniyeler arayla çekilir; bu kural olmadan 6 farklı sayfa tek
+"benzer" grupta toplanıyor, "Önerileri uygula" beşini çöpe atıyordu. Yazı ağırlığı = `asset_quality.is_screenshot`
+ya da CLIP metin istemi ("a page of printed text") benzerliği ≥ 0.06 ve "a photo" isteminden ≥ 0.005 yüksek
+(SigLIP2'de belgeler ≥ 0.09 / +0.027, fotoğraflar ≤ 0.05 / −0.017); metin modeli yoksa yalnız ekran görüntüsü kuralı.
+Kenarlar güçlüden zayıfa birleştirilir; iki küme ancak tüm
+çiftleri kosinüs ≥ 0.84 ise ve toplam ≤ 24 ise birleşir (zincirleme engeli). Neden: tüm çiftler Hamming ≤ 6,
+kosinüs ≥ 0.88, netlik oranı ≤ 3 ve parlaklık farkı ≤ 25 ise `duplicate` ("Neredeyse aynı"), değilse `similar`.
+Sonuç `(vektör sayısı/son, kalite sayısı/son, asset sayısı/en büyük version)` parmak iziyle kullanıcı başına
+bellekte tutulur (çöpe taşıma/geri yükleme version'ı artırır); Temizlik'i açmış kullanıcılar için dizinleyici
+boştayken (en çok dakikada bir) değişmişse yeniden hesaplanır. Süre: 270 fotoğraf ~20–60 ms, 30 bin ~2 sn,
+100 bin (%10'u dosya tarihli) ~7 sn (4 CPU).
+
+**En iyisi** (PHP `cleanup_pick_best`): favori (+1000) > çözünürlük (100 × piksel/en büyük) > netlik (60 ×
+oran) > konum (+12) > kamera bilgisi (+8, EXIF'i silinmiş kopyalara karşı) > dosya boyutu (10 × oran, az
+sıkıştırılmış); `edited_of_id` olan ya da adı kopya gibi olan (`(1)`, `-edited`, `kopya`) −25. Gerekçeler
+(`keep_reasons`) arayüzde "En iyisi: En yüksek çözünürlük · En net" olarak gösterilir.
+
+**Listeler** (PHP, `asset_quality` + meta veri; favoriler ve bir gruptakiler hariç, öncelik: grup > ekran
+görüntüsü > karanlık/parlak > bulanık): bulanık `sharpness < 25` (kısa kenar ≥ 256 px), karanlık `brightness < 22`,
+aşırı parlak `> 236`, kısa video `duration_ms < 1000` (Live Photo videosu hariç), cepte kayıt: kapak karesi
+`brightness < 22` olan video.
+
+**Doğruluk** (gerçek fotoğraflarla, `p1…p18` + üretilmiş kopyalar, 86 dosya yükleme API'siyle): 18 grup,
+yanlış birleştirme 0 (benzer ama farklı fotoğraflar 6–30 sn arayla çekilmiş olsa da — orman yolu ×2, sisli deniz ×2,
+iskele ×2, masa ×2 — ayrı kaldı; LFW'de aynı kişinin farklı fotoğrafları da gruplanmadı), aynı fotoğrafın kopya
+çiftlerinin %92'si doğru grupta (kaçanlar: %10 kırpılıp renkleri değiştirilmiş düzenleme, 3.5× aşırı pozlanmış ya
+da %7'ye karartılmış kopya — ikisi "karanlık/parlak" listesine düşer). Bulanık kopyalar (σ ≥ 2 Gauss) netliği
+1–25, net fotoğraflar ≥ 80.
+

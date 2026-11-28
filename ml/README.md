@@ -35,6 +35,7 @@ curl -s 127.0.0.1:8765/search -d '{"user_id":1,"text":"kumsalda köpek","limit":
 curl -s '127.0.0.1:8765/status?user_id=1'
 curl -s '127.0.0.1:8765/faces/status?user_id=1'
 curl -s 127.0.0.1:8765/faces/recluster -d '{"user_id":1}'
+curl -s 127.0.0.1:8765/cleanup/groups -d '{"user_id":1}'      # Temizlik: benzer/yinelenen gruplar
 ```
 
 ## Testler
@@ -50,6 +51,8 @@ python -I ml/tests/test_service.py --model-dir /tmp/models/ViT-B-16-SigLIP2__web
 python -I ml/tests/test_cutoff.py
 # Türkçe kalite karşılaştırması: Crossmodal-3600 (indirme komutları dosyanın başında)
 python -I ml/tests/xm3600_bench.py --data <xm3600 klasörü> --model-dir /tmp/models/ViT-B-16-SigLIP2__webli
+# Temizlik: pHash/netlik/renk imzası/ekran görüntüsü kuralı/gruplama (model/DB gerekmez; --images ile gerçek fotoğraflar)
+python -I ml/tests/test_cleanup.py --images <p1..p18.jpg klasörü>
 # Yüz: birim testleri (NMS, Umeyama, hizalama, kümeleme; model/DB gerekmez)
 python -I ml/tests/test_face_ops.py
 # Yüz: uçtan uca (geçici DB om_facetest_<pid>, LFW görselleri, CLIP modeli olmadan)

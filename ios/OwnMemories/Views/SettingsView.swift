@@ -76,6 +76,18 @@ struct SettingsView: View {
                 }
                 .listRowBackground(theme.groupSurface)
                 Section {
+                    NavigationLink {
+                        CleanupView()
+                    } label: {
+                        Label("Temizlik", systemImage: "sparkles")
+                    }
+                } header: {
+                    Text("Kütüphane")
+                } footer: {
+                    Text("Benzer kareler, bulanık fotoğraflar ve ekran görüntüleri için öneriler. Silinenler önce Çöp kutusuna gider (30 gün).")
+                }
+                .listRowBackground(theme.groupSurface)
+                Section {
                     Button("Çıkış yap", role: .destructive) { confirmLogout = true }
                 } footer: {
                     Text("Çıkış yapınca bu cihazdaki yedekleme durumu sıfırlanır; tekrar giriş yapınca sunucuda olanlar yeniden yüklenmez.")

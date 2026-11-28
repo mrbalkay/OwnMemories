@@ -332,3 +332,17 @@ Elle eklediğiniz `OM_ML_*` / `OM_FACE_*` ayarları güncellemelerde korunur (ve
 
 **Kapatmak:** `sudo touch /etc/ownmemories/ml.disabled && sudo bash /var/www/ownmemories/server/install-ml.sh`
 (geri açmak için dosyayı silip betiği yeniden çalıştırın). Kapalıyken arama dosya adı/açıklama ile çalışır.
+
+## H. Temizlik (benzer ve gereksiz fotoğraflar)
+
+Web'de menüdeki **Diğer → Temizlik** (ya da Ayarlar → Temizliği aç), iPhone'da **Ayarlar → Kütüphane → Temizlik**:
+seri çekimler, yeniden kaydedilmiş / WhatsApp'tan gelmiş kopyalar, bulanık ve çok karanlık kareler, ekran
+görüntüleri ve yanlışlıkla çekilmiş kısa videolar listelenir. Her benzer grupta en iyisi (en yüksek çözünürlük,
+en net, favori, konumlu) "En iyisi" olarak işaretlenir; "Önerileri uygula" diğerlerini **Çöp kutusuna** taşır
+(30 gün içinde geri yüklenebilir, hiçbir şey hemen silinmez). "Bunlar farklı" bir grubu bir daha önermez.
+
+Benzer grupları akıllı arama servisi (`ownmemories-ml`, bkz. G) bulur; ek kurulum gerekmez — `update.sh` servisi
+günceller, veritabanı tablosu (migration 009) ilk istekte eklenir. Servis güncellendikten sonra tüm fotoğrafların
+netlik/parlaklık/algısal özet ölçümünü arka planda bir kez çıkarır (saatte ~30.000 fotoğraf; akıllı
+arama dizinlemesi sürüyorsa onunla dönüşümlü). Bu sürede Temizlik sayfası "Fotoğraflar inceleniyor: 1.200 / 30.000"
+gösterir. Durum: `journalctl -u ownmemories-ml | grep kalite`.

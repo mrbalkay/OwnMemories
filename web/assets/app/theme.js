@@ -7,7 +7,7 @@
  * S = sinema, G = galeri, Y = yerel (beklenen kullanım).
  *
  * Kabuk (web/app/index.php)
- *   #app.app[data-route="photos|favorites|people|person|albums|album|shared|map|archive|trash|search|settings"]  her rotada güncellenir
+ *   #app.app[data-route="photos|favorites|people|person|albums|album|shared|map|archive|cleanup|trash|search|settings"]  her rotada güncellenir
  *   .ambient#ambient          #app'in ilk çocuğu, tam ekran katman (gizli). --ambient / --ambient-rgb ile boya   S
  *   .sidebar .logo .nav .nav-item .nav-settings .me .me-name .me-usage .me-links   (mevcut)
  *   .me-avatar                .me-name içinde baş harf (gizli)   Y
@@ -23,8 +23,9 @@
  *   .selbar, .v-bar, .story-top    diğer cam yüzeyler (mevcut)
  *
  * Menü (#nav, main.js renderNav) — düz liste, sırası: nav-h[library], photos, favorites, people, nav-h[albums], albums, shared,
- *   map, .nav-sep, nav-h[other], archive, trash
- *   .nav-item[data-nav="photos|favorites|people|albums|shared|map|archive|trash"][data-group="library|albums|other"] > .ic + .nav-label
+ *   map, .nav-sep, nav-h[other], archive, cleanup, trash
+ *   .nav-item[data-nav="photos|favorites|people|albums|shared|map|archive|cleanup|trash"][data-group="library|albums|other"] > .ic + .nav-label
+ *       (Y `order` kullanıyorsa yeni öğelere de order verin: cleanup 11, trash 12.)
  *   .nav-h[data-group="library|albums|other"]   grup başlığı "Kitaplık/Albümler/Diğer" (gizli)   Y
  *       Y, Harita'yı Kitaplık grubuna almak için #nav{display:flex} içinde CSS `order` kullanır.
  *   .nav-sep                  Arşiv'den önce ayraç (gizli)   S G
@@ -107,6 +108,25 @@
  *     > .p-chips > .p-chip(.is-unnamed)[data-person][data-source] > a|button.p-chip-main > .p-ava + .p-chip-name | button.p-chip-x
  *     > .p-add-slot > button.p-add | .pp   > .f-loose-head + .f-loose > .f-item[data-face] > .p-ava.f-ava + button.f-name-btn | .pp
  *   Yüz kutuları: .v-stage > .v-faces(.has-hot) > button.v-face(.is-named|.is-cluster|.is-unknown|.is-hot) > .v-face-label
+ *
+ * Temizlik (cleanup.js) — #app[data-route="cleanup"], #/cleanup?tab=similar|blurry|dark|screenshots|videos
+ *   Renk değişkenleri .cleanup ve .cl-cmp-layer üzerinde: --cl-ok/--cl-ok-ink ("En iyisi"), --cl-del/--cl-del-ink (silinecek).
+ *   .cleanup > .page-head.cl-head (h1 + p.cl-lead) | .cl-note (ML yok) | .cl-progress > .cl-progress-text + .cl-progress-bar(--p) > i
+ *     | section.cl-hero(.is-clean) > .cl-hero-text > .cl-hero-num > .cl-hero-bytes + .cl-hero-unit | p.cl-hero-sub
+ *                                 + .cl-hero-art > img×3 + button.btn.btn-primary.cl-apply-all
+ *     | .cl-cards[role=tablist] > button.cl-card[role=tab][data-tab][aria-selected](.is-zero) > .cl-card-ic + .cl-card-text
+ *         > strong.cl-card-label + .cl-card-sub | .cl-card-thumbs > img×3   (mobilde yatay kaydırma)
+ *     | section.cl-panel[data-tab] > p.cl-kbd | .cl-groups > article.cl-group[data-reason="duplicate|similar"][tabindex=0]
+ *         > header.cl-group-head > .cl-group-title (.cl-chip[data-reason] + .cl-group-meta + .cl-group-save) + .cl-group-actions > .btn×3
+ *         > .cl-strip > button.cl-shot(.is-best|.is-keep|.is-trash) > img + .cl-best-badge | .cl-mark + .cl-shot-info (+ .cl-shot-tag)
+ *         > p.cl-why > .cl-why-k
+ *       | .cl-toolbar (sticky) > .cl-toolbar-count + .btn… | .cl-grid > .cl-tile(.is-on) > button.cl-tile-main > img + .cl-check + .cl-tile-tag
+ *                                                          + .cl-tile-actions > button.cl-tile-btn×2 | .cl-empty | p.cl-more
+ *     | footer.cl-foot > button.linklike
+ *   Karşılaştırma (body'ye eklenir): .cl-cmp-layer(.in) > .cl-cmp-backdrop + section.cl-cmp[role=dialog]
+ *     > header.cl-cmp-head (h2 + p + .cl-cmp-count + .cl-cmp-close) > .cl-cmp-stage > figure.cl-cmp-side(.is-best|.is-trash)
+ *       > .cl-cmp-media > img(.in) + .cl-best-badge | .cl-state-pill(.is-trash) | figcaption > .cl-cmp-name + dl.cl-facts > .cl-fact(.is-better)[data-fact]
+ *       + .cl-cmp-actions (.cl-cmp-keepnote | .btn×3) > .cl-film > button.cl-film-item(.is-on|.is-trash) > footer.cl-cmp-foot
  */
 import { api } from './api.js';
 import { OM } from './util.js';

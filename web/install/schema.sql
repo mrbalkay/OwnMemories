@@ -305,3 +305,27 @@ CREATE TABLE IF NOT EXISTS asset_embeddings (
   KEY ix_emb_user (user_id, model),
   KEY ix_emb_model (model)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Temizlik (009): kalite ölçümleri ve gizlenen öneriler.
+CREATE TABLE IF NOT EXISTS asset_quality (
+  asset_id CHAR(36) NOT NULL PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  phash BIGINT UNSIGNED NULL,
+  sharpness FLOAT NULL,
+  brightness FLOAT NULL,
+  color VARBINARY(48) NULL,
+  is_screenshot TINYINT(1) NOT NULL DEFAULT 0,
+  algo SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+  computed_at DATETIME NOT NULL,
+  KEY ix_aq_user (user_id),
+  KEY ix_aq_phash (user_id, phash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS cleanup_dismissed (
+  user_id INT UNSIGNED NOT NULL,
+  kind VARCHAR(16) NOT NULL,
+  item_key CHAR(40) NOT NULL,
+  asset_ids TEXT NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (user_id, kind, item_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

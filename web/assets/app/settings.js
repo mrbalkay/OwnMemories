@@ -1,6 +1,6 @@
 // OwnMemories — Ayarlar: görünüm teması seçimi ve profil adı.
 import { api } from './api.js';
-import { h, t, toast, OM } from './util.js';
+import { h, t, toast, icon, OM } from './util.js';
 import { THEMES, DEFAULT_THEME, currentTheme, setTheme } from './theme.js';
 
 const PREVIEW = {
@@ -54,6 +54,10 @@ export function renderSettings(view) {
       h('h2', {}, t('appearance')),
       h('p', { class: 'muted' }, t('appearance_note')),
       h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': t('appearance') }, ...cards)),
+    h('section', { class: 'settings-section settings-cleanup' },
+      h('h2', {}, t('cl_settings_title')),
+      h('p', { class: 'muted' }, t('cl_settings_note')),
+      h('a', { class: 'btn btn-soft settings-cleanup-link', href: '#/cleanup' }, icon('broom'), h('span', {}, t('cl_open_cleanup')))),
     h('section', { class: 'settings-section' },
       h('h2', {}, t('profile')),
       h('div', { class: 'settings-row' }, h('label', {}, t('your_name'), nameInput), saveName))));
