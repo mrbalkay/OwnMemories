@@ -8,10 +8,24 @@ final class LibraryModel: ObservableObject {
     @Published private(set) var error: String?
     private var next: AssetCursor?
     private(set) var done = false
+    /// Takvimden geçmiş bir güne atlandı: liste o günden başlar, üstte "en yeniye dön" görünür.
+    @Published private(set) var jumped = false
 
     func reload(client: APIClient?) async {
         next = nil
         done = false
+        jumped = false
+        assets = []
+        sections = []
+        await loadMore(client: client)
+    }
+
+    /// Listeyi verilen imleçten (bir günün en yeni öğesinin hemen sonrası) yeniden başlatır.
+    func jump(before: String, client: APIClient?) async {
+        guard !loading else { return }
+        next = AssetCursor(before: before, beforeId: nil)
+        done = false
+        jumped = true
         assets = []
         sections = []
         await loadMore(client: client)
@@ -45,6 +59,8 @@ final class LibraryModel: ObservableObject {
     @discardableResult
     func refreshInPlace(client: APIClient?) async -> Bool {
         guard let client else { return true }
+        // Geçmiş bir güne atlanmışken liste en baştan çekilmez (kullanıcının yeri bozulmasın).
+        if jumped { return true }
         guard !loading else { return false }
         guard let oldest = assets.last?.takenAt else { await reload(client: client); return true }
         loading = true
@@ -96,6 +112,10 @@ struct LibraryView: View {
     @State private var viewing: Asset?
     @State private var story: Memory?
     @State private var featuredStart: Asset?
+    @State private var calendarMonth: CalendarTarget?
+    @State private var pendingScroll: String?
+
+    struct CalendarTarget: Identifiable { let id: String }   // "YYYY-MM" ya da "" (en yeni ay)
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: theme.gridSpacing), count: theme.gridColumns)
@@ -103,9 +123,30 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
+          ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
-                    LibraryHeader(title: "Fotoğraflar", initial: session.user?.name)
+                    LibraryHeader(title: "Fotoğraflar", initial: session.user?.name, onCalendar: {
+                        calendarMonth = CalendarTarget(id: model.sections.first.map { String($0.id.prefix(7)) } ?? "")
+                    })
+                    .id("library-top")
+                    if model.jumped {
+                        Button {
+                            Task {
+                                await model.reload(client: session.client)
+                                withAnimation { proxy.scrollTo("library-top", anchor: .top) }
+                            }
+                        } label: {
+                            Label("En yeni fotoğraflara dön", systemImage: "arrow.up")
+                                .font(.system(size: 14, weight: .semibold))
+                                .padding(.horizontal, 14).padding(.vertical, 8)
+                                .background(theme.surface, in: Capsule())
+                                .overlay(Capsule().stroke(theme.hairline, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, 8)
+                    }
                     if !memories.memories.isEmpty {
                         MemoriesStrip(memories: memories.memories) { story = $0 }
                     } else if theme.memoryLayout == .hero, let f = memories.featured.first {
@@ -114,8 +155,13 @@ struct LibraryView: View {
                     ForEach(Array(model.sections.enumerated()), id: \.element.id) { i, section in
                         if i == 0 || model.sections[i - 1].id.prefix(7) != section.id.prefix(7) {
                             monthHeader(String(section.id.prefix(7)), first: i == 0)
+                                .contentShape(Rectangle())
+                                .onTapGesture { calendarMonth = CalendarTarget(id: String(section.id.prefix(7))) }
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityHint("Takvimi açar")
                         }
                         Text(DayGrouping.title(for: section.id))
+                            .id("day-" + section.id)
                             .font(theme.dayFont)
                             .foregroundStyle(theme.name == .galeri ? theme.ink : theme.ink.opacity(0.92))
                             .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
@@ -150,6 +196,28 @@ struct LibraryView: View {
             .background(alignment: .top) { AmbientGlow(assetId: ambientAssetId) }
             .background(theme.canvas.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
+            .sheet(item: $calendarMonth) { target in
+                CalendarSheet(initialMonth: target.id.isEmpty ? nil : target.id) { day in
+                    Task {
+                        if model.sections.contains(where: { $0.id == day.day }) && !model.jumped {
+                            pendingScroll = day.day
+                        } else {
+                            await model.jump(before: day.before, client: session.client)
+                            pendingScroll = day.day
+                        }
+                    }
+                }
+                .environmentObject(session)
+                .environment(\.theme, theme)
+            }
+            .onChange(of: pendingScroll) { _, day in
+                guard let day else { return }
+                // Sayfa kapanırken kaydırma kaybolmasın: kısa bir gecikmeyle hedef güne git.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo("day-" + day, anchor: .top) }
+                    pendingScroll = nil
+                }
+            }
             .overlay(alignment: .bottom) {
                 if showSyncPill {
                     SyncPill(done: engine.counts.done, total: engine.counts.total)
@@ -191,6 +259,7 @@ struct LibraryView: View {
                     .environmentObject(session)
                     .environment(\.theme, theme)
             }
+          }
         }
     }
 
@@ -253,6 +322,7 @@ struct LibraryHeader: View {
     let title: String
     var subtitle: String? = nil
     var initial: String? = nil
+    var onCalendar: (() -> Void)? = nil
     @Environment(\.theme) private var theme
 
     var body: some View {
@@ -267,6 +337,18 @@ struct LibraryHeader: View {
                 }
             }
             Spacer(minLength: 8)
+            if let onCalendar {
+                Button(action: onCalendar) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(theme.name == .yerel ? theme.accent : theme.ink)
+                        .frame(width: avatarSize, height: avatarSize)
+                        .background(theme.name == .galeri ? AnyShapeStyle(Color.clear) : AnyShapeStyle(Color.primary.opacity(0.08)), in: Circle())
+                        .overlay(Circle().stroke(theme.hairline, lineWidth: theme.name == .yerel ? 0 : 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Takvim")
+            }
             if let initial, let ch = initial.first {
                 Text(String(ch).uppercased())
                     .font(.system(size: theme.name == .galeri ? 12 : 15, weight: .semibold))
