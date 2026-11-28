@@ -11,20 +11,26 @@ struct AssetViewer: View {
     @State private var current: [String: Asset] = [:]
     @State private var showInfo = false
     @State private var chrome = true
+    /// Aşağı/yukarı çekerek kapatma (iOS Fotoğraflar gibi): içerik parmağı izler, arka plan solar.
+    @State private var dragY: CGFloat = 0
+
+    private var dragProgress: CGFloat { min(abs(dragY) / 320, 1) }
 
     private func asset(_ id: String) -> Asset? { current[id] ?? assets.first { $0.id == id } }
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.black.ignoresSafeArea()
+            Color.black.opacity(Double(1 - dragProgress * 0.85)).ignoresSafeArea()
             TabView(selection: $selection) {
                 ForEach(assets) { a in
-                    AssetPageView(asset: a)
+                    AssetPageView(asset: a, dragY: $dragY, onDismiss: dismissBySwipe)
                         .tag(a.id)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
+            .offset(y: dragY)
+            .scaleEffect(1 - dragProgress * 0.25)
             .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() } }
 
             HStack {
@@ -41,12 +47,24 @@ struct AssetViewer: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
             .background(LinearGradient(colors: [.black.opacity(0.6), .clear], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
-            .opacity(chrome ? 1 : 0)
+            .opacity(chrome && dragY == 0 ? 1 : 0)
         }
+        .presentationBackground(.clear)
         .statusBarHidden(!chrome)
         .onAppear { selection = startId }
         .sheet(isPresented: $showInfo) {
             if let a = asset(selection) { AssetInfoView(asset: a).presentationDetents([.medium, .large]) }
+        }
+    }
+
+    /// Çekme eşiği aşıldı: fotoğraf çekildiği yönde ekrandan çıkar, sonra görünüm animasyonsuz kapanır.
+    private func dismissBySwipe() {
+        let target: CGFloat = (dragY >= 0 ? 1 : -1) * 1200
+        withAnimation(.easeOut(duration: 0.2)) { dragY = target }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { dismiss() }
         }
     }
 
@@ -62,9 +80,33 @@ struct AssetViewer: View {
 
 private struct AssetPageView: View {
     let asset: Asset
+    @Binding var dragY: CGFloat
+    var onDismiss: () -> Void
     @EnvironmentObject private var session: Session
     @State private var player: AVPlayer?
     @State private var scale: CGFloat = 1
+    /// Bir sürüklemenin yönü ilk harekette belirlenir: yatay olanlar sayfa değiştirir, dikey olanlar kapatır.
+    @State private var dragAxis: Axis?
+
+    private var dismissGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { v in
+                guard scale <= 1.01 else { return }
+                if dragAxis == nil {
+                    dragAxis = abs(v.translation.height) > abs(v.translation.width) ? .vertical : .horizontal
+                }
+                if dragAxis == .vertical { dragY = v.translation.height }
+            }
+            .onEnded { v in
+                defer { dragAxis = nil }
+                guard dragAxis == .vertical, scale <= 1.01 else { return }
+                if abs(v.translation.height) > 110 || abs(v.predictedEndTranslation.height) > 320 {
+                    onDismiss()
+                } else {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { dragY = 0 }
+                }
+            }
+    }
 
     var body: some View {
         Group {
@@ -83,6 +125,8 @@ private struct AssetPageView: View {
                 .gesture(MagnificationGesture().onChanged { scale = max(1, $0) }.onEnded { _ in withAnimation { scale = 1 } })
             }
         }
+        .contentShape(Rectangle())
+        .simultaneousGesture(dismissGesture)
         .onAppear {
             guard asset.isVideo, player == nil, let client = session.client else { return }
             let url = client.url("assets/\(asset.id)/video")

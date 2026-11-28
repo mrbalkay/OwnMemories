@@ -64,16 +64,52 @@ class Viewer {
     else if (e.key === 'f' && this.asset?.access === 'own') this.toggleFav();
   }
 
+  /**
+   * Dokunma hareketleri (iOS Fotoğraflar mantığı): yatay kaydırma önceki/sonraki öğeye geçer;
+   * aşağı ya da yukarı çekince fotoğraf parmağı izler, arka plan solar ve eşik aşılınca kapanır.
+   */
   touch() {
-    let x0 = null, y0 = null;
-    this.stage.addEventListener('touchstart', (e) => { if (e.touches.length === 1) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; } }, { passive: true });
-    this.stage.addEventListener('touchend', (e) => {
+    let x0 = null, y0 = null, t0 = 0, axis = null, dy = 0;
+    const media = () => this.stage.querySelector('.v-img, video');
+    const setDrag = (y, animate) => {
+      const m = media();
+      const p = Math.min(Math.abs(y) / 320, 1);
+      if (m) {
+        m.style.transition = animate ? 'transform .25s cubic-bezier(.2,.8,.2,1)' : 'none';
+        m.style.transform = y ? `translateY(${y}px) scale(${1 - p * 0.25})` : '';
+      }
+      this.el.style.transition = animate ? 'background-color .25s ease' : 'none';
+      this.el.style.backgroundColor = y ? `rgba(8, 7, 11, ${1 - p * 0.85})` : '';
+      this.el.classList.toggle('dragging', !!y);
+    };
+    this.stage.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1 || this.stage.classList.contains('zoom')) { x0 = null; return; }
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = performance.now(); axis = null; dy = 0;
+    }, { passive: true });
+    this.stage.addEventListener('touchmove', (e) => {
       if (x0 === null) return;
-      const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
-      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) this.step(dx < 0 ? 1 : -1);
-      else if (dy > 110 && Math.abs(dy) > Math.abs(dx)) this.close();
+      if (e.touches.length !== 1) { x0 = null; setDrag(0, true); return; }
+      const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+      if (!axis && Math.hypot(mx, my) > 10) axis = Math.abs(my) > Math.abs(mx) ? 'y' : 'x';
+      if (axis === 'y') { e.preventDefault(); dy = my; setDrag(dy, false); }
+    }, { passive: false });
+    const end = (e) => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      const v = Math.abs(dy) / Math.max(1, performance.now() - t0); // px/ms
       x0 = null;
-    });
+      if (axis === 'x' && Math.abs(dx) > 60) { this.step(dx < 0 ? 1 : -1); return; }
+      if (axis !== 'y') return;
+      if (Math.abs(dy) > 110 || (Math.abs(dy) > 40 && v > 0.6)) {
+        const m = media();
+        if (m) { m.style.transition = 'transform .2s ease-out, opacity .2s ease-out'; m.style.transform = `translateY(${dy > 0 ? '100vh' : '-100vh'}) scale(.75)`; m.style.opacity = '0'; }
+        this.el.style.transition = 'background-color .2s ease-out';
+        this.el.style.backgroundColor = 'rgba(8, 7, 11, 0)';
+        setTimeout(() => this.close(), 190);
+      } else setDrag(0, true);
+    };
+    this.stage.addEventListener('touchend', end);
+    this.stage.addEventListener('touchcancel', () => { if (x0 !== null) { x0 = null; setDrag(0, true); } });
   }
 
   async step(dir) {
