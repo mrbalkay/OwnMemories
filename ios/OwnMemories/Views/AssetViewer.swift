@@ -50,10 +50,12 @@ struct AssetViewer: View {
             }
             .ignoresSafeArea()
             topBar
-            if let player, chrome, dragY == 0 {
+            if let player, let pid = playerAssetId, pid == selectedId, chrome, dragY == 0 {
                 VStack {
                     Spacer()
+                    // Her oynatıcı için yeni denetim görünümü: gözlemci daima kendi oynatıcısından kaldırılır.
                     VideoControls(player: player)
+                        .id(pid)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 8)
                 }
@@ -70,9 +72,12 @@ struct AssetViewer: View {
                 index = min(max(index, 0), ids.count - 1)
                 currentId = ids[index]
             }
+            syncPlayer()
         }
         .onChange(of: index) { _, i in
             if assets.indices.contains(i) { currentId = assets[i].id }
+            // Yeni sayfa yakınlaştırılmamış başlar (erişilebilirlik ile sayfa değişse bile sürükleme kilitli kalmaz).
+            zooming = false
             syncPlayer()
         }
         .onAppear { syncPlayer() }
@@ -105,7 +110,7 @@ struct AssetViewer: View {
         return ZStack {
             ForEach(slots) { slot in
                 AssetPageView(asset: slot.asset, isCurrent: slot.index == index, zooming: $zooming,
-                              player: slot.index == index ? player : nil) {
+                              player: slot.index == index && playerAssetId == slot.asset.id ? player : nil) {
                     withAnimation(.easeInOut(duration: 0.2)) { chrome.toggle() }
                 }
                     .frame(width: width, height: size.height)
@@ -324,10 +329,10 @@ private struct AssetPageView: View {
     @ViewBuilder
     private var content: some View {
         if asset.isVideo {
-            if let player {
-                PlayerSurface(player: player)
-            } else {
+            ZStack {
+                // Önizleme altta kalır: ilk kare gelene dek siyah ekran yerine görünür.
                 RemoteImage(assetId: asset.id, variant: "preview", contentMode: .fit, showsPlaceholder: false)
+                if let player { PlayerSurface(player: player) }
             }
         } else {
             ZStack {
@@ -378,8 +383,11 @@ private struct AssetPageView: View {
                 scale = 1
                 offset = .zero
             } else {
-                scale = min(scale, maxScale)
-                offset = clamped(offset, scale: scale, size: size, fit: fit)
+                let s = min(scale, maxScale)
+                // Üst sınıra geri dönerken ekran ortası etrafında küçült, sonra kenarlara sınırla.
+                let k = s / scale
+                scale = s
+                offset = clamped(CGSize(width: offset.width * k, height: offset.height * k), scale: s, size: size, fit: fit)
             }
         }
         if isCurrent { zooming = scale > 1.02 }
@@ -389,8 +397,12 @@ private struct AssetPageView: View {
         DragGesture(minimumDistance: 4)
             .updating($panActive) { _, state, _ in if scale > 1.02 { state = true } }
             .onChanged { v in
-                guard scale > 1.02, pinchStart == nil else { return }
-                if panStart == nil { panStart = offset }
+                guard scale > 1.02 else { return }
+                // Sıkıştırma sürerken gezdirme durur; sıkıştırma bitince o anki konumdan sıçramadan sürer.
+                guard pinchStart == nil else { panStart = nil; return }
+                if panStart == nil {
+                    panStart = CGSize(width: offset.width - v.translation.width, height: offset.height - v.translation.height)
+                }
                 guard let start = panStart else { return }
                 let proposed = CGSize(width: start.width + v.translation.width, height: start.height + v.translation.height)
                 // Sınır dışına taşarken direnç.
@@ -486,7 +498,9 @@ private struct VideoControls: View {
     @State private var duration: Double = 0
     @State private var scrubbing = false
     @State private var muted = false
-    @State private var observer: Any?
+    @State private var ended = false
+    /// Gözlemci, eklendiği oynatıcıyla birlikte saklanır: başka bir oynatıcıdan kaldırmak AVPlayer'ı çökertir.
+    @State private var observer: (player: AVPlayer, token: Any)?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -498,10 +512,10 @@ private struct VideoControls: View {
             .accessibilityLabel(playing ? "Duraklat" : "Oynat")
             Text(Self.time(progress * duration))
                 .font(.system(size: 12).monospacedDigit())
-            Slider(value: $progress, in: 0...1) { editing in
+            Slider(value: $progress, in: 0...1, onEditingChanged: { editing in
                 scrubbing = editing
-                if !editing { seek() }
-            }
+                if editing { ended = false } else { seek() }
+            })
             .tint(.white)
             .onChange(of: progress) { _, _ in if scrubbing { seek() } }
             .accessibilityLabel("Video konumu")
@@ -528,34 +542,42 @@ private struct VideoControls: View {
         .onDisappear(perform: detach)
         .onChange(of: ObjectIdentifier(player)) { _, _ in detach(); attach() }
         .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { note in
-            if (note.object as? AVPlayerItem) === player.currentItem { playing = false }
-        }
-    }
-
-    private func attach() {
-        muted = player.isMuted
-        playing = player.timeControlStatus != .paused
-        observer = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { t in
-            // Ana kuyrukta çağrılır; görünüm durumu ana aktörde güncellenir.
-            MainActor.assumeIsolated {
-                let d = player.currentItem?.duration.seconds ?? 0
-                if d.isFinite, d > 0 { duration = d }
-                if !scrubbing, duration > 0 { progress = min(max(t.seconds / duration, 0), 1) }
-                playing = player.timeControlStatus != .paused
+            if let item = note.object as? AVPlayerItem, item === player.currentItem {
+                playing = false
+                ended = true
             }
         }
     }
 
+    private func attach() {
+        guard observer == nil else { return }
+        muted = player.isMuted
+        playing = player.timeControlStatus != .paused
+        let p = player
+        let token = p.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { t in
+            // Ana kuyrukta çağrılır; görünüm durumu ana aktörde güncellenir.
+            MainActor.assumeIsolated {
+                let d = p.currentItem?.duration.seconds ?? 0
+                if d.isFinite, d > 0 { duration = d }
+                if !scrubbing, duration > 0 { progress = min(max(t.seconds / duration, 0), 1) }
+                playing = p.timeControlStatus != .paused
+            }
+        }
+        observer = (p, token)
+    }
+
     private func detach() {
-        if let observer { player.removeTimeObserver(observer) }
+        if let observer { observer.player.removeTimeObserver(observer.token) }
         observer = nil
     }
 
     private func toggle() {
         if player.timeControlStatus == .paused {
-            if let item = player.currentItem, item.duration.isNumeric, CMTimeCompare(player.currentTime(), item.duration) >= 0 {
+            if ended || (player.currentItem.map { $0.duration.isNumeric && CMTimeCompare(player.currentTime(), $0.duration) >= 0 } ?? false) {
                 player.seek(to: .zero)
+                progress = 0
             }
+            ended = false
             player.play()
             playing = true
         } else {
