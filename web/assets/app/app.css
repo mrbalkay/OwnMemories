@@ -180,7 +180,6 @@ svg.fill { fill: currentColor; stroke: none; }
 @keyframes fade { from { opacity: 0; } }
 .viewer.with-info { grid-template-columns: 1fr 380px; }
 .v-bar { grid-column: 1 / 2; display: flex; align-items: center; gap: 8px; padding: 10px 12px; z-index: 2; background: linear-gradient(rgba(0, 0, 0, .6), transparent); position: absolute; left: 0; right: 0; }
-.viewer.with-info .v-bar { right: 380px; }
 .v-title { flex: 1; font-size: 14px; opacity: .88; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v-tools { display: flex; gap: 2px; }
 .viewer .icon-btn:hover { background: rgba(255, 255, 255, .12); }
@@ -281,7 +280,7 @@ dialog.modal h3 { font-size: 14px; margin: 18px 0 6px; }
   .viewer.with-info .v-next { right: 16px; }
   .v-nav { display: none; }
   .selbar { left: 8px; right: 8px; top: 8px; }
-  .sel-actions .btn span { display: none; }
+  .sel-actions .btn span:not(.ic) { display: none; }
   .story-media img, .story-media video { border-radius: 0; max-height: 100dvh; }
 }
 @media (prefers-reduced-motion: reduce) {

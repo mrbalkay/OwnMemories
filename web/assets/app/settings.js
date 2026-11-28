@@ -5,7 +5,7 @@ import { THEMES, DEFAULT_THEME, currentTheme, setTheme } from './theme.js';
 
 const PREVIEW = {
   // Her temanın küçük, kendi renkleriyle çizilmiş önizlemesi (yalnızca CSS; gerçek görsel gerekmez).
-  sinema: ['#0b0b0e', '#1c1a22', '#e8c27a'],
+  sinema: ['#0a0b0e', '#1e2129', '#eceae6'],
   galeri: ['#f6f4f0', '#ffffff', '#2c4a5a'],
   yerel: ['#f2f2f7', '#ffffff', '#0a7cff'],
 };

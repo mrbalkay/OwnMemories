@@ -45,6 +45,9 @@ export class Timeline {
       if (w && Math.abs(w - this.lastWidth) > 1) { this.lastWidth = w; this.onResize(); }
     });
     this.ro.observe(this.wrap);
+    // Tema değişince boşluk/kenar değerleri değişir: satırları yeniden diz.
+    this.onTheme = () => requestAnimationFrame(() => { this.lastWidth = this.wrap.clientWidth; this.onResize(); });
+    document.addEventListener('om:theme', this.onTheme);
     this.io = new IntersectionObserver((es) => { if (!this.paused && es.some((e) => e.isIntersecting)) this.load(); }, { rootMargin: '1200px' });
     this.io.observe(this.sentinel);
     this.buildScrubber();
@@ -87,6 +90,7 @@ export class Timeline {
   }
 
   destroy() {
+    document.removeEventListener('om:theme', this.onTheme);
     window.removeEventListener('resize', this.onResize);
     this.ro?.disconnect();
     this.io?.disconnect();

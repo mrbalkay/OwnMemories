@@ -41,9 +41,12 @@ final class LibraryModel: ObservableObject {
     /// Yerinde yenileme: şu an yüklü aralığı (en eski yüklü öğenin tarihine kadar) baştan yeniden çeker
     /// ve listeyi tek seferde değiştirir. Yeni yedeklenen fotoğraflar tarih sırasındaki yerlerine girer;
     /// liste boşalmadığı için kaydırma konumu korunur.
-    func refreshInPlace(client: APIClient?) async {
-        guard let client, !loading else { return }
-        guard let oldest = assets.last?.takenAt else { await reload(client: client); return }
+    /// Başka bir yükleme sürdüğü için çalışamadıysa false döner (çağıran sonra tekrar dener).
+    @discardableResult
+    func refreshInPlace(client: APIClient?) async -> Bool {
+        guard let client else { return true }
+        guard !loading else { return false }
+        guard let oldest = assets.last?.takenAt else { await reload(client: client); return true }
         loading = true
         defer { loading = false }
         var fresh: [Asset] = []
@@ -67,6 +70,7 @@ final class LibraryModel: ObservableObject {
         } catch {
             // Sessiz: bir sonraki yüklemede ya da aşağı çekince tekrar denenir.
         }
+        return true
     }
 
     func update(_ asset: Asset) {
@@ -87,6 +91,8 @@ struct LibraryView: View {
     @StateObject private var model = LibraryModel()
     /// Yedekleme sürerken yeni yüklenenleri listeye getiren, sık istek atmamak için ertelenmiş yenileme.
     @State private var pendingRefresh: Task<Void, Never>?
+    /// Yenileme sürerken yeni bir yükleme biterse işaretlenir; tur bitince bir kez daha yenilenir.
+    @State private var refreshDirty = false
     @State private var viewing: Asset?
     @State private var story: Memory?
 
@@ -160,6 +166,10 @@ struct LibraryView: View {
                 guard new > old else { return }
                 scheduleRefresh()
             }
+            .onChange(of: engine.isRunning) { was, now in
+                // Yedekleme bitti: son yüklenenlerin de listede olduğundan emin ol.
+                if was, !now { scheduleRefresh(delay: 1) }
+            }
             .onChange(of: scenePhase) { _, phase in
                 // Arka planda yüklenenler: uygulamaya dönünce listeyi güncelle.
                 if phase == .active, !model.assets.isEmpty { scheduleRefresh(delay: 0.5) }
@@ -207,10 +217,23 @@ struct LibraryView: View {
     /// Art arda tamamlanan yüklemeleri birleştirir: ilk tamamlanmadan kısa süre sonra bir kez yeniler;
     /// o sırada gelenler bir sonraki tura kalır (yükleme sürdükçe birkaç saniyede bir güncellenir).
     private func scheduleRefresh(delay: Double = 2.5) {
+        refreshDirty = true
         guard pendingRefresh == nil else { return }
         pendingRefresh = Task {
-            try? await Task.sleep(for: .seconds(delay))
-            await model.refreshInPlace(client: session.client)
+            var wait = delay
+            var skipped = 0
+            while refreshDirty && skipped < 20 {
+                try? await Task.sleep(for: .seconds(wait))
+                refreshDirty = false
+                if await model.refreshInPlace(client: session.client) {
+                    wait = 2.5
+                } else {
+                    // Sayfa yükleniyordu: kısa süre sonra yeniden dene.
+                    refreshDirty = true
+                    skipped += 1
+                    wait = 1
+                }
+            }
             pendingRefresh = nil
         }
     }
