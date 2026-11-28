@@ -119,6 +119,9 @@ function asset_ingest(int $userId, string $srcPath, array $in): array
         throw $e;
     }
     job_enqueue('render', ['asset_id' => $id], $in['source'] === 'takeout' ? 7 : 3);
+    if ($lat !== null && $lng !== null && function_exists('places_enqueue_asset')) {
+        places_enqueue_asset($id);
+    }
     return ['status' => 'created', 'asset_id' => $id];
 }
 
@@ -177,6 +180,8 @@ function asset_purge(int $userId, array $ids): int
         db_exec('DELETE FROM asset_people WHERE asset_id = ?', [$id]);
         people_purge_asset($id);
         asset_embedding_delete($id);
+        asset_place_delete($id);
+        cleanup_purge_asset($id);
         db_exec('UPDATE assets SET live_pair_id = NULL WHERE live_pair_id = ?', [$id]);
         db_exec('UPDATE assets SET edited_of_id = NULL WHERE edited_of_id = ?', [$id]);
         db_exec('UPDATE albums SET cover_asset_id = NULL WHERE cover_asset_id = ?', [$id]);
@@ -202,6 +207,21 @@ function asset_embedding_delete(string $id): void
         if (($e->errorInfo[1] ?? 0) !== 1146) { // ER_NO_SUCH_TABLE
             throw $e;
         }
+    }
+}
+
+/** Yer satırını siler (asset_places henüz kurulmadıysa sessizce geçer). */
+function asset_place_delete(string $id): void
+{
+    try {
+        db_exec('DELETE FROM asset_places WHERE asset_id = ?', [$id]);
+    } catch (PDOException $e) {
+        if (($e->errorInfo[1] ?? 0) !== 1146) {
+            throw $e;
+        }
+    }
+    if (function_exists('places_cache_forget')) {
+        places_cache_forget($id);
     }
 }
 
@@ -246,6 +266,7 @@ function asset_to_json(array $a): array
         'latitude' => $a['latitude'] !== null ? (float) $a['latitude'] : null,
         'longitude' => $a['longitude'] !== null ? (float) $a['longitude'] : null,
         'altitude' => $a['altitude'] !== null ? (float) $a['altitude'] : null,
+        'place' => $a['latitude'] !== null && function_exists('place_json') ? place_json(asset_place_row((string) $a['id']), $a) : null,
         'camera_make' => $a['camera_make'],
         'camera_model' => $a['camera_model'],
         'lens' => $a['lens'],

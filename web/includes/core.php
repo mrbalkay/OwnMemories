@@ -18,7 +18,7 @@ if (!defined('OM_VERSION')) {
 date_default_timezone_set('UTC');
 mb_internal_encoding('UTF-8');
 
-foreach (['functions', 'i18n', 'layout', 'migrate', 'tools', 'auth', 'media', 'storage', 'jobs', 'assets', 'albums', 'takeout', 'importer', 'uploads', 'api', 'serve', 'admin', 'devices', 'memories', 'search', 'people'] as $__lib) {
+foreach (['functions', 'layout', 'migrate', 'tools', 'auth', 'media', 'storage', 'jobs', 'assets', 'albums', 'takeout', 'importer', 'uploads', 'api', 'serve', 'admin', 'devices', 'memories', 'search', 'people', 'backup', 'places', 'i18n', 'cleanup'] as $__lib) {
     $__f = __DIR__ . '/' . $__lib . '.php';
     if (is_file($__f)) {
         require_once $__f;

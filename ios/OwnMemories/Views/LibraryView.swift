@@ -162,11 +162,22 @@ struct LibraryView: View {
                                 .accessibilityAddTraits(.isButton)
                                 .accessibilityHint("Takvimi açar")
                         }
-                        Text(DayGrouping.title(for: section.id))
-                            .id("day-" + section.id)
-                            .font(theme.dayFont)
-                            .foregroundStyle(theme.name == .galeri ? theme.ink : theme.ink.opacity(0.92))
-                            .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(DayGrouping.title(for: section.id))
+                                .font(theme.dayFont)
+                                .foregroundStyle(theme.name == .galeri ? theme.ink : theme.ink.opacity(0.92))
+                            // Günün yeri (sunucu GPS'ten çevrimdışı bulur): "Moda, Kadıköy"
+                            if let place = DayGrouping.place(for: section.assets) {
+                                Text(place)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(theme.muted)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .id("day-" + section.id)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityElement(children: .combine)
+                        .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
                         LazyVGrid(columns: columns, spacing: theme.gridSpacing) {
                             ForEach(section.assets) { asset in
                                 Button { viewing = asset } label: { Tile(asset: asset) }

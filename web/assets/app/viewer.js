@@ -233,7 +233,14 @@ class Viewer {
     if (a.camera_model || a.camera_make) row(t('camera'), [a.camera_make, a.camera_model].filter(Boolean).join(' '), a.lens ? h('div', { class: 'muted small' }, a.lens) : null);
     if (a.latitude !== null) {
       const osm = `https://www.openstreetmap.org/?mlat=${a.latitude}&mlon=${a.longitude}#map=15/${a.latitude}/${a.longitude}`;
-      row(t('location'), `${a.latitude.toFixed(5)}, ${a.longitude.toFixed(5)}`, h('div', {}, h('a', { href: osm, target: '_blank', rel: 'noopener' }, t('map_open'))));
+      const coords = `${a.latitude.toFixed(5)}, ${a.longitude.toFixed(5)}`;
+      const p = a.place;
+      // Yer adı (sunucuda çevrimdışı bulunur): "Moda, Kadıköy, İstanbul, Türkiye"; koordinatlar küçük ve ikincil.
+      const name = p
+        ? (own ? h('a', { class: 'i-place', href: `#/place/${p.id}`, title: t('open_place', { name: p.city }) }, p.label) : h('span', { class: 'i-place' }, p.label))
+        : null;
+      row(t('location'), ...[name, h('div', { class: 'i-coords muted small' }, h('span', { class: 'i-coords-num', 'aria-label': `${t('coords')}: ${coords}` }, coords), ' · ',
+        h('a', { href: osm, target: '_blank', rel: 'noopener' }, t('map_open')))].filter(Boolean));
     } else {
       row(t('location'), h('span', { class: 'muted' }, t('no_location')));
     }

@@ -10,17 +10,24 @@ struct MapPointsResponse: Decodable {
 /// POST /v1/assets/lookup → kimliklerle öğeler (istenen sırada).
 private struct LookupResponse: Decodable { let assets: [Asset] }
 
-/// Harita sekmesi: fotoğraflar Apple Haritalar üzerinde, Apple Fotoğraflar gibi küçük resimli kümeler.
-/// Kümeye dokununca yakınlaşır; yeterince yakındaysa kümedeki fotoğraflar görüntüleyicide açılır.
+/// Harita sekmesi: Harita | Yerler bölümlü denetimi.
+/// Harita: fotoğraflar Apple Haritalar üzerinde, Apple Fotoğraflar gibi küçük resimli kümeler. Kümeye dokununca
+/// yakınlaşır; yeterince yakındaysa kümedeki fotoğraflar görüntüleyicide açılır.
+/// Yerler: şehir kartları (ülkelere göre) → o yerin fotoğrafları (PlacesView.swift).
 struct MapScreen: View {
     @EnvironmentObject private var session: Session
     @Environment(\.theme) private var theme
+    @AppStorage("om.map.mode") private var mode: Mode = .map
+    @StateObject private var places = PlacesModel()
     @State private var points: [MapPointsResponse.Point] = []
     @State private var state: LoadState = .loading
     @State private var viewing: ViewerTarget?
     @State private var opening = false
 
     enum LoadState { case loading, ready, empty, failed }
+    enum Mode: String { case map, places }
+    /// Cam başlığın yüksekliği (başlık + bölümlü denetim): Yerler listesi bunun altından başlar.
+    private let headerHeight: CGFloat = 118
 
     struct ViewerTarget: Identifiable {
         let assets: [Asset]
@@ -32,19 +39,23 @@ struct MapScreen: View {
         NavigationStack {
             ZStack(alignment: .top) {
                 theme.canvas.ignoresSafeArea()
-                switch state {
-                case .ready:
-                    // Harita cam başlığın ve sekme çubuğunun altına uzanır; kenar boşlukları PhotoMap.padding'de.
-                    PhotoMap(points: points, theme: theme) { ids in open(ids) }
-                        .ignoresSafeArea()
-                case .loading:
-                    ProgressView().tint(theme.muted).frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .empty:
-                    message("Konum bilgisi olan fotoğraf yok.", detail: "Konumu kayıtlı fotoğraflar yedeklendikçe burada görünür.")
-                case .failed:
-                    VStack(spacing: 12) {
-                        message("Harita yüklenemedi.", detail: "Sunucuya ulaşılamıyor olabilir.")
-                        Button("Tekrar dene") { Task { await load() } }
+                if mode == .places {
+                    PlacesListView(model: places, topInset: headerHeight)
+                } else {
+                    switch state {
+                    case .ready:
+                        // Harita cam başlığın ve sekme çubuğunun altına uzanır; kenar boşlukları PhotoMap.padding'de.
+                        PhotoMap(points: points, theme: theme) { ids in open(ids) }
+                            .ignoresSafeArea()
+                    case .loading:
+                        ProgressView().tint(theme.muted).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .empty:
+                        message("Konum bilgisi olan fotoğraf yok.", detail: "Konumu kayıtlı fotoğraflar yedeklendikçe burada görünür.")
+                    case .failed:
+                        VStack(spacing: 12) {
+                            message("Harita yüklenemedi.", detail: "Sunucuya ulaşılamıyor olabilir.")
+                            Button("Tekrar dene") { Task { await load() } }
+                        }
                     }
                 }
                 header
@@ -56,6 +67,11 @@ struct MapScreen: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: PlaceSummary.self) { p in
+                PlaceView(place: p)
+                    .environmentObject(session)
+                    .environment(\.theme, theme)
+            }
             .task { if points.isEmpty { await load() } }
             .fullScreenCover(item: $viewing) { t in
                 AssetViewer(assets: t.assets, startId: t.startId, onChange: { _ in })
@@ -65,19 +81,32 @@ struct MapScreen: View {
         }
     }
 
-    /// Haritanın üstünde temaya uygun başlık şeridi (cam).
+    /// Haritanın üstünde temaya uygun başlık şeridi (cam): başlık, sayı ve Harita | Yerler denetimi.
     private var header: some View {
-        HStack {
-            Text("Harita")
-                .font(theme.largeTitle)
-                .foregroundStyle(theme.ink)
-            Spacer()
-            if state == .ready {
-                Text("\(points.count) fotoğraf")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(theme.muted)
-                    .monospacedDigit()
+        VStack(spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(mode == .places ? "Yerler" : "Harita")
+                    .font(theme.largeTitle)
+                    .foregroundStyle(theme.ink)
+                Spacer()
+                if mode == .map && state == .ready {
+                    Text("\(points.count) fotoğraf")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(theme.muted)
+                        .monospacedDigit()
+                } else if mode == .places && places.state == .ready {
+                    Text("\(places.placeCount) yer · \(places.groups.count) ülke")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(theme.muted)
+                        .monospacedDigit()
+                }
             }
+            Picker("Görünüm", selection: $mode) {
+                Text("Harita").tag(Mode.map)
+                Text("Yerler").tag(Mode.places)
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("Görünüm: Harita ya da Yerler")
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)
@@ -269,7 +298,7 @@ private struct PhotoMap: UIViewRepresentable {
     /// Cam başlık (üst güvenli alan + ~70 pt) ve sekme çubuğu (alt güvenli alan) altında kalmayacak boşluk.
     static func padding(for map: MKMapView) -> UIEdgeInsets {
         let s = map.safeAreaInsets
-        return UIEdgeInsets(top: s.top + 80, left: 50, bottom: s.bottom + 40, right: 50)
+        return UIEdgeInsets(top: s.top + 124, left: 50, bottom: s.bottom + 40, right: 50)   // cam başlık + Harita | Yerler denetimi
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }

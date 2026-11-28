@@ -1,0 +1,11 @@
+FR.11.78	Yvelines	Yvelines	2967196
+FR.11.75	Paris	Paris	2968815
+IT.07.RM	Città metropolitana di Roma Capitale	Citta metropolitana di Roma Capitale	3169069
+TR.68.7732084	Çankaya	Cankaya	7732084
+TR.34.7732501	Kadıköy	Kadikoey	7732501
+TR.34.7732589	Üsküdar	UEskuedar	7732589
+TR.35.7732725	Konak	Konak	7732725
+TR.50.7732945	Nevsehir	Nevsehir	7732945
+TR.50.7732946	Ürgüp	UErguep	7732946
+TR.34.7733237	Fatih	Fatih	7733237
+TR.17.7910944	Bozcaada	Bozcaada	7910944

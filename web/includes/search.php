@@ -227,7 +227,7 @@ function api_search(array $user, array $q): array
             }
             $page = array_slice($list, $offset, $limit);
             $next = $offset + $limit < count($list) ? $offset + $limit : null;
-            return api_ok(['mode' => 'smart', 'assets' => array_map('asset_to_json', $page), 'next_offset' => $next, 'total' => count($list), 'status' => $status]);
+            return api_ok(['mode' => 'smart', 'assets' => assets_json($page), 'next_offset' => $next, 'total' => count($list), 'status' => $status]);
         }
     }
     // Metin araması (yedek): tarihe göre yeniden eskiye.
@@ -241,7 +241,7 @@ function api_search(array $user, array $q): array
     $total = $offset === 0 && $next === null ? count($rows) : (int) db_val("SELECT COUNT(*) FROM assets a WHERE $where", $args);
     // Hizmet yanıt verdi ama ilgi eşiğini geçen yok ve metin eşleşmesi de yok: "akıllı arama: sonuç yok".
     $mode = $ranked !== null && $total === 0 ? 'smart' : 'text';
-    return api_ok(['mode' => $mode, 'assets' => array_map('asset_to_json', $rows), 'next_offset' => $next, 'total' => $total, 'status' => $status]);
+    return api_ok(['mode' => $mode, 'assets' => assets_json($rows), 'next_offset' => $next, 'total' => $total, 'status' => $status]);
 }
 
 /**

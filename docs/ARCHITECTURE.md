@@ -71,7 +71,12 @@ tests/                php tests/run.php
 - `jobs` — iş kuyruğu (`render`, `import_step`); 3 deneme, sonra `failed`
 - `imports`, `import_items` — her içe aktarma ve her medya dosyasının sonucu (`imported`/`duplicate`/`no_metadata`/`skipped_trashed`/`failed`)
 - `uploads`, `site_settings`, `rate_limits`, `audit_log`
+- `geo_places` — GeoNames yerleşimleri (id = geonameid, name, name_tr (Türkçe ad: "Roma", "İstanbul"), feature_code, country_code, admin1/admin2 kod + ad (il/eyalet, ilçe), lat/lng, population, cell = 0,1°'lik ızgara hücresi, indeksli). `bin/geo-import.php` doldurur (§8)
+- `geo_countries` — code PK, name (İngilizce), name_tr (ICU'dan Türkçe: "Fransa")
+- `asset_places` — asset_id PK, user_id, place_id (en yakın yer), city_id (şehir düzeyi; Yerler sayfası ve `place=` süzgeci bunu kullanır), name/city/district (yalnız TR, ilçe)/admin1/country/country_code/region, distance_km, lat/lng (bulunurken kullanılan konum: değişince yeniden bulunur), search_key (katlanmış adlar, metin araması), geo_version. Konumu olup yakında yer olmayan asset için place_id NULL satır (işlendi)
 - `asset_embeddings` — asset_id PK, user_id, model (ör. `ViT-B-16-SigLIP2__webli`), vec (MEDIUMBLOB, float32 little-endian, L2-normalize, 768 boyut = 3072 bayt), created_at. ownmemories-ml yazar; asset kalıcı silinince PHP siler (§7)
+- `asset_quality` (009) — asset_id PK, user_id, phash (BIGINT UNSIGNED, 64 bit DCT algısal özet), sharpness (Laplace varyansı), brightness (0..255), color (VARBINARY(48), 4×4 ortalama RGB), is_screenshot, algo, computed_at. ownmemories-ml yazar; asset kalıcı silinince PHP siler (§8)
+- `cleanup_dismissed` (009) — (user_id, kind, item_key) PK, asset_ids, created_at: Temizlik'te "Bunlar farklı" / "Bu iyi" ile gizlenen öneriler (§8)
 
 ### Yineleme kuralları
 1. Aynı kullanıcıda aynı SHA-1 → yinelenen.
@@ -101,8 +106,11 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
  "latitude":38.4192,"longitude":27.1287,"altitude":12.0,"camera_make":"Apple","camera_model":"iPhone 8","lens":null,
  "description":null,"is_favorite":false,"is_archived":false,"shared_from_others":false,"trashed_at":null,
  "source":"takeout","live_pair_id":null,"edited_of_id":null,"thumb_state":"ready",
+ "place":{"id":311046,"name":"Alsancak","city":"İzmir","district":"Konak","admin1":"İzmir","country":"Türkiye",
+          "country_code":"TR","region":null,"label":"Alsancak, Konak, İzmir, Türkiye","short":"Alsancak, Konak"},
  "updated_at":"2026-11-26T10:00:00Z","version":42}
 ```
+`place` konum yoksa, yer verisi kurulu değilse ya da yer henüz bulunmadıysa `null`; `place.id` şehir düzeyindeki yerin kimliğidir (§8).
 `GET assets/{id}` ek olarak `access` (`own`/`view`), `people[]`, `albums[{id,title}]` ve (paylaşılan ise) `owner_name` döner.
 
 ### Album nesnesi
@@ -121,10 +129,10 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | POST | `auth/login` | `{email,password,device_name,platform}` | `{token,user}` (10 deneme/15 dk) |
 | POST | `auth/logout` | – | `{ok}` (token silinir / web oturumu kapanır) |
 | GET | `me` | – | `{user}` |
-| GET | `assets` | `limit≤500 (200)`, `before` (ISO), `before_id`, `favorite=1`, `archived=1`, `trashed=1`, `album=<id>`, `person=<id>` (kendi kişisi; değilse 404), `q` (dosya adı/açıklama/kamera/kişi adı), `from`, `to`, `has_location=1`, `type=photo\|video` | `{assets:[…], next:{before,before_id}\|null}` — `taken_at DESC, id DESC`, anahtar kümesi sayfalama |
+| GET | `assets` | `limit≤500 (200)`, `before` (ISO), `before_id`, `favorite=1`, `archived=1`, `trashed=1`, `album=<id>`, `person=<id>` (kendi kişisi; değilse 404), `place=<şehir id>` (§8; sayı değilse 404), `q` (dosya adı/açıklama/kamera/kişi adı/yer adı — yer adları Türkçe büyük/küçük harf ve aksan duyarsız: "kadikoy" = "KADIKÖY"), `from`, `to`, `has_location=1`, `type=photo\|video` | `{assets:[…], next:{before,before_id}\|null}` — `taken_at DESC, id DESC`, anahtar kümesi sayfalama |
 | GET | `assets/summary` | aynı süzgeçler | `{months:[{month:"2019-07",count}]}` (ay, yerel çekim gününe göre) |
 | GET | `assets/days` | süzgeçler + `month=YYYY-MM` (zorunlu; hatalıysa 422) | `{month, days:[{day:"2019-07-14",count,cover_asset_id,before}]}` — yerel güne göre (`taken_at + taken_tz_offset`, yoksa UTC; gün başlıklarıyla aynı), yeni gün önce; `before` o güne atlamak için `assets?before=` imleci (günün en yeni `taken_at`'i + 1 sn). Web takvimi kullanır. |
-| GET | `assets/map` | süzgeçler + `bbox=minLng,minLat,maxLng,maxLat` | `{points:[{id,lat,lng}]}` (≤ 5000) |
+| GET | `assets/map` | süzgeçler + `bbox=minLng,minLat,maxLng,maxLat` | `{points:[{id,lat,lng,city?,place?}]}` (≤ 5000; `city`/`place` yer bulunduysa — harita ipuçları) |
 | POST | `assets/check` | `{sha1:[…≤500]}` | `{missing:[…]}` (silinmişler "var" sayılır) |
 | POST | `assets/trash` · `assets/restore` · `assets/purge` | `{ids:[…≤1000]}` | `{count}` |
 | GET | `assets/{id}` | – | `{asset}` |
@@ -144,7 +152,9 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | DELETE | `albums/{id}/members/{userId}` | – | `{ok}` (sahip çıkarır veya üye ayrılır) |
 | GET | `users/lookup?email=` | – | `{exists,name}` |
 | GET | `assets/random?count=12` | – | `{assets:[…]}` — son 30 gün dışındaki rastgele fotoğraflar (widget) |
-| GET | `memories?date=YYYY-MM-DD` | (varsayılan: kullanıcının bugünü) | `{date, memories:[{id,kind,title,years_ago,date,count,cover_asset_id,asset_ids,assets}]}` — `kind`: `on_this_day` / `this_week` (bugün yoksa ±3 gün) / `favorites` |
+| GET | `memories?date=YYYY-MM-DD` | (varsayılan: kullanıcının bugünü) | `{date, memories:[{id,kind,title,place,years_ago,date,count,cover_asset_id,asset_ids,assets}]}` — `kind`: `on_this_day` / `this_week` (bugün yoksa ±3 gün) / `trip` (yıldönümü bugünün ±3 gününe düşen gezi; aynı yılın günlük anısının yerini alır, `end_date`, `days`) / `favorites`. Başlıklar yer adlarıyla Türkçe ekli kurulur (§8) |
+| GET | `places` | `favorite=1`, `type` | `{places:[{id,name,admin1,country,country_code,region,count,cover_asset_id,lat,lng}], ready, pending}` — şehir düzeyinde yerler (zaman çizelgesi görünürlük kuralları), sayıya göre azalan; kapak: fotoğraf > favori > en yeni. `ready`: yer verisi kurulu mu; `pending`: yeri bekleyen konumlu öğe |
+| GET | `places/{id}` | – | `{place:{…, first_at, last_at}}`; kullanıcının o yerde öğesi yoksa 404 |
 | POST | `devices/report` | `{device_id,name,model,os_version,app_version,pending,uploaded_total,last_backup_at,last_error}` | `{ok,server_time}` — iOS yedekleme durumu (Yönetim → Genel bakış) |
 | GET | `search` | `q` (≤ 200 karakter), `from`, `to` (ISO), `favorite=1`, `sort=relevance\|date` (varsayılan relevance), `limit≤200 (60)`, `offset` | `{mode:"smart"\|"text", assets:[…], next_offset:int\|null, total, status:{indexed,total,pending,model,ready}\|null}` — akıllı mod: ML hizmetinden (config `ml.url`, varsayılan `http://127.0.0.1:8765`, zaman aşımı `ml.timeout` 3 sn, isteğe bağlı `ml.min_score`) en fazla 500 sıralı kimlik alınır; zaman çizelgesi görünürlük kurallarıyla (yalnız kendi kütüphanesi, çöp/arşiv hariç, tek kare kuralı) süzülür, sıra korunur. Dosya adı/açıklama/kamera/kişi eşleşmeleri öne alınır (hibrit). Sorguda adlandırılmış (gizli olmayan) bir kişinin adı tam sözcük olarak geçerse (`Ali plajda`; büyük/küçük harf ve i/ı duyarsız, en uzun ad) o kişinin fotoğrafları en başa gelir, kendi aralarında kalan sözcüklerle (`plajda`) akıllı sırada; diğer sonuçlar ardından korunur (ör. `Deniz` adlı kişi varken `deniz kenarı` aramasında manzaralar kaybolmaz). Hizmet yok, hata ya da sonuç yoksa `assets?q=` ile aynı metin araması (`mode:"text"`, tarihe göre); hizmet yanıt verip ilgi eşiğini geçen olmadığında metin araması da boşsa `mode:"smart"`, boş liste. Boş `q` → boş liste. `status` yalnız ilk sayfada (offset=0) |
 | GET | `search/status` | – | ML `/status` vekili: `{available:true,indexed,total,pending,model,ready}` ya da `{available:false}` |
@@ -159,7 +169,25 @@ Takeout sidecar `photoTakenTime` > EXIF `DateTimeOriginal` (+`OffsetTimeOriginal
 | DELETE | `assets/{id}/people/{personId}` | – | aynı yük — etiket silinir; kişinin bu fotoğraftaki yüzleri ayrılır ve reddedilir |
 | POST | `assets/people` | `{ids:[…≤500], person_id? \| name?}` | `{count, person}` — toplu elle etiket (yalnız kendi asset'leri sayılır; hiçbiri kendisinin değilse 404 ve kişi oluşturulmaz) |
 | PATCH | `faces/{id}` | `{person_id:int}` · `{name:string}` · `{person_id:null}` | asset'in kişi yükü — atama `assigned_by='user'` (o kişiye ret varsa kalkar); `null` ayırır ve `rejected_person_id` yapar |
+| GET | `cleanup` | – | `{ml:{available,indexed}, analysis:{analyzed,total}, groups:[{id,reason:"duplicate"\|"similar",keep_id,keep_reasons:[favorite\|resolution\|sharpest\|location\|original],bytes,taken_at,assets:[Asset+quality]}], blurry:[…], dark:[…+why:"dark"\|"bright"], screenshots:[…], short_videos:[…], stats:{potential_bytes,groups,group_assets,blurry,blurry_bytes,dark,dark_bytes,screenshots,screenshots_bytes,short_videos,short_videos_bytes}}` — Temizlik (§8). Listeler en çok 300 öğe (sayılar `stats`'ta tam); ML yoksa `groups` boş, listeler yine dolu |
+| POST | `cleanup/resolve` | `{keep:[…], trash:[…]}` ya da `{groups:[{keep,trash},…]}` (toplam ≤ 1000) | `{trashed, freed_bytes, skipped}` — yalnız **çöpe taşır** (asla kalıcı silmez); Live Photo fotoğrafı giderse videosu da; ≥ 2 tutulan küme "farklı" olarak hatırlanır; aynı kimlik (bir grupta ya da gruplar arasında) hem keep hem trash ise 422; `keep` dolu ama hiçbiri artık yerinde değilse (eski sayfa / başka cihazda silinmiş) o parça atlanır (`skipped`), grubun son kopyaları çöpe gitmez |
+| POST | `cleanup/dismiss` | `{kind:"group"\|"blurry"\|"dark"\|"screenshot"\|"video", ids:[…]}` | `{dismissed}` — "Bunlar farklı" (grup: üyeleri bu kümenin alt kümesi olan grup bir daha gelmez; yeni bir üye katılırsa yeniden görünür) / "Bu iyi" (tek öğe) |
+| POST | `cleanup/reset` | – | `{restored}` — gizlenen tüm öneriler geri gelir |
 | GET | `faces/{id}/thumb` | – | 256×256 JPEG yüz kırpması (kutunun uzun kenarı + her yana %35 dolgu, görüntü içinde kalır), `private, max-age=31536000, immutable`; önizleme yoksa 404 |
+| GET | `admin/backup` | – (yalnızca yönetici; diğerlerine 403) | `{backup:{configured, level:"ok\|warn\|error\|unconfigured", targets:[{id,type,label,location,last_status,last_success_at,last_failure_at,snapshot_id,snapshot_count,repo_size,data_added,error,last_check_at,last_check_ok,health:{level,reason}}], next_run_at, running, requested, can_request, last_run, restore_test, schedule, retention, include_derived, setup_command}}` |
+| POST | `admin/backup/run` | – (yalnızca yönetici; oturumda CSRF) | 202 `{backup}` — "Şimdi yedekle": istek dosyası yazar; zaten sıradaysa/çalışıyorsa yeni istek oluşturmaz. Kurulmamışsa 409 `backup_not_configured` |
+
+
+**Sunucu yedeği:** `server/backup.sh` (root, restic) sonucu `/var/lib/ownmemories/backup-status.json` dosyasına yazar
+(root:www-data 0640, gizli bilgi içermez); PHP (`web/includes/backup.php`) yalnızca okur ve sağlığı hesaplar (yeşil: son başarı
+≤ 30 sa; sarı: 30–48 sa, son deneme hatalı veya denetim sorunlu; kırmızı: 48 sa'ten eski/hiç yok). "Şimdi yedekle"
+`/var/lib/ownmemories/backup-spool/run-request` dosyasını yazar (root:www-data 2770); `ownmemories-backup.path` birimi
+yedeği root olarak başlatır, `backup.sh` dosyayı ilk iş siler. Ayarlar ve anahtarlar yalnızca `/etc/ownmemories/backup.env`
+(root 0600). Yollar `config.php` → `backup.status_file` / `backup.spool_dir` ile değiştirilebilir (geliştirme/test).
+Güvenlik: `config.php` www-data tarafından yazılabildiği için root betikler onu **sahibinin yetkisiyle** (`setpriv`)
+değerlendirir ve değerleri doğrular (satır sonu/denetim karakteri yok; mysql ayar dosyasına seçenek sokulamaz) — web
+uygulamasını ele geçiren biri "Şimdi yedekle" ile root kodu çalıştıramaz. Panelin "çalışıyor" bilgisi PID'in komut satırında
+`backup` geçtiğinde geçerlidir (yeniden başlatma sonrası PID yeniden kullanımı).
 
 **Person nesnesi:** `{"id":12,"name":"Ayşe"|null,"count":42,"cover_face_id":881|null,"cover_asset_id":"uuid"|null,"hidden":false}` —
 `count` çöpte olmayan fotoğraflar; kapak: seçilmiş `cover_face_id` (hâlâ bu kişinin yüzüyse), yoksa en yüksek puanlı yüz, yüz yoksa
@@ -177,6 +205,8 @@ Aynı `#edited` kaynağının yeni hali gelince eski düzenlenmiş kopya çöpe 
 
 ## 5. İş kuyruğu ve cron
 
+- `geocode` — tek asset'in yerini bulur (konumlu yükleme / içe aktarma ve konum değişikliği sonrası; yer verisi yoksa iş koyulmaz).
+- `geocode_backfill` — eksik, konumu değişmiş ya da eski veri sürümüyle işlenmiş asset'leri id sırasıyla 400'lük gruplar halinde işler; süresi dolunca `after` imleciyle kendini yeniden kuyruğa koyar (kaldığı yerden sürer). `geo-import` veri değişince ve Yönetim → Sistem'deki düğme koyar.
 - `render` — küçük resim + önizleme (vipsthumbnail → Imagick → GD; video için ffmpeg karesi). Araç yoksa `placeholder` ve iş `skipped`.
 - `import_step` — Takeout içe aktarmasını dilim dilim ilerletir ve kendini yeniden kuyruğa koyar.
 - Tüketiciler: Ubuntu'da `bin/worker.php` (systemd), hostingde `bin/cron.php` veya `web/cron.php?key=…` (dakikalık).
@@ -266,9 +296,10 @@ birebir aynı ön işleme korundu.
 | POST | `/search` | `{user_id, text, limit≤500 (100), min_score:float\|null}` | `{results:[{id, score}], model, took_ms}` — skora göre azalan. Model yüklenmeden 503, hatalı istek 400 |
 | GET | `/status?user_id=N` | – | `{indexed, total, pending, model, ready}` — `total`: kullanıcının `thumb_state='ready'` asset sayısı; `ready`: model hazır ve en az bir vektör var |
 | GET | `/faces/status?user_id=N` | – | `{available, model, ready, scanned, total, faces, people[, error]}` — `total`: `thumb_state='ready'`, çöpte olmayan, canlı fotoğrafın video yarısı olmayan asset; `scanned`: bunlardan `face_scans` satırı olan (bu yüz modeliyle); `people`: gizli olmayan kişiler; `available`/`ready`: yüz modeli yüklü (ve tablolar var). 3 sn önbellek |
+| POST | `/cleanup/groups` | `{user_id}` | `{groups:[{assets:[id…],reason:"duplicate"\|"similar",min_sim,max_hamming}], analyzed, total, indexed, took_ms, cached}` — benzer gruplar (§8); kütüphane değişmedikçe bellekten. `asset_quality` yoksa 503 |
 | POST | `/faces/recluster` | `{user_id}` | `{queued:true, available:true}` — kullanıcı için tam kümeleme geçişini kuyruğa alır (dizinleyici iş parçacığında, birkaç saniye içinde). Yüz modeli yoksa `{queued:false, available:false}` |
 
-`/health` ayrıca `faces: bool` (yüz modeli yüklü mü) döndürür.
+`/health` ayrıca `faces: bool` (yüz modeli yüklü mü) ve `cleanup: bool` (`asset_quality` tablosu var mı) döndürür.
 
 ### Yüz tanıma (Kişiler)
 
@@ -346,10 +377,102 @@ verilirse PHP gibi MySQL Unix soketi kullanılır.
 ### Dosyalar
 
 `ml/ownmemories_ml/`: `service.py` (HTTP + dizinleyici + bellek içi dizin), `model.py` (ön işleme, ONNX),
-`faces.py` (yüz algılama/hizalama/tanıma), `clustering.py` (yüz kümeleme),
+`faces.py` (yüz algılama/hizalama/tanıma), `clustering.py` (yüz kümeleme), `cleanup.py` (Temizlik: kalite ölçümleri, benzer gruplar),
 `download.py` (HF indirici: sürdürme, boyut + sha256), `quantize.py`, `config.py`, `__main__.py`
 (`serve` / `download` / `quantize` / `embed-text`). Testler: `ml/tests/eval_samples.py` (kalite, gecikme, RAM),
 `ml/tests/test_service.py` (geçici DB ile uçtan uca), `ml/tests/test_cutoff.py` (ilgi eşiği, DB/model gerekmez),
 `ml/tests/xm3600_bench.py` (Türkçe kalite karşılaştırması, yukarıda), `ml/tests/test_faces.py` (yüz tanıma,
 geçici DB + LFW ile uçtan uca), `ml/tests/face_eval.py` (LFW uzaklık/kümeleme/gecikme/RAM ölçümü),
 `ml/tests/test_face_ops.py` (NMS, Umeyama, hizalama, kümeleme birim testleri; model/DB gerekmez).
+
+## 8. Yerler (çevrimdışı ters coğrafi kodlama)
+
+Fotoğraf konumları **hiçbir dış servise gönderilmeden** yer adlarına çevrilir. Veri: [GeoNames](https://www.geonames.org)
+(Creative Commons Attribution 4.0 — atıf web'de Yerler sayfasının altında, iOS'ta Yerler listesinin altında ve Yönetim → Sistem'de).
+
+- **İndirme** (`server/install-geo.sh`, `update.sh` ve `install-ubuntu.sh` çağırır): `/var/lib/ownmemories/geo` içine
+  `cities500.zip` (dünya, nüfusu 500+ yerleşimler), `TR.zip` (Türkiye'nin tüm yerleşimleri ve mahalleleri; il/ilçe adları
+  Türkçe harfli), `admin1CodesASCII.txt`, `admin2Codes.txt`, `countryInfo.txt` — ~30 MB indirme. 30 günden yeni dosyalar
+  yeniden indirilmez (`--force`). İndirme başarısızsa eldeki kopya kullanılır; ilk kurulumda başarısızsa güncelleme yine biter.
+- **İçe aktarma** (`bin/geo-import.php` → `geo_import()`): dosya özetinden bir sürüm (`site_settings.geo_version`) üretir;
+  değişmediyse atlar. `geo_places_new`'e 500'lük toplu INSERT ile yükler, `RENAME TABLE` ile atomik değiştirir
+  (~290 bin yer, ~46 MB, ~7 sn, 128 MB PHP belleği yeter). Tarihî/terk edilmiş/dinî (PPLH, PPLQ, PPLW, PPLCH) ve adında rakam
+  olan yerler ("Paris 01 Louvre") alınmaz. Türkçe adlar: Türkiye'deki yerlerde `alternatenames` içinden aynı yazılışın Türkçe
+  harfli biçimi ("Istanbul" → "İstanbul"); yabancı şehirlerde `web/includes/places_data.php` tablosu (Rome → Roma, Athens → Atina…);
+  ülkelerde ICU (`Locale::getDisplayRegion(…, 'tr')`, yoksa tablo). Veri değiştiyse `geocode_backfill` kuyruğa girer.
+- **Arama** (`geo_lookup`): noktanın 0,1°'lik hücresi ve ±2 komşu hücredeki yerler (yoksa ±6) tek indeksli sorguyla gelir,
+  uzaklık PHP'de (haversine) hesaplanır (~1,5 ms). 50 km'de yer yoksa `null`.
+  - `name`: en yakın yer 3 km içindeyse o (mahalle/köy: "Moda", "Alsancak"), değilse şehir.
+  - `city`: mahalle (PPLX) olmayan yerler arasında `uzaklık / nüfus^¼` en küçük olan; seçilen il merkezi değilse ve 12 km
+    (nüfus ≥ 1 M) / 6 km (≥ 250 bin) içinde daha kalabalık bir il merkezi/başkent varsa o (Konak → İzmir, Üsküdar → İstanbul);
+    il merkezi olmayan ama en az 5 kat kalabalık (≥ 100 bin; 3 km) bir yerleşim de şehri kapsar (Libération semti → Nice).
+  - `district`: yalnız Türkiye'de ilçe; `admin1`: il / eyalet; `region`: `places_data.php` bölgeleri (Kapadokya, 16 km).
+- **Biçim**: `label` = ad, ilçe, şehir, il, ülke (tekrarsız; boşluk farkı yok sayılır): "Moda, Kadıköy, İstanbul, Türkiye".
+  Türkiye'de ilçe biliniyorsa "şehir" (yakındaki büyük yerleşim, başka ilçede olabilir) etikete girmez: "Çavuşin, Avanos, Nevşehir";
+  yer il merkezinin kendisiyse ilçe önce: "Osmangazi, Bursa". `short` (gün başlığı) = ilk iki parça, Türkiye dışında ülkeyle:
+  "Moda, Kadıköy" · "Bozcaada, Çanakkale" · "Paris, Fransa". Konum, yer bulunduktan sonra değiştiyse (iş bekliyor) `place` null.
+- **Arama anahtarı**: tüm adlar (Türkçe + yerel + İngilizce ülke adı + bölge) `places_fold()` ile katlanır ("Kadıköy" → "kadikoy");
+  `q` de katlanıp kelime başı `LIKE` ile eşleşir.
+- **Anılar**: Türkçe bulunma eki `tr_locative()` (ünlü uyumu, sert ünsüzden sonra -ta/-te, kesme işareti; okunuşu farklı adlar
+  tablodan: "Nice'te"). Ev = en çok farklı ayda (≥ 3) fotoğraf çekilen şehir. Ev dışında (40 km+) geçen ardışık günler (en çok 1 boş
+  gün) gezidir (≥ 3 öğe); baskın yer en az %60 ise o yer (bölge önce), değilse tek ülkedeyse ülke. Başlıklar: 1 gün "Bozcaada'da bir
+  gün", hafta sonunu içeren 2–3 gün "Paris'te bir hafta sonu", 2–5 gün "Roma'da 4 gün", 6–9 gün "Bozcaada'da bir hafta",
+  10+ gün ya da ülke "Kapadokya, Kasım 2021". Günlük anılar evden uzaktaysa: "2 yıl önce bugün Roma'da".
+`ml/tests/test_face_ops.py` (NMS, Umeyama, hizalama, kümeleme birim testleri; model/DB gerekmez),
+`ml/tests/test_cleanup.py` (Temizlik: pHash/netlik/renk imzası/ekran görüntüsü kuralı/gruplama; model/DB gerekmez).
+
+## 8. Temizlik (benzer ve gereksiz fotoğraflar)
+
+Birebir aynı dosyalar yüklemede SHA-1 ile zaten engellenir (blob tekilleştirme). Temizlik **yakın kopyaları**
+(seri çekimler, yeniden kaydedilmiş/küçültülmüş/WhatsApp'tan geçmiş kopyalar, düzenlenmiş kopyalar) ve gereksiz
+kareleri (bulanık, çok karanlık/aşırı parlak, ekran görüntüsü, 1 sn'den kısa video, cepte kalmış simsiyah video)
+bulur. Web: `#/cleanup` (menü → Diğer → Temizlik; Ayarlar'dan da). iOS: Ayarlar → Kütüphane → Temizlik.
+**Hiçbir şey kalıcı silinmez**: uygulama seçilenleri Çöp kutusuna taşır (30 gün sonra cron siler).
+
+**Ölçümler** (`ml/ownmemories_ml/cleanup.py`, dizinleyicinin her turunda, türetilmiş önizlemeden —
+yoksa video kapağı/küçük resim; 2048 px WebP önizlemede ~100 ms, JPEG ~50 ms; CLIP işi sürerken de tur başına 32 görüntü):
+`phash` (32×32 gri → DCT → sol üst 8×8, ortancaya göre 64 bit), `sharpness` (gri görüntü ≤ 1024 px uzun kenar,
+Laplace, 4×4 karoların en netlerinden ikincisinin varyansı — arka planı bulanık portre "bulanık" sayılmaz),
+`brightness` (ortalama), `color` (4×4 RGB), `is_screenshot` (dosya adı `Screenshot`/`Ekran Resmi`/`Ekran
+görüntüsü`…, kamera bilgisi olmayan PNG ya da bilinen iPhone/iPad/Android ekran boyutu; PHP `cleanup_is_screenshot`
+aynı kural). Yöntem değişirse `ALGO` artırılır ve eski satırlar yeniden hesaplanır.
+
+**Gruplama** (`group_assets`, ML `POST /cleanup/groups`, numpy; kullanıcının çöpte/arşivde olmayan, tek kare
+kuralına uyan, ≥ 64 px fotoğrafları; CLIP vektörleri aramanın bellek içi dizininden):
+1. *Seri çekim*: çekim zamanı **güvenilir** (date_source exif/takeout/filename/user; `file` toplu kopyalamada hepsi
+   aynı olabilir) iki fotoğraf ≤ 10 sn arayla ve kosinüs ≥ 0.93, ya da ≤ 120 sn arayla ve ≥ 0.955.
+2. *Görsel kopya* (zamandan bağımsız): pHash Hamming ≤ 8 ve kosinüs ≥ 0.86 (aday çiftler 4×16 bitlik bantlarla).
+3. *Küresel*: kosinüs ≥ 0.98, yalnızca çekim zamanı güvenilmez fotoğraflardan (EXIF'i silinmiş kopyalar) tüm
+   kütüphaneye (bloklu matris çarpımı; m·n > 40 bin² ise atlanır).
+2 ve 3'te renk imzası farkı ≤ 16 ve en-boy oranı farkı ≤ 1.25 kat olmalı (aynı düzende ama farklı renkteki kareler,
+düşük dokulu gökyüzü/deniz fotoğrafları birleşmesin). **Yazı ağırlıklı kareler** (belge sayfası, slayt, fiş,
+ekran görüntüsü) için üç yolda da yalnız neredeyse birebir kopya kenarı kurulur (Hamming ≤ 6 ve kosinüs ≥ 0.975):
+farklı belge sayfaları CLIP'te 0.89–0.96 benzer ve saniyeler arayla çekilir; bu kural olmadan 6 farklı sayfa tek
+"benzer" grupta toplanıyor, "Önerileri uygula" beşini çöpe atıyordu. Yazı ağırlığı = `asset_quality.is_screenshot`
+ya da CLIP metin istemi ("a page of printed text") benzerliği ≥ 0.06 ve "a photo" isteminden ≥ 0.005 yüksek
+(SigLIP2'de belgeler ≥ 0.09 / +0.027, fotoğraflar ≤ 0.05 / −0.017); metin modeli yoksa yalnız ekran görüntüsü kuralı.
+Kenarlar güçlüden zayıfa birleştirilir; iki küme ancak tüm
+çiftleri kosinüs ≥ 0.84 ise ve toplam ≤ 24 ise birleşir (zincirleme engeli). Neden: tüm çiftler Hamming ≤ 6,
+kosinüs ≥ 0.88, netlik oranı ≤ 3 ve parlaklık farkı ≤ 25 ise `duplicate` ("Neredeyse aynı"), değilse `similar`.
+Sonuç `(vektör sayısı/son, kalite sayısı/son, asset sayısı/en büyük version)` parmak iziyle kullanıcı başına
+bellekte tutulur (çöpe taşıma/geri yükleme version'ı artırır); Temizlik'i açmış kullanıcılar için dizinleyici
+boştayken (en çok dakikada bir) değişmişse yeniden hesaplanır. Süre: 270 fotoğraf ~20–60 ms, 30 bin ~2 sn,
+100 bin (%10'u dosya tarihli) ~7 sn (4 CPU).
+
+**En iyisi** (PHP `cleanup_pick_best`): favori (+1000) > çözünürlük (100 × piksel/en büyük) > netlik (60 ×
+oran) > konum (+12) > kamera bilgisi (+8, EXIF'i silinmiş kopyalara karşı) > dosya boyutu (10 × oran, az
+sıkıştırılmış); `edited_of_id` olan ya da adı kopya gibi olan (`(1)`, `-edited`, `kopya`) −25. Gerekçeler
+(`keep_reasons`) arayüzde "En iyisi: En yüksek çözünürlük · En net" olarak gösterilir.
+
+**Listeler** (PHP, `asset_quality` + meta veri; favoriler ve bir gruptakiler hariç, öncelik: grup > ekran
+görüntüsü > karanlık/parlak > bulanık): bulanık `sharpness < 25` (kısa kenar ≥ 256 px), karanlık `brightness < 22`,
+aşırı parlak `> 236`, kısa video `duration_ms < 1000` (Live Photo videosu hariç), cepte kayıt: kapak karesi
+`brightness < 22` olan video.
+
+**Doğruluk** (gerçek fotoğraflarla, `p1…p18` + üretilmiş kopyalar, 86 dosya yükleme API'siyle): 18 grup,
+yanlış birleştirme 0 (benzer ama farklı fotoğraflar 6–30 sn arayla çekilmiş olsa da — orman yolu ×2, sisli deniz ×2,
+iskele ×2, masa ×2 — ayrı kaldı; LFW'de aynı kişinin farklı fotoğrafları da gruplanmadı), aynı fotoğrafın kopya
+çiftlerinin %92'si doğru grupta (kaçanlar: %10 kırpılıp renkleri değiştirilmiş düzenleme, 3.5× aşırı pozlanmış ya
+da %7'ye karartılmış kopya — ikisi "karanlık/parlak" listesine düşer). Bulanık kopyalar (σ ≥ 2 Gauss) netliği
+1–25, net fotoğraflar ≥ 80.
+

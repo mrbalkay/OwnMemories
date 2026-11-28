@@ -33,4 +33,26 @@ enum DayGrouping {
         f.setLocalizedDateFormatFromTemplate(p[0] == thisYear ? "dMMMMEEEE" : "dMMMMyyyyEEEE")
         return f.string(from: date)
     }
+
+    /// Günün baskın yeri: tek şehirse en sık kısa ad ("Moda, Kadıköy"), birden çok şehirse en çok iki şehir ("İzmir, Çeşme").
+    static func place(for assets: [Asset]) -> String? {
+        var cities: [String: Int] = [:]
+        var shorts: [String: Int] = [:]
+        var order: [String] = []
+        for a in assets {
+            guard let p = a.place else { continue }
+            if cities[p.city] == nil { order.append(p.city) }
+            cities[p.city, default: 0] += 1
+            shorts[p.short, default: 0] += 1
+        }
+        guard !cities.isEmpty else { return nil }
+        if cities.count == 1 {
+            return shorts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.first?.key
+        }
+        let ranked = order.enumerated().sorted { a, b in
+            let (ca, cb) = (cities[a.element]!, cities[b.element]!)
+            return ca != cb ? ca > cb : a.offset < b.offset
+        }
+        return ranked.prefix(2).map(\.element).joined(separator: ", ")
+    }
 }
